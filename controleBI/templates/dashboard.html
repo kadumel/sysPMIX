@@ -1,0 +1,289 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="row">
+    <!-- Card de Motoristas -->
+    <div class="col mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 text-muted">Motoristas</h6>
+                        <h2 class="card-title mb-0">{{ total_motoristas }}</h2>
+                    </div>
+                    <div class="bg-primary bg-opacity-10 p-3 rounded">
+                        <i class="bi bi-person-badge text-primary fs-1"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'list_funcionario' %}?tipo=Motorista" class="btn btn-sm btn-outline-primary">
+                        Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card de Ajudantes -->
+    <div class="col mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 text-muted">Ajudantes</h6>
+                        <h2 class="card-title mb-0">{{ total_ajudantes }}</h2>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded">
+                        <i class="bi bi-people text-success fs-1"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'list_funcionario' %}?tipo=Ajudante" class="btn btn-sm btn-outline-success">
+                        Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card de Veículos -->
+    <div class="col mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 text-muted">Veículos</h6>
+                        <h2 class="card-title mb-0">{{ total_veiculos }}</h2>
+                    </div>
+                    <div class="bg-warning bg-opacity-10 p-3 rounded">
+                        <i class="bi bi-truck text-warning fs-1"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'list_veiculo' %}" class="btn btn-sm btn-outline-warning">
+                        Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card de Pedidos -->
+    <div class="col mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 text-muted">Pedidos</h6>
+                        <h2 class="card-title mb-0">{{ total_pedidos }}</h2>
+                    </div>
+                    <div class="bg-info bg-opacity-10 p-3 rounded">
+                        <i class="bi bi-box-seam text-info fs-1"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'list_pedido' %}" class="btn btn-sm btn-outline-info">
+                        Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card de Pedidos Enviados -->
+    <div class="col mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="card-subtitle mb-2 text-muted">Pedidos Enviados</h6>
+                        <h2 class="card-title mb-0">{{ pedidos_enviados }}</h2>
+                    </div>
+                    <div class="bg-success bg-opacity-10 p-3 rounded">
+                        <i class="bi bi-cloud-upload text-success fs-1"></i>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'list_pedido' %}?sincronizado=True" class="btn btn-sm btn-outline-success">
+                        Ver Detalhes
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficos e Tabelas -->
+<div class="row mt-4">
+    <!-- Gráfico de Status de Veículos -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Status dos Veículos</h5>
+                <div style="height: 250px;">
+                    <canvas id="veiculosChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Status de Pedidos -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Status dos Pedidos</h5>
+                <div style="height: 250px;">
+                    <canvas id="pedidosChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico de Pedidos Mensais -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Pedidos Mensais</h5>
+                <div style="height: 250px;">
+                    <canvas id="pedidosMensaisChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela de Últimos Pedidos -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Últimos Pedidos</h5>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Número</th>
+                                <th>Cliente</th>
+                                <th>Data</th>
+                                <th>Status</th>
+                                <th>Valor</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for pedido in ultimos_pedidos %}
+                            <tr>
+                                <td>{{ pedido.pedido_erp }}</td>
+                                <td>{{ pedido.descr_cliente }}</td>
+                                <td>{{ pedido.data_pedido|date:"d/m/Y" }}</td>
+                                <td>
+                                    <span class="badge {% if pedido.status == '1' %}bg-success{% elif pedido.status == '4' %}bg-info{% else %}bg-danger{% endif %}">
+                                        {{ pedido.get_status_display }}
+                                    </span>
+                                </td>
+                                <td>R$ {{ pedido.valor|floatformat:2 }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Gráfico de Status de Veículos
+    const veiculosCtx = document.getElementById('veiculosChart').getContext('2d');
+    new Chart(veiculosCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Ativos', 'Inativos'],
+            datasets: [{
+                data: [{{ veiculos_ativos }}, {{ veiculos_inativos }}],
+                backgroundColor: ['#28a745', '#dc3545']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+
+    // Gráfico de Status de Pedidos
+    const pedidosCtx = document.getElementById('pedidosChart').getContext('2d');
+    new Chart(pedidosCtx, {
+        type: 'bar',
+        data: {
+            labels: ['Aprovados', 'Faturados', 'Cancelados'],
+            datasets: [{
+                label: 'Quantidade',
+                data: [{{ pedidos_aprovados }}, {{ pedidos_faturados }}, {{ pedidos_cancelados }}],
+                backgroundColor: ['#28a745', '#17a2b8', '#dc3545']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Gráfico de Pedidos Mensais
+    const pedidosMensaisCtx = document.getElementById('pedidosMensaisChart').getContext('2d');
+    new Chart(pedidosMensaisCtx, {
+        type: 'line',
+        data: {
+            labels: {{ meses|safe }},
+            datasets: [{
+                label: 'Pedidos',
+                data: {{ pedidos_mensais|safe }},
+                borderColor: '#004A8D',
+                backgroundColor: 'rgba(0, 74, 141, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        display: true,
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %} 

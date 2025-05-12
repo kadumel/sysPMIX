@@ -1,0 +1,241 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Lista de Veículos</h5>
+                        <button type="button" class="btn btn-primary" id="btnImportarVeiculo">
+                            <i class="fas fa-file-import"></i> Importar Veículos
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Filtros -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <form method="get" class="row g-3">
+                                        <div class="col-md-4">
+                                            <label for="search" class="form-label">Buscar</label>
+                                            <input type="text" class="form-control" id="search" name="search" 
+                                                   placeholder="Placa, modelo ou descrição..." value="{{ current_search }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="tipo_veiculo" class="form-label">Tipo</label>
+                                            <select class="form-select" id="tipo_veiculo" name="tipo_veiculo">
+                                                <option value="">Todos</option>
+                                                <option value="Carro" {% if current_tipo_veiculo == 'Carro' %}selected{% endif %}>Carro</option>
+                                                <option value="Van" {% if current_tipo_veiculo == 'Van' %}selected{% endif %}>Van</option>
+                                                <option value="Caminhão" {% if current_tipo_veiculo == 'Caminhão' %}selected{% endif %}>Caminhão</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="status" class="form-label">Status</label>
+                                            <select class="form-select" id="status" name="status">
+                                                <option value="">Todos</option>
+                                                <option value="Ativo" {% if current_status == 'Ativo' %}selected{% endif %}>Ativo</option>
+                                                <option value="Inativo" {% if current_status == 'Inativo' %}selected{% endif %}>Inativo</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 d-flex align-items-end">
+                                            <button type="submit" class="btn btn-primary w-100">
+                                                <i class="bi bi-search me-2"></i>Filtrar
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Placa</th>
+                                    <th>Modelo</th>
+                                    <th>Descrição</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Sincronizado</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for veiculo in veiculos %}
+                                <tr>
+                                    <td>{{ veiculo.placa|default:'' }}</td>
+                                    <td>{{ veiculo.modelo|default:'' }}</td>
+                                    <td>{{ veiculo.descricao|default:'' }}</td>
+                                    <td>{{ veiculo.tipo_veiculo|default:'' }}</td>
+                                    <td>
+                                        <span class="badge {% if veiculo.status_inicial == 'Ativo' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ veiculo.status_inicial|default:'Inativo' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if veiculo.sincronizado %}bg-success{% else %}bg-warning{% endif %}">
+                                            {% if veiculo.sincronizado %}Sim{% else %}Não{% endif %}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group">
+                                            <a href="{% url 'veiculo_detail' veiculo.id %}" 
+                                               class="btn btn-sm btn-info" 
+                                               title="Detalhes">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="{% url 'veiculo_edit' veiculo.id %}" 
+                                               class="btn btn-sm btn-warning" 
+                                               title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-danger delete-veiculo" 
+                                                    title="Excluir"
+                                                    data-id="{{ veiculo.id }}"
+                                                    data-placa="{{ veiculo.placa }}"
+                                                    data-descricao="{{ veiculo.descricao }}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="6" class="text-center">Nenhum veículo encontrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="6" class="text-center">
+                                        <small class="text-muted">
+                                            Total de registros: {{ total_registros }} | 
+                                            Registros filtrados: {{ registros_filtrados }}
+                                        </small>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Paginação -->
+                    {% if is_paginated %}
+                    <nav aria-label="Navegação de páginas" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo_veiculo %}&tipo_veiculo={{ current_tipo_veiculo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                            </li>
+                            {% endif %}
+
+                            {% for num in paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo_veiculo %}&tipo_veiculo={{ current_tipo_veiculo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                        {{ num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo_veiculo %}&tipo_veiculo={{ current_tipo_veiculo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Importar veículos
+        $('#btnImportarVeiculo').click(function() {
+            if (confirm('Deseja importar os veículos do sistema ERP?')) {
+                $.ajax({
+                    url: '{% url "import_veiculos" %}',
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.message);
+                            location.reload();
+                        } else {
+                            alert('Erro: ' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('Erro ao importar veículos: ' + error);
+                    }
+                });
+            }
+        });
+
+        // Delete veículo
+        $('.delete-veiculo').click(function() {
+            const id = $(this).data('id');
+            const placa = $(this).data('placa');
+            const descricao = $(this).data('descricao');
+            
+            if (confirm(`Tem certeza que deseja excluir o veículo:\n\n${placa} - ${descricao}\n\nEsta ação não poderá ser desfeita.`)) {
+                $.ajax({
+                    url: "{% url 'veiculo_delete' 0 %}".replace('0', id),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            location.reload();
+                        } else {
+                            alert('Erro: ' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('Erro ao excluir veículo: ' + error);
+                    }
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}

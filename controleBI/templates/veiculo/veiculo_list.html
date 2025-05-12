@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="card-title mb-0">
+                        <i class="bi bi-truck me-2"></i>
+                        Veículos
+                    </h4>
+                    <a href="{% url 'add_veiculo' %}" class="btn btn-primary">
+                        <i class="bi bi-plus-lg me-2"></i>Novo Veículo
+                    </a>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Código ERP</th>
+                                    <th>Filial</th>
+                                    <th>Placa</th>
+                                    <th>Descrição</th>
+                                    <th>Modelo</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for veiculo in veiculos %}
+                                <tr>
+                                    <td>{{ veiculo.codigo_erp }}</td>
+                                    <td>{{ veiculo.filial|default:'' }}</td>
+                                    <td>{{ veiculo.placa }}</td>
+                                    <td>{{ veiculo.descricao|default:'' }}</td>
+                                    <td>{{ veiculo.modelo|default:'' }}</td>
+                                    <td>{{ veiculo.tipo_veiculo|default:'' }}</td>
+                                    <td>
+                                        <span class="badge {% if veiculo.status_inicial == 'Ativo' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ veiculo.status_inicial|default:'' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group">
+                                            <a href="{% url 'veiculo_detail' veiculo.id %}" class="btn btn-sm btn-info" title="Detalhes">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                            <a href="{% url 'veiculo_edit' veiculo.id %}" class="btn btn-sm btn-warning" title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="8" class="text-center">Nenhum veículo encontrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

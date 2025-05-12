@@ -1,0 +1,397 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+    
+    <!-- Filtros -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="card-title mb-0">
+                <i class="bi bi-people me-2"></i>
+                Lista de Pedidos
+            </h4>
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label for="search" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="search" name="search" 
+                           placeholder="Número, Cliente ou CNPJ" value="{{ request.GET.search }}"
+                           maxlength="40">
+                </div>
+                <!-- <div class="col-md-2">
+                    <label for="status" class="form-label">Status</label>
+                    <select class="form-select" id="status" name="status">
+                        <option value="">Todos</option>
+                        <option value="1" {% if request.GET.status == '1' %}selected{% endif %}>Aprovado</option>
+                        <option value="4" {% if request.GET.status == '4' %}selected{% endif %}>Faturado</option>
+                        <option value="9" {% if request.GET.status == '9' %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div> -->
+                <div class="col-md-2">
+                    <label for="sincronizado" class="form-label">Sincronizado</label>
+                    <select class="form-select" id="sincronizado" name="sincronizado">
+                        <option value="">Todos</option>
+                        <option value="True" {% if request.GET.sincronizado == 'True' %}selected{% endif %}>Sim</option>
+                        <option value="False" {% if request.GET.sincronizado == 'False' %}selected{% endif %}>Não</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="data_inicio" class="form-label">Data Inicial</label>
+                    <input type="date" class="form-control" id="data_inicio" name="data_inicio" 
+                           value="{{ request.GET.data_inicio }}">
+                </div>
+                <div class="col-md-2">
+                    <label for="data_fim" class="form-label">Data Final</label>
+                    <input type="date" class="form-control" id="data_fim" name="data_fim" 
+                           value="{{ request.GET.data_fim }}">
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search"></i> Filtrar
+                    </button>
+                    <a href="{% url 'list_pedido' %}" class="btn btn-secondary">
+                        <i class="bi bi-x"></i> Limpar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabela de Pedidos -->
+    <div class="card">
+        <div class="card-body">
+            <!-- Botões de Ação em Lote -->
+            <div class="mb-3 d-flex gap-2">
+                <button type="button" class="btn btn-warning" id="importPedidosBtn">
+                    <i class="bi bi-upload me-2"></i>Importar Pedidos
+                </button>
+                <button type="button" class="btn btn-success" id="syncSelectedBtn" disabled>
+                    <i class="bi bi-cloud-upload me-2"></i>Enviar Selecionados
+                </button>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="selectAll">
+                                </div>
+                            </th>
+                            <th>Número</th>
+                            <th>Cliente</th>
+                            <th>CNPJ/CPF</th>
+                            <th>Data</th>
+                            <th>Peso</th>
+                            <th>Valor</th>
+                            <th>Enviado</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pedido in pedidos %}
+                        <tr>
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input pedido-checkbox" type="checkbox" 
+                                           value="{{ pedido.id }}" 
+                                           {% if pedido.sincronizado %}disabled{% endif %}>
+                                </div>
+                            </td>
+                            <td>{{ pedido.pedido_erp }}</td>
+                            <td>{{ pedido.descr_cliente }}</td>
+                            <td>{{ pedido.cnpj_cliente }}</td>
+                            <td>{{ pedido.data_pedido|date:"d/m/Y" }}</td>
+                            <td>{{ pedido.peso|floatformat:2 }}</td>
+                            <td>R$ {{ pedido.valor|floatformat:2 }}</td>
+                            <td>
+                                <span class="badge {% if pedido.sincronizado == True %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ pedido.sincronizado|yesno:"Sim,Não" }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <a href="{% url 'view_pedido' pedido.id %}?{% if current_search %}search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if pedidos.number %}&page={{ pedidos.number }}{% endif %}" 
+                                       class="btn btn-sm btn-info" 
+                                       data-bs-toggle="tooltip" title="Visualizar">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{% url 'edit_pedido' pedido.id %}?{% if current_search %}search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if pedidos.number %}&page={{ pedidos.number }}{% endif %}" 
+                                       class="btn btn-sm btn-warning" 
+                                       data-bs-toggle="tooltip" title="Editar">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <button type="button" 
+                                            class="btn btn-sm btn-danger delete-pedido" 
+                                            data-pedido-id="{{ pedido.id }}"
+                                            data-bs-toggle="tooltip" 
+                                            title="Excluir">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center">Nenhum pedido encontrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="9" class="text-end align-middle">
+                                <div class="d-flex justify-content-end gap-3 small">
+                                    <div><strong>Total de Registros:</strong> {{ total_registros }}</div>
+                                    <div><strong>Registros Filtrados:</strong> {{ registros_filtrados }}</div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <!-- Paginação -->
+            {% if pedidos.has_other_pages %}
+            <nav aria-label="Navegação de páginas" class="mt-4">
+                <ul class="pagination justify-content-center">
+                    {% if pedidos.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pedidos.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                    </li>
+                    {% endif %}
+
+                    <li class="page-item active">
+                        <span class="page-link">Página {{ pedidos.number }} de {{ pedidos.paginator.num_pages }}</span>
+                    </li>
+
+                    {% if pedidos.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ pedidos.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled">
+                        <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+
+    // Importar pedidos
+    const importPedidosBtn = document.getElementById('importPedidosBtn');
+    importPedidosBtn.addEventListener('click', function() {
+        if (!confirm('Deseja importar os pedidos do sistema?')) {
+            return;
+        }
+
+        // Desabilitar botão e mostrar loading
+        const button = this;
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-repeat spin me-2"></i>Importando...';
+
+        // Fazer a requisição para importar pedidos
+        fetch('/pedidos/import/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                // Recarregar a página para mostrar os novos pedidos
+                window.location.reload();
+            } else {
+                throw new Error(data.message || 'Erro ao importar pedidos');
+            }
+        })
+        .catch(error => {
+            alert('Erro ao importar pedidos: ' + error.message);
+        })
+        .finally(() => {
+            // Restaurar botão
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-upload me-2"></i>Importar Pedidos';
+        });
+    });
+
+    // Seleção de todos os pedidos
+    const selectAll = document.getElementById('selectAll');
+    const pedidoCheckboxes = document.querySelectorAll('.pedido-checkbox');
+    const syncSelectedBtn = document.getElementById('syncSelectedBtn');
+
+    // Função para atualizar o botão de sincronização
+    function updateSyncButton() {
+        const selectedPedidos = document.querySelectorAll('.pedido-checkbox:checked');
+        syncSelectedBtn.disabled = selectedPedidos.length === 0;
+    }
+
+    // Evento de mudança no checkbox "Selecionar Todos"
+    selectAll.addEventListener('change', function() {
+        pedidoCheckboxes.forEach(checkbox => {
+            if (!checkbox.disabled) {
+                checkbox.checked = this.checked;
+            }
+        });
+        updateSyncButton();
+    });
+
+    // Evento de mudança nos checkboxes individuais
+    pedidoCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            // Verificar se todos os checkboxes habilitados estão marcados
+            const allChecked = Array.from(pedidoCheckboxes)
+                .filter(cb => !cb.disabled)
+                .every(cb => cb.checked);
+            selectAll.checked = allChecked;
+            updateSyncButton();
+        });
+    });
+
+    // Excluir pedido
+    document.querySelectorAll('.delete-pedido').forEach(button => {
+        button.addEventListener('click', function() {
+            const pedidoId = this.dataset.pedidoId;
+            
+            if (!confirm('Tem certeza que deseja excluir este pedido?')) {
+                return;
+            }
+
+            fetch(`/pedidos/${pedidoId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Remover a linha da tabela
+                    this.closest('tr').remove();
+                    // Atualizar contadores
+                    const totalRegistros = document.querySelector('td[colspan="9"] .d-flex div:first-child');
+                    const registrosFiltrados = document.querySelector('td[colspan="9"] .d-flex div:last-child');
+                    
+                    if (totalRegistros && registrosFiltrados) {
+                        const total = parseInt(totalRegistros.textContent.match(/\d+/)[0]) - 1;
+                        const filtrados = parseInt(registrosFiltrados.textContent.match(/\d+/)[0]) - 1;
+                        
+                        totalRegistros.innerHTML = `<strong>Total de Registros:</strong> ${total}`;
+                        registrosFiltrados.innerHTML = `<strong>Registros Filtrados:</strong> ${filtrados}`;
+                    }
+                } else {
+                    throw new Error('Erro ao excluir pedido');
+                }
+            })
+            .catch(error => {
+                alert('Erro ao excluir pedido: ' + error.message);
+            });
+        });
+    });
+
+    // Enviar pedidos selecionados
+    syncSelectedBtn.addEventListener('click', function() {
+        const button = this;
+        const selectedPedidos = Array.from(document.querySelectorAll('.pedido-checkbox:checked'))
+            .map(checkbox => checkbox.value);
+
+        if (selectedPedidos.length === 0) {
+            alert('Selecione pelo menos um pedido para enviar.');
+            return;
+        }
+
+        // Confirmar envio
+        if (!confirm(`Deseja enviar ${selectedPedidos.length} pedido(s) selecionado(s)?`)) {
+            return;
+        }
+
+        // Desabilitar botão e mostrar loading
+        button.disabled = true;
+        button.innerHTML = '<i class="bi bi-arrow-repeat spin me-2"></i>Enviando...';
+
+        // Enviar pedidos
+        fetch('/pedidos/sync-batch/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({ pedido_ids: selectedPedidos })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Atualizar status na tabela e desmarcar checkboxes
+                selectedPedidos.forEach(id => {
+                    const checkbox = document.querySelector(`input[value="${id}"]`);
+                    const row = checkbox.closest('tr');
+                    const statusCell = row.querySelector('td:nth-last-child(2)');
+                    
+                    // Atualizar status
+                    statusCell.innerHTML = '<span class="badge bg-success">Sim</span>';
+                    
+                    // Desabilitar e desmarcar checkbox
+                    checkbox.disabled = true;
+                    checkbox.checked = false;
+                });
+                
+                // Desmarcar checkbox "Selecionar Todos"
+                const selectAllCheckbox = document.getElementById('selectAll');
+                selectAllCheckbox.checked = false;
+                
+                // Atualizar estado do botão de envio
+                updateSyncButton();
+                
+                // Mostrar mensagem de sucesso
+                alert('Pedidos enviados com sucesso!');
+            } else {
+                throw new Error(data.message || 'Erro ao enviar pedidos');
+            }
+        })
+        .catch(error => {
+            // Mostrar mensagem de erro
+            alert('Erro ao enviar pedidos: ' + error.message);
+        })
+        .finally(() => {
+            // Restaurar botão
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-cloud-upload me-2"></i>Enviar Selecionados';
+        });
+    });
+});
+</script>
+
+<style>
+.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
+{% endblock %} 

@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2 class="mb-0">Detalhes do Pedido</h2>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'list_pedido' %}?{% if filter_params.search %}search={{ filter_params.search }}{% endif %}{% if filter_params.status %}&status={{ filter_params.status }}{% endif %}{% if filter_params.tipo %}&tipo={{ filter_params.tipo }}{% endif %}{% if filter_params.data_inicio %}&data_inicio={{ filter_params.data_inicio }}{% endif %}{% if filter_params.data_fim %}&data_fim={{ filter_params.data_fim }}{% endif %}{% if filter_params.sincronizado %}&sincronizado={{ filter_params.sincronizado }}{% endif %}{% if filter_params.page %}&page={{ filter_params.page }}{% endif %}" 
+                       class="btn btn-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informações do Pedido -->
+        <div class="col-md-8">
+            <!-- Dados Básicos do Pedido -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações do Pedido</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Número do Pedido:</strong> {{ pedido.pedido_erp }}</p>
+                            <p><strong>Tipo:</strong> {{ pedido.tipo }}</p>
+                            <p><strong>Entrega/Serviço:</strong> {{ pedido.ent_ou_serv }}</p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge {% if pedido.status == '1' %}bg-success{% elif pedido.status == '4' %}bg-info{% else %}bg-danger{% endif %}">
+                                    {{ pedido.get_status_display }}
+                                </span>
+                            </p>
+                            <p><strong>Pode Formar Carga:</strong> {{ pedido.get_podeformarcarga_display }}</p>
+                            <p><strong>Prioridade:</strong> {{ pedido.get_prioridade_display }}</p>
+                            <p><strong>Data do Pedido:</strong> {{ pedido.data_pedido|date:"d/m/Y" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Valor Total:</strong> R$ {{ pedido.valor|floatformat:2 }}</p>
+                            <p><strong>Peso Total:</strong> {{ pedido.peso|floatformat:2 }} kg</p>
+                            <p><strong>Cubagem:</strong> {{ pedido.cubagem|floatformat:2 }}</p>
+                            <p><strong>Quantidade de Pallets:</strong> {{ pedido.qtd_pallets_entrega|floatformat:2 }}</p>
+                            <p><strong>Valor ST:</strong> R$ {{ pedido.valor_st|floatformat:2 }}</p>
+                            {% if pedido.obs %}
+                            <p><strong>Observações:</strong> {{ pedido.obs }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informações da Nota Fiscal -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações da Nota Fiscal</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Número NF:</strong> {{ pedido.nf|default:"-" }}</p>
+                            <p><strong>Chave NFE:</strong> {{ pedido.chave_nfe|default:"-" }}</p>
+                            <p><strong>Série:</strong> {{ pedido.serie|default:"-" }}</p>
+                            <p><strong>Tipo NF:</strong> {{ pedido.tipo_nota_fiscal|default:"-" }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Número Pedido Confirmado:</strong> {{ pedido.num_ped_conf|default:"-" }}</p>
+                            <p><strong>Código Carregamento:</strong> {{ pedido.carga|default:"-" }}</p>
+                            <p><strong>Data da Coleta:</strong> {{ pedido.dt_list_nf|date:"d/m/Y"|default:"-" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Itens do Pedido -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Itens do Pedido</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descrição</th>
+                                    <th>Unidade</th>
+                                    <th>Quantidade</th>
+                                    <th>Preço Unitário</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td>{{ item.cod_produto_erp }}</td>
+                                    <td>{{ item.descricao }}</td>
+                                    <td>{{ item.unidade }}</td>
+                                    <td>{{ item.qtd }}</td>
+                                    <td>R$ {{ item.preco|floatformat:2 }}</td>
+                                    <td>R$ {{ item.subtotal|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações do Cliente e Empresas -->
+        <div class="col-md-4">
+            <!-- Informações do Cliente -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações do Cliente</h5>
+                    <p><strong>Nome Fantasia:</strong> {{ pedido.descr_cliente }}</p>
+                    <p><strong>Razão Social:</strong> {{ pedido.razao_cliente }}</p>
+                    <p><strong>CNPJ/CPF:</strong> {{ pedido.cnpj_cliente }}</p>
+                    <p><strong>Código Cliente:</strong> {{ pedido.codigo_cliente }}</p>
+                    <p><strong>Endereço:</strong> {{ pedido.end_cliente }}, {{ pedido.num_end_cliente }}</p>
+                    <p><strong>Bairro:</strong> {{ pedido.bairro_cliente }}</p>
+                    <p><strong>Cidade:</strong> {{ pedido.cidade_cliente }}/{{ pedido.uf_cliente }}</p>
+                    <p><strong>CEP:</strong> {{ pedido.cep_cliente }}</p>
+                    <p><strong>Telefone:</strong> {{ pedido.tel1_cliente }}</p>
+                    {% if pedido.tel2_cliente %}
+                    <p><strong>Telefone 2:</strong> {{ pedido.tel2_cliente }}</p>
+                    {% endif %}
+                    {% if pedido.tel3_cliente %}
+                    <p><strong>Telefone 3:</strong> {{ pedido.tel3_cliente }}</p>
+                    {% endif %}
+                    {% if pedido.email1_cliente %}
+                    <p><strong>E-mail 1:</strong> {{ pedido.email1_cliente }}</p>
+                    {% endif %}
+                    {% if pedido.email2_cliente %}
+                    <p><strong>E-mail 2:</strong> {{ pedido.email2_cliente }}</p>
+                    {% endif %}
+                    {% if pedido.email3_cliente %}
+                    <p><strong>E-mail 3:</strong> {{ pedido.email3_cliente }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Informações Financeiras do Cliente -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações Financeiras</h5>
+                    <p><strong>Valor Crédito:</strong> R$ {{ pedido.vlr_credito_cliente|floatformat:2|default:"-" }}</p>
+                    <p><strong>Saldo Disponível:</strong> R$ {{ pedido.saldo_disp_cliente|floatformat:2|default:"-" }}</p>
+                    <p><strong>Títulos Vencidos:</strong> R$ {{ pedido.vlr_tits_vencido_cliente|floatformat:2|default:"-" }}</p>
+                    <p><strong>Títulos a Vencer:</strong> R$ {{ pedido.vlr_tits_vencer_cliente|floatformat:2|default:"-" }}</p>
+                    <p><strong>Status Crédito:</strong> {{ pedido.status_cred_cliente|default:"-" }}</p>
+                    <p><strong>Forma Pagamento:</strong> {{ pedido.forma_pgto_cliente|default:"-" }}</p>
+                    <p><strong>Retém ICMS:</strong> {{ pedido.get_retem_icms_cliente_display|default:"-" }}</p>
+                </div>
+            </div>
+
+            <!-- Informações de Empresas -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações de Empresas</h5>
+                    <p><strong>Empresa Faturamento:</strong> {{ pedido.empresa_fat }}</p>
+                    <p><strong>Empresa Logística:</strong> {{ pedido.empresa_log }}</p>
+                    <p><strong>Empresa Digitação:</strong> {{ pedido.empresa_digit }}</p>
+                    <p><strong>Pedido Original:</strong> {{ pedido.pedido_orig }}</p>
+                </div>
+            </div>
+
+            <!-- Informações de Rota e Segmento -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações de Rota e Segmento</h5>
+                    <p><strong>Código Praça:</strong> {{ pedido.praca_cod_erp|default:"-" }}</p>
+                    <p><strong>Descrição Praça:</strong> {{ pedido.praca_descricao|default:"-" }}</p>
+                    <p><strong>Código Rota:</strong> {{ pedido.rota_cod_erp|default:"-" }}</p>
+                    <p><strong>Descrição Rota:</strong> {{ pedido.rota_descricao|default:"-" }}</p>
+                    <p><strong>Vendedor:</strong> {{ pedido.vendedor_erp|default:"-" }}</p>
+                    <p><strong>Código Segmento:</strong> {{ pedido.cod_segmento|default:"-" }}</p>
+                    <p><strong>Descrição Segmento:</strong> {{ pedido.descr_segmento|default:"-" }}</p>
+                    <p><strong>Filial Padrão:</strong> {{ pedido.filial_padrao }}</p>
+                    <p><strong>Última Compra:</strong> {{ pedido.data_ult_compra|date:"d/m/Y"|default:"-" }}</p>
+                </div>
+            </div>
+
+            <!-- Informações Adicionais -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Informações Adicionais</h5>
+                    <p><strong>Código Endereço Alternativo:</strong> {{ pedido.codigo_endereco_alt|default:"-" }}</p>
+                    <p><strong>Referência Entrega:</strong> {{ pedido.referencia_entrega|default:"-" }}</p>
+                    <p><strong>Restrição Transporte:</strong> {{ pedido.restricao_transp|default:"-" }}</p>
+                    <p><strong>Permite Retirada:</strong> {{ pedido.get_permite_retira_cliente_display|default:"-" }}</p>
+                    <p><strong>Rede/Loja:</strong> {{ pedido.rede_loja_cliente|default:"-" }}</p>
+                    <p><strong>Valor Adicional 1:</strong> R$ {{ pedido.valor_adic_number_1|floatformat:2|default:"-" }}</p>
+                    <p><strong>Valor Adicional 2:</strong> R$ {{ pedido.valor_adic_number_2|floatformat:2|default:"-" }}</p>
+                    <p><strong>Latitude:</strong> {{ pedido.latitude|default:"-" }}</p>
+                    <p><strong>Longitude:</strong> {{ pedido.longitude|default:"-" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

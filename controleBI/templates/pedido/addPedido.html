@@ -1,0 +1,190 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<style>
+    .required-field {
+        border-color: #dc3545 !important;
+    }
+    .required-label::after {
+        content: " *";
+        color: #dc3545;
+    }
+</style>
+
+<div class="container-fluid">
+   
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="card-title mb-0"> <i class="bi bi-person-plus me-2"></i> Cadastro de Pedido </h4>
+            <a href="{% url 'list_pedido' %}" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> Voltar</a>
+        </div>
+        <div class="card-body">
+            <form method="post" class="row g-3">
+                {% csrf_token %}
+                
+                <!-- Dados do Pedido -->
+                <div class="col-12">
+                    <h5 class="card-title mb-3">Dados do Pedido</h5>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="pedido_erp" class="form-label">Número do Pedido</label>
+                    <input type="text" class="form-control" id="pedido_erp" name="pedido_erp" 
+                           value="{{ pedido.pedido_erp }}" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="status" class="form-label">Status</label>
+                    <select class="form-select" id="status" name="status" disabled>
+                        <option value="">Selecione...</option>
+                        <option value="1" {% if pedido.status == '1' %}selected{% endif %}>Aprovado</option>
+                        <option value="4" {% if pedido.status == '4' %}selected{% endif %}>Faturado</option>
+                        <option value="9" {% if pedido.status == '9' %}selected{% endif %}>Cancelado</option>
+                    </select>
+                </div>
+
+                <div class="col-md-3">
+                    <label for="podeformarcarga" class="form-label">Pode Formar Carga</label>
+                    <select class="form-select" id="podeformarcarga" name="podeformarcarga">
+                        <option value="">Selecione...</option>
+                        <option value="S" {% if pedido.podeformarcarga == 'S' %}selected{% endif %}>Sim</option>
+                        <option value="N" {% if pedido.podeformarcarga == 'N' %}selected{% endif %}>Não</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="ent_ou_serv">Entrega/Serviço</label>
+                        <select class="form-control" id="ent_ou_serv" name="ent_ou_serv" disabled>
+                            <option value="E" {% if pedido.ent_ou_serv == 'E' %}selected{% endif %}>Entrega</option>
+                            <option value="S" {% if pedido.ent_ou_serv == 'S' %}selected{% endif %}>Serviço</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dados do Cliente -->
+                <div class="col-12 mt-4">
+                    <h5 class="card-title mb-3">Dados do Cliente</h5>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="descr_cliente" class="form-label">Nome do Cliente</label>
+                    <input type="text" class="form-control" id="descr_cliente" name="descr_cliente" 
+                           value="{{ pedido.descr_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="razao_cliente" class="form-label">Razão Social</label>
+                    <input type="text" class="form-control" id="razao_cliente" name="razao_cliente" 
+                           value="{{ pedido.razao_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-6">
+                    <label for="cnpj_cliente" class="form-label">CNPJ/CPF</label>
+                    <input type="text" class="form-control" id="cnpj_cliente" name="cnpj_cliente" 
+                           value="{{ pedido.cnpj_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="end_cliente" class="form-label">Endereço</label>
+                    <input type="text" class="form-control" id="end_cliente" name="end_cliente" 
+                           value="{{ pedido.end_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="num_end_cliente" class="form-label">Número</label>
+                    <input type="text" class="form-control" id="num_end_cliente" name="num_end_cliente" 
+                           value="{{ pedido.num_end_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="bairro_cliente" class="form-label">Bairro</label>
+                    <input type="text" class="form-control" id="bairro_cliente" name="bairro_cliente" 
+                           value="{{ pedido.bairro_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-3">
+                    <label for="cidade_cliente" class="form-label">Cidade</label>
+                    <input type="text" class="form-control" id="cidade_cliente" name="cidade_cliente" 
+                           value="{{ pedido.cidade_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="uf_cliente" class="form-label">UF</label>
+                    <input type="text" class="form-control" id="uf_cliente" name="uf_cliente" 
+                           value="{{ pedido.uf_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-2">
+                    <label for="cep_cliente" class="form-label">CEP</label>
+                    <input type="text" class="form-control" id="cep_cliente" name="cep_cliente" 
+                           value="{{ pedido.cep_cliente }}" readonly>
+                </div>
+                
+                <div class="col-md-4">
+                    <label for="tel1_cliente" class="form-label">Telefone</label>
+                    <input type="text" class="form-control" id="tel1_cliente" name="tel1_cliente" 
+                           value="{{ pedido.tel1_cliente }}" readonly>
+                </div>
+
+                <!-- Itens do Pedido -->
+                <div class="col-12 mt-4">
+                    <h5 class="card-title mb-3">Itens do Pedido</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="itensTable">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Descrição</th>
+                                    <th>Unidade</th>
+                                    <th>Quantidade</th>
+                                    <th>Preço</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td>
+                                        <input type="hidden" name="item_ids[]" value="{{ item.id }}">
+                                        {{ item.cod_produto_erp }}
+                                    </td>
+                                    <td>{{ item.descricao }}</td>
+                                    <td>{{ item.unidade }}</td>
+                                    <td>{{ item.qtd }}</td>
+                                    <td>R$ {{ item.preco|floatformat:2 }}</td>
+                                    <td>R$ {{ item.subtotal|floatformat:2 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Observações -->
+                <div class="col-12 mt-4">
+                    <h5 class="card-title mb-3">Observações</h5>
+                    <textarea class="form-control" id="obs" name="obs" rows="3" readonly>{{ pedido.obs }}</textarea>
+                </div>
+
+                <!-- Botões -->
+                <div class="col-12 mt-4 d-flex justify-content-end gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-save"></i> Salvar
+                    </button>
+                    <a href="{% url 'list_pedido' %}" class="btn btn-secondary">
+                        <i class="bi bi-x"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Removido o código de validação visual para campos obrigatórios
+});
+</script>
+{% endblock %}

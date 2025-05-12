@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+{% block content %}
+<style>
+    :root {
+        --primary-color: #0056b3;
+        --secondary-color: #ff6b00;
+        --text-color: #333;
+        --light-gray: #f8f9fa;
+        --card-bg: #ffffff;
+    }
+
+    .container {
+        margin: 40px auto;
+        max-width: 1400px;
+    }
+
+    .card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+        background: var(--card-bg);
+    }
+
+    .card:hover {
+        transform: translateY(-5px);
+    }
+
+    .card-body {
+        padding: 25px;
+    }
+
+    h1, h5 {
+        color: var(--primary-color);
+        font-weight: 600;
+    }
+
+    .form-group label {
+        color: var(--text-color);
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 10px 15px;
+        height: 45px;
+        transition: all 0.3s;
+        background: var(--light-gray);
+    }
+
+    .form-control:focus {
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 0.2rem rgba(0, 86, 179, 0.25);
+        background: white;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--primary-color), #003366);
+        border: none;
+        padding: 10px 25px;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(135deg, #004494, #002b4d);
+        transform: translateY(-2px);
+    }
+
+    .table-dark {
+        background: linear-gradient(135deg, var(--primary-color), #003366) !important;
+        color: white;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(0, 86, 179, 0.05);
+    }
+
+    .table-striped tbody tr:hover {
+        background-color: rgba(0, 86, 179, 0.1);
+    }
+
+    .btn-atualizar {
+        background: var(--secondary-color);
+        color: white;
+        border: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+
+    .btn-atualizar:hover {
+        background: #e05e00;
+        transform: translateY(-2px);
+    }
+
+    .tableColor {
+        background-color: #fff3cd;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .tableColor:hover {
+        background-color: #ffe69c;
+    }
+
+    hr {
+        border-top: 2px solid var(--primary-color);
+        opacity: 0.2;
+        margin: 30px 0;
+    }
+
+    .totalizadores h5 {
+        font-size: 1.5rem;
+        margin-bottom: 15px;
+    }
+
+    .totalizadores .card {
+        margin: 15px;
+        border-radius: 10px;
+        background: white;
+        color: var(--text-color);
+    }
+
+    .totalizadores .card-title {
+        color: var(--primary-color);
+        font-size: 0.8rem;
+        margin: 1px;
+        font-weight: 600;
+    }
+
+    .totalizadores .card-body h5 {
+        color: var(--text-color);
+        font-size: 1.5rem;
+        font-weight: 500;
+    }
+</style>
+
+<div class="container">
+    <div class="row">
+        <!--Filtro-->
+        <div class="col-sm-4">
+            <div class="card">
+                <div class="card-body">
+                    <h1>Controle</h1>
+                    <hr>
+                    <form method="POST">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label>Data inicial:</label>
+                            {% render_field form.data_inicial type="date" id="data_inicial" class="form-control" %}
+                        </div>
+                        <div class="form-group">
+                            <label>Data final:</label>
+                            {% render_field form.data_final type="date" id="data_final" class="form-control" %}
+                        </div>
+                        <div class="form-group">
+                            <label>Seleção:</label>
+                            {% render_field form.selecao class="form-control" %}
+                        </div>
+                        <div class="form-group">
+                            <label>Nome ou Placa:</label>
+                            {% render_field form.nome_placa class="form-control" type="text" id="nome_placa" %}
+                        </div>
+                        <div class="form-group">
+                            <button type="submit" id="botao-busca" class="btn btn-primary">
+                                <i class="fas fa-search"></i> Buscar
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!--totalizadores-->
+        <div id="totalizadores" class="col-sm-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="totalizadores">Totalizadores:</h5>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card">
+                                <h5 class="card-title">Tempo de jornada:</h5>
+                                <div class="card-body">
+                                    <h5>{{tJornada}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Parado ligado:</h5>
+                                <div class="card-body">
+                                    <h5>{{paradoLigado}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Em movimento:</h5>
+                                <div class="card-body">
+                                    <h5>{{veiMovimento}}</h5>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <h5 class="card-title">Tempo de almoço:</h5>
+                                <div class="card-body">
+                                    <h5>{{horarioAlmoco}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Tempo de espera:</h5>
+                                <div class="card-body">
+                                    <h5>{{tempoEspera}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Tempo de descanso:</h5>
+                                <div class="card-body">
+                                    <h5>{{tempoDescanso}}</h5>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card">
+                                <h5 class="card-title">Tempo noturno:</h5>
+                                <div class="card-body">
+                                    <h5>{{tempoNoturno}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Horas Extras Noturnas:</h5>
+                                <div class="card-body">
+                                    <h5>{{extraNoturno}}</h5>
+                                </div>
+                            </div>
+                            <div class="card">
+                                <h5 class="card-title">Horas Extras Diurnas:</h5>
+                                <div class="card-body">
+                                    <h5>{{extrasDiurnas}}</h5>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr>
+
+<!-- alerta django -->
+<div class="row justify-content-md-center">
+    {% if sqlConnect %}
+    <div class="col-12 text-center">
+        <span class="text-muted">
+            <i>Obs. As colunas que estão com cores amarelas estarão habilitadas para alterar os valores.</i>
+        </span>
+    </div>
+    {% endif %}
+</div>
+
+<!--botão para gerar o arquivo excel -->
+<br>
+<div class="table-responsive">
+    {% if sqlConnect %}
+    <div id="tabela">
+        <table id="tblData" class="table table-striped table-sm">
+            <thead>
+                <tr>
+                    <th scope="col" class="table-dark">Placa</th>
+                    <th scope="col" class="table-dark">Data</th>
+                    <th scope="col" class="table-dark">Motorista</th>
+                    <th scope="col" class="table-dark">Dia da Semana</th>
+                    <th scope="col" class="table-dark">Inicio de jornada</th>
+                    <th scope="col" class="table-dark">Fim de jornada</th>
+                    <th scope="col" class="table-dark">Jornada</th>
+                    <th scope="col" class="table-dark">Parado ligado</th>
+                    <th scope="col" class="table-dark">Veiculo movimento</th>
+                    <th scope="col" class="table-secondary">Hora do almoço</th>
+                    <th scope="col" class="table-secondary">Tempo de espera</th>
+                    <th scope="col" class="table-secondary">Tempo de descanço</th>
+                    <th scope="col" class="table-dark">Tempo noturno</th>
+                    <th scope="col" class="table-dark">Tempo Extra</th>
+                    <th scope="col" class="table-dark">Tempo extra noturno</th>
+                    <th scope="col" class="table-dark">Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for i in sqlConnect %}
+                <tr>
+                    <td>{{i.placa}}</td>
+                    <td>{{i.data}}</td>
+                    <td>{{i.motoristaRAS}}</td>
+                    <td>{{i.diaSemana}}</td>
+                    <td>{{i.InicioJornada}}</td>
+                    <td>{{i.FimJornada}}</td>
+                    <td>{{i.Jornada}}</td>
+                    <td>{{i.ligadoParado}}</td>
+                    <td>{{i.veiMovi}}</td>
+                    <td class="tableColor" onclick="typeHora(this)">{{i.horaAlmoco}}</td>
+                    <td class="tableColor" onclick="typeHora(this)">{{i.tempoEspera}}</td>
+                    <td class="tableColor" onclick="typeHora(this)">{{i.tempoDescanso}}</td>
+                    <td>{{i.tempoNoturno}}</td>
+                    <td>{{i.TempoExtra}}</td>
+                    <td>{{i.tempoNoturnoExtra}}</td>
+                    <td>
+                        <button class="btn-atualizar" onClick="atualizarDados(this)">
+                            <i class="fas fa-sync-alt"></i> Atualizar
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="text-center">
+        <h5>Sem dados gerados.</h5>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block js %}
+<!--Script do sistema-->
+<script>
+
+  $(document).ready(function(){
+    $("#id_selecao").change(function(){
+      if ($(this).val() == 'placa') {
+        //alert('As placas foram carregadas')
+        $("#nome_placa").val("")
+        var listaplacas = [{% for i in result_placa %}'{{i.placa}}',{% endfor %}]
+        //console.log(listaplacas)
+        $("#nome_placa").prop("disabled", false)
+        $("#nome_placa" ).autocomplete({
+          source: function( request, response ) {
+          var matcher = new RegExp( "^" + $.ui.autocomplete.escapeRegex( request.term ), "i" );
+          response( $.grep( listaplacas, function( item ){
+              return matcher.test( item );
+          }) );
+      }
+       });
+      } else if ($(this).val() == 'motorista') {
+        //alert('Os motoristas foram carregados')
+        $("#nome_placa").val("")
+        var listasmotoristas = [{% for i in result_motorista %}'{{i.motoristaRAS}}',{% endfor %}]
+        //console.log(listasmotoristas)
+        $("#nome_placa").prop("disabled", false)
+        $("#nome_placa" ).autocomplete({
+          source: function( request, response ) {
+          var matcher = new RegExp( "^" + $.ui.autocomplete.escapeRegex( request.term ), "i" );
+          response( $.grep( listasmotoristas, function( item ){
+              return matcher.test( item );
+          }) );
+      }
+       });
+      } else if ($(this).val() == "todos") {
+        $("#nome_placa").val("")
+        $("#nome_placa").prop("disabled", true)
+      }
+    })
+  })
+$(function(){
+  $("#nome_placa").click(function(){
+    if ($("#id_selecao").val() == 'placa'){
+      var listaplacas =  [{% for i in result_placa %}'{{i.placa}}',{% endfor %}]
+      $("#nome_placa" ).autocomplete({
+        source: function( request, response ) {
+          var matcher = new RegExp( "^" + $.ui.autocomplete.escapeRegex( request.term ), "i" );
+          response( $.grep( listaplacas, function( item ){
+              return matcher.test( item );
+          }) );
+      }
+    });
+    }
+     if ($("#id_selecao").val() == 'motorista'){
+      var listasmotoristas = [{% for i in result_motorista %}'{{i.motoristaRAS}}',{% endfor %}]
+      $("#nome_placa").val("")
+      $("#nome_placa").autocomplete({
+        source: function( request, response ) {
+          var matcher = new RegExp( "^" + $.ui.autocomplete.escapeRegex( request.term ), "i" );
+          response( $.grep( listasmotoristas, function( item ){
+              return matcher.test( item );
+          }) );
+      }
+      });
+    }
+  })
+})
+window.onload = function () {
+   if($("#id_selecao").val() == 'todos'){
+    $("#nome_placa").prop("disabled", true)
+   }
+ }
+
+
+ $(document).ready(function () {
+    var table = $("#tblData").DataTable({
+        paging: true,
+        pageLength: 10,
+        lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "Todos"]],
+        searching: true,
+        language: {
+            "sEmptyTable": "Nenhum registro encontrado",
+            "sInfo": "Mostrando _START_ até _END_ de _TOTAL_ registros",
+            "sInfoEmpty": "Mostrando 0 até 0 de 0 registros",
+            "sInfoFiltered": "(Filtrados de _MAX_ registros)",
+            "sInfoPostFix": "",
+            "sInfoThousands": ".",
+            "sLengthMenu": "_MENU_ resultados por página",
+            "sLoadingRecords": "Carregando...",
+            "sProcessing": "Processando...",
+            "sZeroRecords": "Nenhum registro encontrado",
+            "sSearch": "Pesquisar:",
+            "oPaginate": {
+                "sNext": "Próximo",
+                "sPrevious": "Anterior",
+                "sFirst": "Primeiro",
+                "sLast": "Último"
+            },
+            "oAria": {
+                "sSortAscending": ": Ordenar colunas de forma ascendente",
+                "sSortDescending": ": Ordenar colunas de forma descendente"
+            }
+        },
+        dom: 'Bfrtip',
+        buttons: [{
+            extend: 'excelHtml5',
+            autoFilter: true,
+            sheetName: 'Exported data',
+            text: '<i class="fas fa-file-excel"></i> Exportar Excel',
+            className: 'btn btn-success'
+        }],
+        columnDefs: [
+            {
+                orderable: false,
+                targets: [9, 10, 11],
+            },
+        ],
+    });
+ 
+});
+
+
+function typeHora(){
+  $(".tableColor").click(function(event){
+    if($(this).children("input").length > 0)
+          return false;
+
+    var tdObj = $(this);
+    var preText = tdObj.html();
+    var inputObj = $("<input type='time' step='2'/>");
+    tdObj.html("");
+
+    inputObj.width(tdObj.width())
+            .height(tdObj.height())
+            .css({border:"0px",fontSize:"12px", width:"76px"})
+            .val(preText)
+            .appendTo(tdObj)
+            .trigger("focus")
+            .trigger("select");
+    inputObj.mouseout(function(event){ // press ENTER-key
+        var text = $(this).val();
+        tdObj.html(text);
+      
+    });
+
+    inputObj.click(function(){
+      return false;
+    });
+  })
+};
+
+function atualizarDados(botao) {
+   var tableData = $(botao).closest("tr").find("td:not(:last-child)").map(function(){
+      return $(this).text().trim();
+   }).get();
+   console.log(tableData)
+    $.ajax({
+      type: "POST",
+      url: "{% url 'atulizarDados' %}",
+      data: { placa: tableData[0],
+              data_op: tableData[1],
+              hr_almoco: tableData[9],
+              tempo_espera: tableData[10],
+              tempo_descanso: tableData[11],
+              csrfmiddlewaretoken: '{{ csrf_token }}'
+             },
+             success: function(response){
+        Swal.fire({
+            icon: 'success',
+            title: 'Tudo certo.',
+            text: response.info,
+            timer: 3000,
+            timerProgressBar: true,
+          })
+      },
+      error: function(response){
+        Swal.fire({
+            icon: 'error',
+            title: 'Ops.',
+            text: response.responseJSON.errors,
+            timer: 3000,
+            timerProgressBar: true,
+          })
+      },
+      })
+    
+        Swal.fire({
+            icon: 'error',
+            title: 'Ops.',
+            text: response.responseJSON.errors,
+            timer: 3000,
+            timerProgressBar: true,
+          })
+    }
+
+
+</script>
+{% endblock %}

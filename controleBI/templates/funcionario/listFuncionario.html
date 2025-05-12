@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="card-title mb-0">
+                        <i class="bi bi-people me-2"></i>
+                        Lista de Funcionários
+                    </h4>
+                    <button type="button" class="btn btn-primary" id="btnImportarFuncionario">
+                        <i class="fas fa-file-import"></i> Importar Funcionários
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Filtros -->
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body">
+                                    <form method="get" class="row g-3">
+                                        <div class="col-md-4">
+                                            <label for="search" class="form-label">Buscar</label>
+                                            <input type="text" class="form-control" id="search" name="search" 
+                                                   placeholder="Nome, CPF ou código ERP..." value="{{ current_search }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="tipo" class="form-label">Tipo</label>
+                                            <select class="form-select" id="tipo" name="tipo">
+                                                <option value="">Todos</option>
+                                                <option value="Motorista" {% if current_tipo == 'Motorista' %}selected{% endif %}>Motorista</option>
+                                                <option value="Ajudante" {% if current_tipo == 'Ajudante' %}selected{% endif %}>Ajudante</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label for="status" class="form-label">Status</label>
+                                            <select class="form-select" id="status" name="status">
+                                                <option value="">Todos</option>
+                                                <option value="Ativo" {% if current_status == 'Ativo' %}selected{% endif %}>Ativo</option>
+                                                <option value="Inativo" {% if current_status == 'Inativo' %}selected{% endif %}>Inativo</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 d-flex align-items-end">
+                                            <button type="submit" class="btn btn-primary w-100">
+                                                <i class="bi bi-search me-2"></i>Filtrar
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabela -->
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>CPF</th>
+                                    <th>Código ERP</th>
+                                    <th>Tipo</th>
+                                    <th>Status</th>
+                                    <th>Sincronizado</th>
+                                    <th class="text-end">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for funcionario in funcionarios %}
+                                <tr>
+                                    <td>{{ funcionario.nome }}</td>
+                                    <td>{{ funcionario.cpf }}</td>
+                                    <td>{{ funcionario.codigo_erp }}</td>
+                                    <td>{{ funcionario.tipo }}</td>
+                                    <td>
+                                        <span class="badge {% if funcionario.status == 'Ativo' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ funcionario.status|default:'Inativo' }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if funcionario.sincronizado %}bg-success{% else %}bg-warning{% endif %}">
+                                            {% if funcionario.sincronizado %}Sim{% else %}Não{% endif %}
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="btn-group">
+                                            <a href="{% url 'funcionario_edit' funcionario.id %}" 
+                                               class="btn btn-sm btn-warning" 
+                                               title="Editar">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <button type="button" 
+                                                    class="btn btn-sm btn-danger delete-funcionario" 
+                                                    title="Excluir"
+                                                    data-id="{{ funcionario.id }}"
+                                                    data-nome="{{ funcionario.nome }}">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center">Nenhum funcionário encontrado.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <td colspan="7" class="text-center">
+                                        <small class="text-muted">
+                                            Total de registros: {{ total_registros }} | 
+                                            Registros filtrados: {{ registros_filtrados }}
+                                        </small>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    <!-- Paginação -->
+                    {% if is_paginated %}
+                    <nav aria-label="Navegação de páginas" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                    <i class="bi bi-chevron-left"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="bi bi-chevron-left"></i></span>
+                            </li>
+                            {% endif %}
+
+                            {% for num in paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                                {% else %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                        {{ num }}
+                                    </a>
+                                </li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}">
+                                    <i class="bi bi-chevron-right"></i>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="bi bi-chevron-right"></i></span>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var modals = document.querySelectorAll('.modal');
+        modals.forEach(function(modal) {
+            new bootstrap.Modal(modal, {
+                backdrop: false,
+                keyboard: false
+            });
+        });
+
+        // Importar funcionários
+        $('#btnImportarFuncionario').click(function() {
+            if (confirm('Deseja importar os funcionários do sistema ERP?')) {
+                $.ajax({
+                    url: '{% url "import_funcionarios" %}',
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            alert(response.message);
+                            location.reload();
+                        } else {
+                            alert('Erro: ' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('Erro ao importar funcionários: ' + error);
+                    }
+                });
+            }
+        });
+
+        // Delete funcionário
+        $('.delete-funcionario').click(function() {
+            const id = $(this).data('id');
+            const nome = $(this).data('nome');
+            
+            if (confirm(`Tem certeza que deseja excluir o funcionário:\n\n${nome}\n\nEsta ação não poderá ser desfeita.`)) {
+                $.ajax({
+                    url: "{% url 'funcionario_delete' 0 %}".replace('0', id),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            location.reload();
+                        } else {
+                            alert('Erro: ' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        alert('Erro ao excluir funcionário: ' + error);
+                    }
+                });
+            }
+        });
+    });
+</script>
+{% endblock %}
+

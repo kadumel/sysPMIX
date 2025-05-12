@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Cabeçalho -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="card-title mb-0">
+                <i class="bi bi-truck me-2"></i>
+                Detalhes do Veículo
+            </h4>
+            <a href="{% url 'list_veiculo' %}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left me-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informações Principais -->
+        <div class="col-12">
+            <!-- Identificação -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Identificação</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Placa</label>
+                            <p class="form-control-plaintext">{{ veiculo.placa }}</p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Código ERP</label>
+                            <p class="form-control-plaintext">{{ veiculo.codigo_erp }}</p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Descrição</label>
+                            <p class="form-control-plaintext">{{ veiculo.descricao }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Especificações Técnicas -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Especificações Técnicas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Modelo</label>
+                            <p class="form-control-plaintext">{{ veiculo.modelo }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Tipo de Veículo</label>
+                            <p class="form-control-plaintext">{{ veiculo.tipo_veiculo }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Ano do Modelo</label>
+                            <p class="form-control-plaintext">{{ veiculo.ano_modelo }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Ano de Fabricação</label>
+                            <p class="form-control-plaintext">{{ veiculo.ano_fabricacao }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Tipo de Combustível</label>
+                            <p class="form-control-plaintext">{{ veiculo.tipo_combustivel }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Velocidade Máxima</label>
+                            <p class="form-control-plaintext">{{ veiculo.velocidade_maxima }} km/h</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status e Quilometragem -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Status e Quilometragem</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Status</label>
+                            <p>
+                                <span class="badge {% if veiculo.status_inicial == 'Ativo' %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ veiculo.status_inicial }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">KM Atual</label>
+                            <p class="form-control-plaintext">{{ veiculo.km_atual|floatformat:0 }} km</p>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label fw-bold">Filial</label>
+                            <p class="form-control-plaintext">{{ veiculo.filial }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Capacidades -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Capacidades</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Qtd. Máx. Entregas</label>
+                            <p class="form-control-plaintext">{{ veiculo.qtd_max_entregas }}</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Peso Máx. Entregas</label>
+                            <p class="form-control-plaintext">{{ veiculo.peso_max_entregas }} kg</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Volume Máx. Entregas</label>
+                            <p class="form-control-plaintext">{{ veiculo.volume_max_entregas }} m³</p>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label fw-bold">Qtd. Pallets</label>
+                            <p class="form-control-plaintext">{{ veiculo.qtd_pallets_veiculo }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirmar Exclusão</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Tem certeza que deseja excluir o veículo <strong>{{ veiculo.placa }}</strong>?</p>
+                <p class="text-danger">Esta ação não pode ser desfeita.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <form method="post" action="{% url 'veiculo_delete' veiculo.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">Confirmar Exclusão</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

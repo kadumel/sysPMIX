@@ -1,0 +1,227 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h4 class="card-title mb-0">
+                        <i class="bi bi-truck me-2"></i>
+                        Editar Veículo
+                    </h4>
+                    <a href="{% url 'list_veiculo' %}" class="btn btn-secondary">
+                        <i class="bi bi-arrow-left me-2"></i>Voltar
+                    </a>
+                </div>
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+                        
+                        <!-- Dados do Veículo -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="bi bi-car-front me-2"></i>
+                                    Dados do Veículo
+                                </h5>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="codigo_erp" class="form-label">Código ERP</label>
+                                <input type="text" class="form-control" id="codigo_erp" name="codigo_erp" value="{{ veiculo.codigo_erp }}" required>
+                                <div class="invalid-feedback">
+                                    Por favor, informe o código ERP.
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="filial" class="form-label">Filial</label>
+                                <input type="text" class="form-control" id="filial" name="filial" value="{{ veiculo.filial }}" required>
+                                <div class="invalid-feedback">
+                                    Por favor, informe a filial.
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="placa" class="form-label">Placa</label>
+                                <input type="text" class="form-control" id="placa" name="placa" value="{{ veiculo.placa }}" required>
+                                <div class="invalid-feedback">
+                                    Por favor, informe a placa.
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="descricao" class="form-label">Descrição</label>
+                                <input type="text" class="form-control" id="descricao" name="descricao" value="{{ veiculo.descricao }}" required>
+                                <div class="invalid-feedback">
+                                    Por favor, informe a descrição.
+                                </div>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="modelo" class="form-label">Modelo</label>
+                                <select class="form-select" id="modelo" name="modelo">
+                                    <option value="">Selecione...</option>
+                                    <option value="Volkswagen" {% if veiculo.modelo == 'Volkswagen' %}selected{% endif %}>Volkswagen</option>
+                                    <option value="ford" {% if veiculo.modelo == 'ford' %}selected{% endif %}>Ford</option>
+                                    <option value="chevrolet" {% if veiculo.modelo == 'chevrolet' %}selected{% endif %}>Chevrolet</option>
+                                    <option value="fiat" {% if veiculo.modelo == 'fiat' %}selected{% endif %}>Fiat</option>
+                                    <option value="hyundai" {% if veiculo.modelo == 'hyundai' %}selected{% endif %}>Hyundai</option>
+                                    <option value="nissan" {% if veiculo.modelo == 'nissan' %}selected{% endif %}>Nissan</option>
+                                    <option value="peugeot" {% if veiculo.modelo == 'peugeot' %}selected{% endif %}>Peugeot</option>
+                                    <option value="renault" {% if veiculo.modelo == 'renault' %}selected{% endif %}>Renault</option>
+                                    <option value="toyota" {% if veiculo.modelo == 'toyota' %}selected{% endif %}>Toyota</option>
+                                    <option value="volvo" {% if veiculo.modelo == 'volvo' %}selected{% endif %}>Volvo</option>
+                                    <option value="mercedes" {% if veiculo.modelo == 'mercedes' %}selected{% endif %}>Mercedes</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="tipo_veiculo" class="form-label">Tipo de Veículo</label>
+                                <select class="form-select" id="tipo_veiculo" name="tipo_veiculo">
+                                    <option value="">Selecione...</option>
+                                    <option value="Caminhão" {% if veiculo.tipo_veiculo == 'Caminhão' %}selected{% endif %}>Caminhão</option>
+                                    <option value="Furgão" {% if veiculo.tipo_veiculo == 'Furgão' %}selected{% endif %}>Furgão</option>
+                                    <option value="Van" {% if veiculo.tipo_veiculo == 'Van' %}selected{% endif %}>Van</option>
+                                    <option value="Carro" {% if veiculo.tipo_veiculo == 'Carro' %}selected{% endif %}>Carro</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="tipo_combustivel" class="form-label">Tipo de Combustível</label>
+                                <select class="form-select" id="tipo_combustivel" name="tipo_combustivel" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="Gasolina" {% if veiculo.tipo_combustivel == 'Gasolina' %}selected{% endif %}>Gasolina</option>
+                                    <option value="Diesel" {% if veiculo.tipo_combustivel == 'Diesel' %}selected{% endif %}>Diesel</option>
+                                    <option value="Flex" {% if veiculo.tipo_combustivel == 'Flex' %}selected{% endif %}>Flex</option>
+                                    <option value="Eletrico" {% if veiculo.tipo_combustivel == 'Eletrico' %}selected{% endif %}>Elétrico</option>
+                                    <option value="Alcool" {% if veiculo.tipo_combustivel == 'Alcool' %}selected{% endif %}>Álcool</option>
+                                    <option value="Outros" {% if veiculo.tipo_combustivel == 'Outros' %}selected{% endif %}>Outros</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Especificações -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="bi bi-gear me-2"></i>
+                                    Especificações
+                                </h5>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="ano_fabricacao" class="form-label">Ano de Fabricação</label>
+                                <input type="number" class="form-control" id="ano_fabricacao" name="ano_fabricacao" value="{{ veiculo.ano_fabricacao|default:'0' }}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="ano_modelo" class="form-label">Ano do Modelo</label>
+                                <input type="number" class="form-control" id="ano_modelo" name="ano_modelo" value="{{ veiculo.ano_modelo|default:'0' }}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="peso_max_entregas" class="form-label">Peso Máximo de Entregas (kg)</label>
+                                <input type="number" class="form-control" id="peso_max_entregas" name="peso_max_entregas" value="{{ veiculo.peso_max_entregas|default:'0' }}" step="0.01">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="volume_max_entregas" class="form-label">Volume Máximo de Entregas (m³)</label>
+                                <input type="number" class="form-control" id="volume_max_entregas" name="volume_max_entregas" value="{{ veiculo.volume_max_entregas|default:'0' }}" step="0.01">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="qtd_pallets_veiculo" class="form-label">Quantidade de Pallets</label>
+                                <input type="number" class="form-control" id="qtd_pallets_veiculo" name="qtd_pallets_veiculo" value="{{ veiculo.qtd_pallets_veiculo|default:'0' }}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="velocidade_maxima" class="form-label">Velocidade Máxima (km/h)</label>
+                                <input type="number" class="form-control" id="velocidade_maxima" name="velocidade_maxima" value="{{ veiculo.velocidade_maxima|default:'0' }}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="qtd_max_entregas" class="form-label">Quantidade Máxima de Entregas</label>
+                                <input type="number" class="form-control" id="qtd_max_entregas" name="qtd_max_entregas" value="{{ veiculo.qtd_max_entregas|default:'0' }}">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label for="km_atual" class="form-label">Quilometragem Atual</label>
+                                <input type="number" class="form-control" id="km_atual" name="km_atual" value="{{ veiculo.km_atual|default:'0' }}" step="0.01">
+                            </div>
+                        </div>
+
+                        <!-- Status -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <h5 class="text-primary mb-3">
+                                    <i class="bi bi-building-gear me-2"></i>
+                                    Status
+                                </h5>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="status_inicial" class="form-label">Status Inicial</label>
+                                <select class="form-select" id="status_inicial" name="status_inicial" required>
+                                    <option value="">Selecione</option>
+                                    <option value="Ativo" {% if veiculo.status_inicial == 'Ativo' %}selected{% endif %}>Ativo</option>
+                                    <option value="Inativo" {% if veiculo.status_inicial == 'Inativo' %}selected{% endif %}>Inativo</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Botões de Ação -->
+                        <div class="row">
+                            <div class="col-12 d-flex justify-content-end gap-2">
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-save me-2"></i>Salvar
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Script para validação do formulário -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Validação do formulário
+        const forms = document.querySelectorAll('.needs-validation');
+        Array.from(forms).forEach(form => {
+            form.addEventListener('submit', event => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+
+        // Máscara para placa
+        const placaInput = document.getElementById('placa');
+        placaInput.addEventListener('input', function(e) {
+            let value = e.target.value.toUpperCase();
+            value = value.replace(/[^A-Z0-9]/g, '');
+            if (value.length > 7) value = value.slice(0, 7);
+            if (value.length > 3) {
+                value = value.slice(0, 3) + '-' + value.slice(3);
+            }
+            e.target.value = value;
+        });
+
+        // Validação de anos
+        const anoFabricacao = document.getElementById('ano_fabricacao');
+        const anoModelo = document.getElementById('ano_modelo');
+        const anoAtual = new Date().getFullYear();
+
+        anoFabricacao.setAttribute('max', anoAtual);
+        anoModelo.setAttribute('max', anoAtual + 1);
+
+        // Select2 para múltipla seleção de filiais
+        $(document).ready(function() {
+            $('#filiais').select2({
+                placeholder: 'Selecione as filiais',
+                allowClear: true
+            });
+        });
+
+        // Validação de números positivos
+        const numberInputs = document.querySelectorAll('input[type="number"]');
+        numberInputs.forEach(input => {
+            input.setAttribute('min', '0');
+            input.addEventListener('input', function(e) {
+                if (this.value < 0) this.value = 0;
+            });
+        });
+    });
+</script>
+{% endblock %} 
