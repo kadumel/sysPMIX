@@ -466,10 +466,10 @@ class ListPedidoView(LoginRequiredMixin, View):
         pedidos = paginator.get_page(page)
         
         # Calcular valor total para cada pedido
-        for pedido in pedidos:
-            pedido.valor = ItemPedido.objects.filter(pedido=pedido).aggregate(
-                total=Sum('qtd') * Sum('preco')
-            )['total'] or 0
+        # for pedido in pedidos:
+        #     pedido.valor = ItemPedido.objects.filter(pedido=pedido).aggregate(
+        #         total=Sum('qtd') * Sum('preco')
+        #     )['total'] or 0
         
         context = {
             'pedidos': pedidos,
@@ -1041,7 +1041,6 @@ def import_pedidos(request):
 def import_veiculos(request):
     max_retries = 3
     retry_count = 0
-    
     while retry_count < max_retries:
         try:
             # Registrar início da importação na auditoria

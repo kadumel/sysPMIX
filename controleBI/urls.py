@@ -10,7 +10,7 @@ from django.views.generic import TemplateView
 from . import views
 
 urlpatterns = [
-    path('', IndexView.as_view(), name='index'),
+    path('',  DashboardView.as_view(), name='index'),
     path('dashboard/', DashboardView.as_view(), name='dashboard'),
     
     # Funcionários
