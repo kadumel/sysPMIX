@@ -55,6 +55,8 @@ class FuncionarioService:
                     "Content-Type": "text/xml; charset=utf-8",
                     "SOAPAction": "urn:sendMotoristas"
                 }
+
+            # print(soap_xml)
         
             # Enviar requisição
             response = requests.post(BASE_URL, data=soap_xml.encode('utf-8'), headers=headers)
@@ -122,6 +124,7 @@ class VeiculoService:
                     "SOAPAction": "urn:sendVeiculos"
                 }
         
+            # print(soap_xml)
             # Enviar requisição
             response = requests.post(BASE_URL, data=soap_xml, headers=headers)
             # Verificar resposta
@@ -195,8 +198,8 @@ class PedidoService:
                 "vlr_tits_vencido_cliente": str(pedido.vlr_tits_vencido_cliente) if pedido.vlr_tits_vencido_cliente else '',
                 "vlr_tits_vencer_cliente": str(pedido.vlr_tits_vencer_cliente) if pedido.vlr_tits_vencer_cliente else '',
                 "status_cred_cliente": pedido.status_cred_cliente or '',
-                "praca_cod_erp": pedido.praca_cod_erp or '',
-                "praca_descricao": pedido.praca_descricao or '',
+                "praca_cod_erp": '1',
+                "praca_descricao": 'Praça Padrão',
                 "rota_cod_erp": pedido.rota_cod_erp or '',
                 "rota_descricao": pedido.rota_descricao or '',
                 "cod_segmento": pedido.cod_segmento or '',
@@ -219,7 +222,8 @@ class PedidoService:
                         "unidade": item.unidade or '',
                         "qtd": str(item.qtd) if item.qtd else '',
                         "preco": str(item.preco) if item.preco else '',
-                        "subtotal": str(item.subtotal) if item.subtotal else ''
+                        "subtotal": str(item.subtotal) if item.subtotal else '',
+                        "peso": str(item.peso) if item.peso else ''
                     } for item in itens
                 ]
             })
@@ -256,6 +260,8 @@ class PedidoService:
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'urn:saveEntregaServico'
             }
+
+            # print(soap_envelope)
             
             response = requests.post(
                 BASE_URL,
