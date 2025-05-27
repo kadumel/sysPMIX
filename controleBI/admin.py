@@ -14,12 +14,40 @@ admin.site.index_title = _('Pannemix')
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('codigo', 'cliente','fantasia','cnpj',  'sincronizado')
-    search_fields = ('codigo', 'cliente','fantasia','cnpj')
-    list_filter = ('codigo', 'cliente','fantasia','cnpj')
-    fields = ('codigo', 'cliente','fantasia','cnpj', 'sincronizado')
+    list_display = ('codigo', 'cliente', 'fantasia', 'cnpj', 'sincronizado')
+    search_fields = ('codigo', 'cliente', 'fantasia', 'cnpj')
+    list_filter = ('codigo', 'cliente', 'fantasia', 'cnpj')
+    fields = ('codigo', 'cliente', 'fantasia', 'cnpj', 'sincronizado')
     list_per_page = 10
 
+@admin.register(ClienteERP)
+class ClienteERPAdmin(admin.ModelAdmin):
+    list_display = ('codigo_cliente', 'descr_cliente', 'razao_cliente', 'cnpj_cpf_cliente', 'cidade_cliente', 'uf_cliente', 'sincronizado')
+    search_fields = ('codigo_cliente', 'descr_cliente', 'razao_cliente', 'cnpj_cpf_cliente', 'cidade_cliente')
+    list_filter = ('uf_cliente', 'cidade_cliente', 'sincronizado', 'prioritario', 'bloqueiosefaz')
+    
+    fieldsets = (
+        ('Informações Principais', {
+            'fields': ('campo_alt', 'seq_id', 'codigo_cliente', 'filial_padrao', 'descr_cliente', 'razao_cliente', 'cnpj_cpf_cliente')
+        }),
+        ('Rota e Segmento', {
+            'fields': ('cliente_cod_rota_erp', 'cliente_descricao_rota', 'cod_segmento', 'descr_segmento')
+        }),
+        ('Endereço', {
+            'fields': ('cep_cliente', 'end_cliente', 'num_end_cliente', 'bairro_cliente', 'cidade_cliente', 'uf_cliente')
+        }),
+        ('Contato', {
+            'fields': ('email1_cliente', 'email2_cliente', 'email3_cliente', 'tel1_cliente', 'tel2_cliente', 'tel3_cliente')
+        }),
+        ('Informações Financeiras', {
+            'fields': ('data_cadastro_cliente', 'vlr_credito_cliente', 'saldo_disp_cliente', 'vlr_tits_vencido_cliente', 
+                      'vlr_tits_vencer_cliente', 'status_cred_cliente', 'data_ult_compra', 'forma_pgto_cliente')
+        }),
+        ('Configurações Adicionais', {
+            'fields': ('turnos_entrega', 'prioritario', 'bloqueiosefaz', 'rede_loja_cliente', 'sincronizado')
+        })
+    )
+    list_per_page = 10
 
 @admin.register(Funcionario)
 class FuncionarioAdmin(admin.ModelAdmin):
@@ -176,6 +204,29 @@ class ItemPedidoAdmin(admin.ModelAdmin):
     list_display = ('pedido', 'cod_produto_erp', 'descricao', 'unidade', 'qtd', 'preco', 'subtotal')
     search_fields = ('pedido', 'cod_produto_erp', 'descricao')
     list_filter = ('pedido', 'cod_produto_erp', 'descricao')
+    list_per_page = 10
+
+
+@admin.register(EnderecoCliente)
+class EnderecoClienteAdmin(admin.ModelAdmin):
+    list_display = ('clienteERP', 'end', 'num_end', 'bairro', 'cidade', 'uf', 'sn_padrao', 'sincronizado')
+    search_fields = ('clienteERP__descr_cliente', 'end', 'bairro', 'cidade', 'cod_end_erp')
+    list_filter = ('uf', 'cidade', 'sn_padrao', 'sincronizado')
+    
+    fieldsets = (
+        ('Cliente', {
+            'fields': ('cliente',)
+        }),
+        ('Informações do Endereço', {
+            'fields': ('cod_end_erp', 'end', 'num_end', 'bairro', 'cidade', 'uf', 'cep')
+        }),
+        ('Praça', {
+            'fields': ('cod_praca_erp', 'descr_praca_erp')
+        }),
+        ('Configurações', {
+            'fields': ('ref_entrega', 'sn_padrao', 'latitude', 'longitude', 'sincronizado')
+        })
+    )
     list_per_page = 10
 
 

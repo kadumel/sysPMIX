@@ -999,6 +999,8 @@ def import_pedidos(request):
                     user=request.user,
                     obs=f"Importação de pedidos realizada com sucesso via SP_ATUALIZA_PEDIDO. {rowcount} pedido(s) afetado(s)."
                 )
+
+                ClienteService.enviar_dados()
                 
                 return JsonResponse({
                     'success': True,

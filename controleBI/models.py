@@ -15,13 +15,61 @@ class Cliente(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        verbose_name = 'Integração - Cliente'
-        verbose_name_plural = 'Integração - Clientes'
+        verbose_name = 'Cliente'
+        verbose_name_plural = 'Clientes'
         ordering = ['id']
 
     def __str__(self):
-        return self.cliente    
+        return self.cliente
+
+class ClienteERP(models.Model):
+    campo_alt = models.CharField(max_length=10, default='NEW_59')
+    seq_id = models.CharField(max_length=10, null=True, blank=True)
+    codigo_cliente = models.CharField(max_length=10, null=True, blank=True)
+    filial_padrao = models.CharField(max_length=10, null=True, blank=True)
+    descr_cliente = models.CharField(max_length=100, null=True, blank=True)
+    razao_cliente = models.CharField(max_length=100, null=True, blank=True)
+    cnpj_cpf_cliente = models.CharField(max_length=14, null=True, blank=True)
+    cliente_cod_rota_erp = models.CharField(max_length=10, null=True, blank=True)
+    cliente_descricao_rota = models.CharField(max_length=100, null=True, blank=True )
+    cod_segmento = models.CharField(max_length=10, null=True, blank=True)
+    descr_segmento = models.CharField(max_length=50, null=True, blank=True)
+    cep_cliente = models.CharField(max_length=8, null=True, blank=True)
+    end_cliente = models.CharField(max_length=200, null=True, blank=True)
+    num_end_cliente = models.CharField(max_length=10, null=True, blank=True)
+    bairro_cliente = models.CharField(max_length=100, null=True, blank=True)
+    cidade_cliente = models.CharField(max_length=100, null=True, blank=True)
+    uf_cliente = models.CharField(max_length=2, null=True, blank=True)
+    email1_cliente = models.EmailField(max_length=100, null=True, blank=True)
+    email2_cliente = models.EmailField(max_length=100, null=True, blank=True)
+    email3_cliente = models.EmailField(max_length=100, null=True, blank=True)
+    tel1_cliente = models.CharField(max_length=20, null=True, blank=True)
+    tel2_cliente = models.CharField(max_length=20, null=True, blank=True)
+    tel3_cliente = models.CharField(max_length=20, null=True, blank=True)
+    data_cadastro_cliente = models.DateTimeField(null=True, blank=True)
+    vlr_credito_cliente = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    saldo_disp_cliente = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    vlr_tits_vencido_cliente = models.DecimalField(max_digits=10, decimal_places=2, default=0, null=True, blank=True)
+    vlr_tits_vencer_cliente = models.DecimalField(max_digits=10, decimal_places=2, default=0, null=True, blank=True)
+    status_cred_cliente = models.CharField(max_length=20, null=True, blank=True)
+    data_ult_compra = models.DateTimeField(null=True, blank=True)
+    forma_pgto_cliente = models.CharField(max_length=50, null=True, blank=True)
+    turnos_entrega = models.CharField(max_length=100, null=True, blank=True)
+    prioritario = models.CharField(max_length=1, choices=[('S', 'Sim'), ('N', 'Não')], default='N', null=True, blank=True)
+    bloqueiosefaz = models.CharField(max_length=1, choices=[('S', 'Sim'), ('N', 'Não')], default='N', null=True, blank=True)
+    rede_loja_cliente = models.CharField(max_length=10, null=True, blank=True)
+    sincronizado = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
+    class Meta:
+        verbose_name = 'Integração - Cliente ERP'
+        verbose_name_plural = 'Integração - Clientes ERP'
+        ordering = ['id']
+
+    def __str__(self):
+        return self.descr_cliente
+
 class Funcionario(models.Model):
     campo_alt = models.CharField(max_length=10, null=True, blank=True, default='NEW_825')
     seq_id = models.CharField(max_length=10, null=True, blank=True)
@@ -318,3 +366,30 @@ class Auditoria(models.Model):
 
     def __str__(self):
         return f"{self.origem} - {self.user.username} - {self.created.strftime('%d/%m/%Y %H:%M')}"
+
+class EnderecoCliente(models.Model):
+    clienteERP = models.ForeignKey(ClienteERP, on_delete=models.CASCADE, related_name='enderecos')
+    cod_end_erp = models.CharField(max_length=20, null=True, blank=True)
+    cod_praca_erp = models.CharField(max_length=20, null=True, blank=True)
+    descr_praca_erp = models.CharField(max_length=100, null=True, blank=True)
+    uf = models.CharField(max_length=2, null=True, blank=True)
+    cidade = models.CharField(max_length=100, null=True, blank=True)
+    bairro = models.CharField(max_length=100, null=True, blank=True)
+    end = models.CharField(max_length=200, null=True, blank=True)
+    num_end = models.CharField(max_length=20, null=True, blank=True)
+    cep = models.CharField(max_length=8, null=True, blank=True)
+    ref_entrega = models.CharField(max_length=200, null=True, blank=True)
+    sn_padrao = models.CharField(max_length=1, choices=[('S', 'Sim'), ('N', 'Não')], default='N', null=True, blank=True)
+    latitude = models.DecimalField(max_digits=18, decimal_places=7, default=0, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=18, decimal_places=7, default=0, null=True, blank=True)
+    sincronizado = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Endereço do Cliente'
+        verbose_name_plural = 'Endereços dos Clientes'
+        ordering = ['clienteERP', '-sn_padrao']
+
+    def __str__(self):
+        return f"{self.clienteERP.descr_cliente} - {self.end}, {self.num_end}"

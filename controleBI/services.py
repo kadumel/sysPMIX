@@ -1,7 +1,7 @@
 import requests
 import json
 from datetime import datetime
-from .models import Funcionario, Veiculo, Pedido, ItemPedido
+from .models import Funcionario, Veiculo, Pedido, ItemPedido, ClienteERP, EnderecoCliente
 from dotenv import load_dotenv
 import os
 import logging
@@ -296,4 +296,163 @@ class PedidoService:
             logger.error(error_msg)
             return False, error_msg
 
+class ClienteService:
     
+    @staticmethod
+    def atualizar_status_sincronizacao():
+        """
+        Atualiza o status de sincronização dos clientes baseado nos endereços.
+        Se algum endereço estiver com sincronizado=False, o cliente também será marcado como não sincronizado.
+        """
+        # Busca todos os endereços não sincronizados
+        enderecos_nao_sincronizados = EnderecoCliente.objects.filter(sincronizado=False).values_list('clienteERP_id', flat=True)
+        
+        # Atualiza os clientes que possuem endereços não sincronizados
+        if enderecos_nao_sincronizados:
+            ClienteERP.objects.filter(id__in=enderecos_nao_sincronizados).update(sincronizado=False)
+            return True, f"Atualizados {len(enderecos_nao_sincronizados)} clientes com endereços não sincronizados"
+        
+        return False, "Nenhum cliente precisou ser atualizado"
+
+    @staticmethod
+    def formatar_dados():
+
+        ClienteService.atualizar_status_sincronizacao()
+        clientes = ClienteERP.objects.filter(sincronizado=False)
+        dados = []
+        if clientes:
+            for cliente in clientes:
+                # Buscar endereços alternativos do cliente
+                enderecos = cliente.enderecos.all()
+            
+                # Formatar endereços alternativos
+                end_alt = []
+                for endereco in enderecos:
+                    if not endereco.sincronizado:  # Apenas inclui endereços não sincronizados
+                        end_alt.append({
+                            "cod_end_erp": endereco.cod_end_erp or '',
+                            "cod_praca_erp": endereco.cod_praca_erp or '',
+                            "descr_praca_erp": endereco.descr_praca_erp or '',
+                            "uf": endereco.uf or '',
+                            "cidade": endereco.cidade or '',
+                            "bairro": endereco.bairro or '',
+                            "end": endereco.end or '',
+                            "num_end": endereco.num_end or '',
+                            "cep": endereco.cep or '',
+                            "ref_entrega": endereco.ref_entrega or '',
+                            "sn_padrao": endereco.sn_padrao or 'N',
+                            "latitude": float(endereco.latitude) if endereco.latitude else 0,
+                            "longitude": float(endereco.longitude) if endereco.longitude else 0
+                        })
+                
+                # Formatar dados do cliente
+                dados.append({
+                    "campo_alt": cliente.campo_alt or '',
+                    "seq_id": cliente.seq_id or '',
+                    "codigo_cliente": cliente.codigo_cliente or '',
+                    "filial_padrao": cliente.filial_padrao or '',
+                    "descr_cliente": cliente.descr_cliente or '',
+                    "razao_cliente": cliente.razao_cliente or '',
+                    "cnpj_cpf_cliente": cliente.cnpj_cpf_cliente or '',
+                    "cliente_cod_rota_erp": cliente.cliente_cod_rota_erp or '',
+                    "cliente_descricao_rota": cliente.cliente_descricao_rota or '',
+                    "cod_segmento": cliente.cod_segmento or '',
+                    "descr_segmento": cliente.descr_segmento or '',
+                    "cep_cliente": cliente.cep_cliente or '',
+                    "end_cliente": cliente.end_cliente or '',
+                    "num_end_cliente": cliente.num_end_cliente or '',
+                    "bairro_cliente": cliente.bairro_cliente or '',
+                    "cidade_cliente": cliente.cidade_cliente or '',
+                    "uf_cliente": cliente.uf_cliente or '',
+                    "email1_cliente": cliente.email1_cliente or '',
+                    "email2_cliente": cliente.email2_cliente or '',
+                    "email3_cliente": cliente.email3_cliente or '',
+                    "tel1_cliente": cliente.tel1_cliente or '',
+                    "tel2_cliente": cliente.tel2_cliente or '',
+                    "tel3_cliente": cliente.tel3_cliente or '',
+                    "data_cadastro_cliente": cliente.data_cadastro_cliente.strftime('%Y-%m-%d %H:%M:%S') if cliente.data_cadastro_cliente else '',
+                    "vlr_credito_cliente": str(cliente.vlr_credito_cliente) if cliente.vlr_credito_cliente else '0',
+                    "saldo_disp_cliente": str(cliente.saldo_disp_cliente) if cliente.saldo_disp_cliente else '0',
+                    "vlr_tits_vencido_cliente": str(cliente.vlr_tits_vencido_cliente) if cliente.vlr_tits_vencido_cliente else '0',
+                    "vlr_tits_vencer_cliente": str(cliente.vlr_tits_vencer_cliente) if cliente.vlr_tits_vencer_cliente else '0',
+                    "status_cred_cliente": cliente.status_cred_cliente or '',
+                    "data_ult_compra": cliente.data_ult_compra.strftime('%Y-%m-%d %H:%M:%S') if cliente.data_ult_compra else '',
+                    "forma_pgto_cliente": cliente.forma_pgto_cliente or '',
+                    "turnos_entrega": cliente.turnos_entrega or '',
+                    "prioritario": cliente.prioritario or 'N',
+                    "bloqueiosefaz": cliente.bloqueiosefaz or 'N',
+                    "rede_loja_cliente": cliente.rede_loja_cliente or '',
+                    "end_alt": end_alt
+                })
+            
+            return dados
+        else:
+            return False
+
+    @staticmethod
+    def enviar_dados():
+         """Envia os dados dos pedidos para o web service"""
+        status = ClienteService.formatar_dados()
+        if status:
+            try:
+                # Formatar dados
+                json_data = json.dumps(status, ensure_ascii=False)
+                
+                # Construir envelope SOAP
+                soap_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
+                <soapenv:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                                xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                                xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
+                                xmlns:urn="urn:myInputNamespace">
+                <soapenv:Header/>
+                <soapenv:Body>
+                    <urn:sendClientes soapenv:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
+                        <login xsi:type="xsd:string">{login}</login>
+                        <senha xsi:type="xsd:string">{senha}</senha>
+                        <array_dados xsi:type="xsd:string"><![CDATA[{json_data}]]></array_dados>
+                    </urn:sendClientes>
+                </soapenv:Body>
+                </soapenv:Envelope>"""
+                
+                # Enviar requisição
+                headers = {
+                    'Content-Type': 'text/xml; charset=utf-8',
+                    'SOAPAction': 'urn:sendClientes'
+                }
+
+                # print(soap_envelope)
+                
+                response = requests.post(
+                    BASE_URL,
+                    data=soap_envelope.encode('utf-8'),
+                    headers=headers,
+                    timeout=30
+                )
+                
+                # Verificar resposta
+                if response.status_code == 200:
+
+
+                    # Verificar se a resposta contém erro
+                    if 'Error' in response.text:
+                        error_msg = response.text.split('<Error>')[1].split('</Error>')[0]
+                        logger.error(f"Erro no web service: {error_msg}")
+                        return False, error_msg
+                    return True, "Pedidos enviados com sucesso"
+                else:
+                    error_msg = f"Erro HTTP {response.status_code}: {response.text}"
+                    logger.error(error_msg)
+                    return False, error_msg
+                    
+            except requests.exceptions.Timeout:
+                error_msg = "Timeout ao conectar com o web service"
+                logger.error(error_msg)
+                return False, error_msg
+            except requests.exceptions.ConnectionError:
+                error_msg = "Erro de conexão com o web service"
+                logger.error(error_msg)
+                return False, error_msg
+            except Exception as e:
+                error_msg = f"Erro ao enviar pedidos: {str(e)}"
+                logger.error(error_msg)
+                return False, error_msg
