@@ -391,7 +391,7 @@ class ClienteService:
 
     @staticmethod
     def enviar_dados():
-         """Envia os dados dos pedidos para o web service"""
+        """Envia os dados dos pedidos para o web service"""
         status = ClienteService.formatar_dados()
         if status:
             try:
