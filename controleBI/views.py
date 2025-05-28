@@ -6,7 +6,7 @@ from .services import FuncionarioService, PedidoService
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncMonth
 from datetime import datetime, timedelta
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.contrib import messages
@@ -14,13 +14,13 @@ from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.urls import reverse_lazy
 from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 import json
 from django.views.generic import ListView, UpdateView, DeleteView
 from django.db import connection
 import time
 import traceback
-from .services import VeiculoService, PedidoService, FuncionarioService
+from .services import VeiculoService, PedidoService, FuncionarioService, ClienteService
 from django.db import connections
 
 
@@ -457,30 +457,57 @@ class ListPedidoView(LoginRequiredMixin, View):
         if sincronizado:
             pedidos = pedidos.filter(sincronizado=sincronizado == 'True')
         
-        # Ordenar por data mais recente
-        pedidos = pedidos.order_by('-data_pedido')
+        # Ordenar por data mais recente e ID para garantir ordem consistente
+        pedidos = pedidos.order_by('-data_pedido', '-id')
         
         # Paginação
-        paginator = Paginator(pedidos, 10)  # 10 itens por página
-        page = request.GET.get('page')
-        pedidos = paginator.get_page(page)
+        items_per_page = 10
+        paginator = Paginator(pedidos, items_per_page)
         
-        # Calcular valor total para cada pedido
-        # for pedido in pedidos:
-        #     pedido.valor = ItemPedido.objects.filter(pedido=pedido).aggregate(
-        #         total=Sum('qtd') * Sum('preco')
-        #     )['total'] or 0
+        try:
+            page = int(request.GET.get('page', '1'))
+            if page < 1:
+                page = 1
+        except ValueError:
+            page = 1
+        
+        try:
+            pedidos_paginados = paginator.page(page)
+        except PageNotAnInteger:
+            pedidos_paginados = paginator.page(1)
+        except EmptyPage:
+            # Se a página estiver fora do intervalo, mostrar última página
+            pedidos_paginados = paginator.page(paginator.num_pages)
+        
+        # Calcular intervalo de páginas para exibição
+        current_page = pedidos_paginados.number
+        total_pages = paginator.num_pages
+        
+        # Mostrar 5 páginas antes e depois da página atual
+        page_range = range(
+            max(1, current_page - 5),
+            min(total_pages + 1, current_page + 6)
+        )
+        
+        # Adicionar primeira e última página se necessário
+        show_first = 1 not in page_range
+        show_last = total_pages not in page_range
         
         context = {
-            'pedidos': pedidos,
+            'pedidos': pedidos_paginados,
             'total_registros': Pedido.objects.count(),
-            'registros_filtrados': pedidos.paginator.count,
+            'registros_filtrados': pedidos.count(),
             'current_search': search,
             'current_status': status,
             'current_tipo': tipo,
             'current_data_inicio': data_inicio,
             'current_data_fim': data_fim,
             'current_sincronizado': sincronizado,
+            'page_range': page_range,
+            'show_first': show_first,
+            'show_last': show_last,
+            'total_pages': total_pages,
+            'current_page': current_page
         }
         
         return render(request, 'pedido/listPedido.html', context)
@@ -984,10 +1011,14 @@ def import_pedidos(request):
             # Criar nova conexão
             with connection.cursor() as cursor:
                 # Executar a stored procedure
+
+                cursor.execute("exec sp_atualiza_cliente")
                 cursor.execute("EXEC SP_ATUALIZA_PEDIDO")
                 
                 # Obter o número de registros afetados
                 rowcount = cursor.rowcount
+
+                print(rowcount)
                 
                 # Fechar a conexão explicitamente
                 cursor.close()
@@ -1000,11 +1031,20 @@ def import_pedidos(request):
                     obs=f"Importação de pedidos realizada com sucesso via SP_ATUALIZA_PEDIDO. {rowcount} pedido(s) afetado(s)."
                 )
 
-                ClienteService.enviar_dados()
+                msgCliente = ''
+                try:
+                    enviados, msgCliente = ClienteService.enviar_dados()
+                    msgCliente = 'Clientes e endereços enviados e sincronizados com sucesso'
+                except Exception as e:
+                    msgCliente = f"Erro ao enviar clientes: {str(e)}"
+
+               
+                atualizado, msgAtualizacaoNF = atualizar_nf_pedidos()
+                
                 
                 return JsonResponse({
                     'success': True,
-                    'message': f'{rowcount} pedido(s) importado(s) com sucesso!'
+                    'message': f'{rowcount} pedido(s) importado(s) com sucesso! \n {msgCliente} \n {msgAtualizacaoNF}'
                 })
                 
         except Exception as e:
@@ -1289,3 +1329,54 @@ def import_funcionarios(request):
             'success': False,
             'message': 'Erro na importação de funcionários'
         }, status=500)
+
+
+def atualizar_nf_pedidos():
+    """
+    View para atualizar os dados de nota fiscal dos pedidos.
+    Atualiza pedidos onde o campo nf é igual ao pedido_erp e a serie is 99
+    """
+    try:
+        connection.close()
+            
+        # Criar nova conexão
+        with connection.cursor() as cursor:
+            # Executar a stored procedure
+            cursor.execute("EXEC SP_ATUALIZA_NF_PEDIDO")
+            
+            # Obter o número de registros afetados
+            rowcount = cursor.rowcount
+            
+            # Fechar a conexão explicitamente
+            cursor.close()
+            connection.close()
+            
+            # Registrar sucesso na auditoria
+            Auditoria.objects.create(
+                origem="Atualização de Nota Fiscal do Pedido",
+                user_id=1,
+                obs=f"Atualização de Nota Fiscal do Pedido realizada com sucesso via SP_ATUALIZA_NF_PEDIDO. {rowcount} pedido(s) afetado(s)."
+            )
+
+            pedidos = Pedido.objects.filter(tipo=3)
+            enviados, msg = PedidoService.enviar_dados(pedidos)
+
+            if enviados:
+                # Atualizar o tipo para null nos pedidos que foram enviados
+                pedidos.update(tipo=None)
+
+            return True, f'{rowcount} - {msg}'
+    except Exception as e:
+        # Fechar a conexão em caso de erro
+        try:
+            connection.close()
+        except:
+            pass
+        
+          # Registrar sucesso na auditoria
+        Auditoria.objects.create(
+            origem="Atualização de Nota Fiscal do Pedido",
+            user=request.user,
+            obs=f"ERROR: {str(e)}"
+        )
+        return False, f"ERROR: {str(e)}"

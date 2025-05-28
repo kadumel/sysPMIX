@@ -153,35 +153,78 @@
             </div>
 
             <!-- Paginação -->
-            {% if pedidos.has_other_pages %}
-            <nav aria-label="Navegação de páginas" class="mt-4">
+            {% if pedidos.paginator.num_pages > 1 %}
+            <nav aria-label="Navegação de página">
                 <ul class="pagination justify-content-center">
+                    <!-- Botão Anterior -->
                     {% if pedidos.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ pedidos.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">
-                            <i class="bi bi-chevron-left"></i>
-                        </a>
-                    </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Primeira">
+                                <span aria-hidden="true">&laquo;&laquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ pedidos.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Anterior">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
                     {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link"><i class="bi bi-chevron-left"></i></span>
-                    </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">&laquo;&laquo;</span>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">&laquo;</span>
+                        </li>
                     {% endif %}
 
-                    <li class="page-item active">
-                        <span class="page-link">Página {{ pedidos.number }} de {{ pedidos.paginator.num_pages }}</span>
-                    </li>
+                    <!-- Números das Páginas -->
+                    {% if show_first %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">1</a>
+                        </li>
+                        {% if page_range.0 != 2 %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                    {% endif %}
 
+                    {% for i in page_range %}
+                        <li class="page-item {% if pedidos.number == i %}active{% endif %}">
+                            <a class="page-link" href="?page={{ i }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">{{ i }}</a>
+                        </li>
+                    {% endfor %}
+
+                    {% if show_last %}
+                        {% if page_range|last != total_pages|add:"-1" %}
+                            <li class="page-item disabled">
+                                <span class="page-link">...</span>
+                            </li>
+                        {% endif %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">{{ total_pages }}</a>
+                        </li>
+                    {% endif %}
+
+                    <!-- Botão Próximo -->
                     {% if pedidos.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ pedidos.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">
-                            <i class="bi bi-chevron-right"></i>
-                        </a>
-                    </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ pedidos.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Próximo">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Última">
+                                <span aria-hidden="true">&raquo;&raquo;</span>
+                            </a>
+                        </li>
                     {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link"><i class="bi bi-chevron-right"></i></span>
-                    </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">&raquo;</span>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">&raquo;&raquo;</span>
+                        </li>
                     {% endif %}
                 </ul>
             </nav>
