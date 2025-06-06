@@ -1358,7 +1358,7 @@ def atualizar_nf_pedidos():
                 obs=f"Atualização de Nota Fiscal do Pedido realizada com sucesso via SP_ATUALIZA_NF_PEDIDO. {rowcount} pedido(s) afetado(s)."
             )
 
-            pedidos = Pedido.objects.filter(tipo=3)
+            pedidos = Pedido.objects.filter(tipo=3, sincronizado=True)
             enviados, msg = PedidoService.enviar_dados(pedidos)
 
             if enviados:

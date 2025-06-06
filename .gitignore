@@ -47,3 +47,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Additional changes
+*.sqlite3
+*.pyc
