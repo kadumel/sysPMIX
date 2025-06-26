@@ -147,6 +147,22 @@ class PedidoService:
             # Buscar itens do pedido usando o modelo ItemPedido
             itens = ItemPedido.objects.filter(pedido=pedido)
             
+            praca_cod_erp = '1'  # Valor padrão
+            praca_descricao = 'Praça Padrão'  # Valor padrão
+            
+            if pedido.codigo_endereco_alt:
+                try:
+                    # Buscar o endereço do cliente pelo codigo_endereco_alt
+                    endereco = EnderecoCliente.objects.filter(id=pedido.codigo_endereco_alt).first()
+                    
+                    if endereco and endereco.praca:
+                        # Se o endereço tem uma praça associada, usar os dados dela
+                        praca_cod_erp = str(endereco.praca.id)
+                        praca_descricao = endereco.praca.praca or 'Praça Padrão'         
+                except Exception as e:
+                    logger.warning(f"Erro ao buscar praça para endereço {pedido.codigo_endereco_alt}: {str(e)}")
+                    # Mantém os valores padrão em caso de erro
+
             dados.append({
                 "nf": pedido.nf,
                 "chave_nfe": pedido.chave_nfe or '',
@@ -198,8 +214,8 @@ class PedidoService:
                 "vlr_tits_vencido_cliente": str(pedido.vlr_tits_vencido_cliente) if pedido.vlr_tits_vencido_cliente else '',
                 "vlr_tits_vencer_cliente": str(pedido.vlr_tits_vencer_cliente) if pedido.vlr_tits_vencer_cliente else '',
                 "status_cred_cliente": pedido.status_cred_cliente or '',
-                "praca_cod_erp": '1',
-                "praca_descricao": 'Praça Padrão',
+                "praca_cod_erp": praca_cod_erp,
+                "praca_descricao": praca_descricao,
                 "rota_cod_erp": pedido.rota_cod_erp or '',
                 "rota_descricao": pedido.rota_descricao or '',
                 "cod_segmento": pedido.cod_segmento or '',

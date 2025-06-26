@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Nova Praça{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="card-title">
+                            <i class="bi bi-plus"></i> Nova Praça
+                        </h3>
+                        <a href="{% url 'list_praca' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label for="nome">
+                                        <i class="bi bi-geo-alt"></i> Nome da Praça *
+                                    </label>
+                                    <input type="text" 
+                                           class="form-control {% if form.nome.errors %}is-invalid{% endif %}" 
+                                           id="nome" 
+                                           name="nome" 
+                                           value="{{ form.nome.value|default:'' }}"
+                                           placeholder="Ex: SÃO PAULO, RIO DE JANEIRO..."
+                                           required>
+                                    {% if form.nome.errors %}
+                                        <div class="invalid-feedback">
+                                            {{ form.nome.errors.0 }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Dica:</strong> O nome da praça será automaticamente convertido para MAIÚSCULAS e deve ser único no sistema.
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check"></i> Salvar Praça
+                            </button>
+                            <a href="{% url 'list_praca' %}" class="btn btn-secondary">
+                                <i class="bi bi-x"></i> Cancelar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-focus no primeiro campo
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('nome').focus();
+    
+    // Converter para maiúsculas automaticamente
+    document.getElementById('nome').addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+    });
+    
+    // Converter para maiúsculas ao perder o foco
+    document.getElementById('nome').addEventListener('blur', function() {
+        this.value = this.value.toUpperCase().trim();
+    });
+});
+</script>
+{% endblock %} 

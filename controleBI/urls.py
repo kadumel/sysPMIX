@@ -4,7 +4,8 @@ from .views import (
     ListFuncionarioView, CadastrarFuncionarioView, FuncionarioEditView, FuncionarioDeleteView,
     ListVeiculoView, CadastrarVeiculoView, VeiculoDetailView, VeiculoEditView, VeiculoDeleteView,
     ListPedidoView, CadastrarPedidoView, ViewPedidoView, DeletePedidoView,
-    RelatorioPedidoView, sync_pedido, sync_pedido_batch, edit_pedido
+    RelatorioPedidoView, sync_pedido, sync_pedido_batch, edit_pedido,
+    ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView
 )
 from django.views.generic import TemplateView
 from . import views
@@ -38,5 +39,13 @@ urlpatterns = [
     path('pedidos/<int:pedido_id>/sync/', sync_pedido, name='sync_pedido'),
     path('pedidos/sync-batch/', sync_pedido_batch, name='sync_pedido_batch'),
     path('pedidos/import/', views.import_pedidos, name='import_pedidos'),
+    
+    # Praças
+    path('pracas/', ListPracaView.as_view(), name='list_praca'),
+    path('pracas/add/', CadastrarPracaView.as_view(), name='add_praca'),
+    path('pracas/<int:pk>/edit/', PracaEditView.as_view(), name='praca_edit'),
+    path('pracas/<int:pk>/delete/', PracaDeleteView.as_view(), name='praca_delete'),
+    path('pracas/<int:pk>/enderecos/', GerenciarEnderecosPracaView.as_view(), name='gerenciar_enderecos_praca'),
+    
     path('teste/', TemplateView.as_view(template_name='teste/base.html'), name='login'),
 ]

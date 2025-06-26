@@ -22,6 +22,22 @@ class Cliente(models.Model):
     def __str__(self):
         return self.cliente
 
+
+class Praca(models.Model):
+    praca = models.CharField(max_length=100, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, verbose_name="Usuário")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Praca'
+        verbose_name_plural = 'Pracas'
+        ordering = ['praca']
+
+    def __str__(self):
+        return f"{self.praca}"
+
+   
 class ClienteERP(models.Model):
     campo_alt = models.CharField(max_length=10, default='NEW_59')
     seq_id = models.CharField(max_length=10, null=True, blank=True)
@@ -387,6 +403,7 @@ class EnderecoCliente(models.Model):
     sincronizado = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    praca = models.ForeignKey(Praca, on_delete=models.PROTECT, verbose_name="Praca", null=True, blank=True)
 
     class Meta:
         verbose_name = 'Endereço do Cliente'
@@ -395,3 +412,5 @@ class EnderecoCliente(models.Model):
 
     def __str__(self):
         return f"{self.clienteERP.descr_cliente} - {self.end}, {self.num_end}"
+
+

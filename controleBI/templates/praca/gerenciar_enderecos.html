@@ -1,0 +1,268 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Gerenciar Endereços - {{ praca.praca }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h3 class="card-title">
+                            <i class="bi bi-geo-alt"></i> Gerenciar Endereços - {{ praca.praca }}
+                        </h3>
+                        <a href="{% url 'list_praca' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <!-- Estatísticas -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="alert alert-info">
+                                <i class="bi bi-info-circle"></i>
+                                <strong>Endereços Associados:</strong> {{ total_associados }}
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-warning">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                <strong>Endereços Disponíveis:</strong> {{ total_disponiveis }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Endereços Associados -->
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5 class="card-title">
+                                        <i class="bi bi-check-circle text-success"></i> Endereços Associados
+                                    </h5>
+                                </div>
+                                <div class="card-body">
+                                    {% if enderecos_associados %}
+                                        <div class="table-responsive">
+                                            <table class="table table-sm">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Cliente</th>
+                                                        <th>Endereço</th>
+                                                        <th>Ação</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {% for endereco in enderecos_associados %}
+                                                    <tr>
+                                                        <td>
+                                                            <strong>{{ endereco.clienteERP.descr_cliente }}</strong>
+                                                            <br>
+                                                            <small class="text-muted">{{ endereco.clienteERP.razao_cliente }}</small>
+                                                        </td>
+                                                        <td>
+                                                            {{ endereco.end }}, {{ endereco.num_end }}
+                                                            <br>
+                                                            <small class="text-muted">{{ endereco.bairro }} - {{ endereco.cidade }}/{{ endereco.uf }}</small>
+                                                        </td>
+                                                        <td>
+                                                            <form method="post" style="display: inline;">
+                                                                {% csrf_token %}
+                                                                <input type="hidden" name="action" value="desassociar">
+                                                                <input type="hidden" name="endereco_id" value="{{ endereco.id }}">
+                                                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                                    <i class="bi bi-x"></i>
+                                                                </button>
+                                                            </form>
+                                                        </td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    {% else %}
+                                        <div class="text-center text-muted">
+                                            <i class="bi bi-inbox fs-1 mb-2"></i>
+                                            <br>
+                                            Nenhum endereço associado a esta praça.
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Endereços Disponíveis -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <h5 class="card-title">
+                                            <i class="bi bi-plus-circle text-primary"></i> Endereços Disponíveis
+                                        </h5>
+                                        <div class="form-inline">
+                                            <div class="input-group">
+                                                <input type="text" class="form-control form-control-sm" id="searchInput" 
+                                                       placeholder="Buscar endereços..." 
+                                                       value="{{ search }}">
+                                                <div class="input-group-append">
+                                                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="filtrarEnderecos()">
+                                                        <i class="bi bi-search"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    {% if enderecos_disponiveis %}
+                                        <form method="post" id="formMultiplos">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="associar_multiplos">
+                                            
+                                            <div class="mb-3">
+                                                <button type="submit" class="btn btn-primary btn-sm">
+                                                    <i class="bi bi-check-all"></i> Associar Selecionados
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selecionarTodos()">
+                                                    <i class="bi bi-check-square"></i> Selecionar Todos
+                                                </button>
+                                                <button type="button" class="btn btn-outline-info btn-sm" onclick="limparSelecao()">
+                                                    <i class="bi bi-x-square"></i> Limpar Seleção
+                                                </button>
+                                            </div>
+                                            
+                                            <div class="table-responsive">
+                                                <table class="table table-sm">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>
+                                                                <input type="checkbox" id="selectAll" onchange="toggleTodos()">
+                                                            </th>
+                                                            <th>Cliente</th>
+                                                            <th>Endereço</th>
+                                                            <th>Ação</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {% for endereco in enderecos_disponiveis %}
+                                                        <tr>
+                                                            <td>
+                                                                <input type="checkbox" name="endereco_ids" value="{{ endereco.id }}" class="endereco-checkbox">
+                                                            </td>
+                                                            <td>
+                                                                <strong>{{ endereco.clienteERP.descr_cliente }}</strong>
+                                                                <br>
+                                                                <small class="text-muted">{{ endereco.clienteERP.razao_cliente }}</small>
+                                                            </td>
+                                                            <td>
+                                                                {{ endereco.end }}, {{ endereco.num_end }}
+                                                                <br>
+                                                                <small class="text-muted">{{ endereco.bairro }} - {{ endereco.cidade }}/{{ endereco.uf }}</small>
+                                                            </td>
+                                                            <td>
+                                                                <button type="button" class="btn btn-sm btn-outline-success" 
+                                                                        onclick="associarIndividual({{ endereco.id }})">
+                                                                    <i class="bi bi-plus"></i>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                        {% endfor %}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </form>
+                                    {% else %}
+                                        <div class="text-center text-muted">
+                                            <i class="bi bi-inbox fs-1 mb-2"></i>
+                                            <br>
+                                            {% if search %}
+                                                Nenhum endereço encontrado com os filtros aplicados.
+                                            {% else %}
+                                                Todos os endereços já estão associados a praças.
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Formulário oculto para associação individual -->
+<form method="post" id="formIndividual" style="display: none;">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="associar">
+    <input type="hidden" name="endereco_id" id="enderecoIdIndividual">
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function selecionarTodos() {
+    const checkboxes = document.querySelectorAll('.endereco-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = true;
+    });
+    document.getElementById('selectAll').checked = true;
+}
+
+function limparSelecao() {
+    const checkboxes = document.querySelectorAll('.endereco-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    document.getElementById('selectAll').checked = false;
+    document.getElementById('selectAll').indeterminate = false;
+}
+
+function toggleTodos() {
+    const selectAll = document.getElementById('selectAll');
+    const checkboxes = document.querySelectorAll('.endereco-checkbox');
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll.checked;
+    });
+}
+
+function filtrarEnderecos() {
+    const searchTerm = document.getElementById('searchInput').value;
+    const currentUrl = new URL(window.location);
+    currentUrl.searchParams.set('search', searchTerm);
+    window.location.href = currentUrl.toString();
+}
+
+function associarIndividual(enderecoId) {
+    document.getElementById('enderecoIdIndividual').value = enderecoId;
+    document.getElementById('formIndividual').submit();
+}
+
+// Atualizar checkbox "Selecionar Todos" quando checkboxes individuais mudarem
+document.addEventListener('DOMContentLoaded', function() {
+    const checkboxes = document.querySelectorAll('.endereco-checkbox');
+    const selectAll = document.getElementById('selectAll');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            const anyChecked = Array.from(checkboxes).some(cb => cb.checked);
+            
+            selectAll.checked = allChecked;
+            selectAll.indeterminate = anyChecked && !allChecked;
+        });
+    });
+    
+    // Permitir busca com Enter
+    document.getElementById('searchInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            filtrarEnderecos();
+        }
+    });
+});
+</script>
+{% endblock %} 

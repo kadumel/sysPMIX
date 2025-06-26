@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from .models import Funcionario, Veiculo, Pedido, ItemPedido, Auditoria
+from .models import Funcionario, Veiculo, Pedido, ItemPedido, Auditoria, Praca, EnderecoCliente
 from .forms import VeiculoForm
 from .services import FuncionarioService, PedidoService
 from django.db.models import Count, Sum, Q
@@ -1380,3 +1380,240 @@ def atualizar_nf_pedidos():
             obs=f"ERROR: {str(e)}"
         )
         return False, f"ERROR: {str(e)}"
+
+
+# Views para gestão de Praças
+class ListPracaView(LoginRequiredMixin, ListView):
+    model = Praca
+    template_name = 'praca/listPraca.html'
+    context_object_name = 'pracas'
+    paginate_by = 10
+
+    def get_queryset(self):
+        queryset = Praca.objects.annotate(
+            enderecos_count=Count('enderecocliente')
+        )
+        
+        # Filtros
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(praca__icontains=search)
+            )
+            
+        return queryset.order_by('praca')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        queryset = self.get_queryset()
+        
+        # Adicionar contagens ao contexto
+        context['total_pracas'] = queryset.count()
+        context['search'] = self.request.GET.get('search', '')
+        
+        return context
+
+
+class CadastrarPracaView(LoginRequiredMixin, View):
+    template_name = 'praca/addPraca.html'
+
+    def get(self, request):
+        return render(request, self.template_name)
+
+    def post(self, request):
+        try:
+            nome = request.POST.get('nome')
+            
+            if not nome:
+                messages.error(request, 'Nome da praça é obrigatório.')
+                return render(request, self.template_name)
+            
+            # Converter para maiúsculas
+            nome = nome.upper().strip()
+            
+            # Verificar se já existe uma praça com o mesmo nome
+            if Praca.objects.filter(praca=nome).exists():
+                messages.error(request, 'Já existe uma praça com este nome.')
+                return render(request, self.template_name)
+            
+            # Criar nova praça
+            praca = Praca.objects.create(
+                praca=nome,
+                user=request.user
+            )
+            
+            # Registrar na auditoria
+            Auditoria.objects.create(
+                origem='Praca',
+                user=request.user,
+                obs=f'Nova praça criada: {praca.praca}'
+            )
+            
+            messages.success(request, f'Praça "{praca.praca}" criada com sucesso!')
+            return redirect('list_praca')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao criar praça: {str(e)}')
+            return render(request, self.template_name)
+
+
+class PracaEditView(LoginRequiredMixin, UpdateView):
+    model = Praca
+    template_name = 'praca/praca_edit.html'
+    fields = ['praca']
+    success_url = reverse_lazy('list_praca')
+
+    def form_valid(self, form):
+        try:
+            # Converter para maiúsculas antes de salvar
+            praca = form.instance
+            praca.praca = praca.praca.upper().strip()
+            
+            # Registrar alteração na auditoria
+            Auditoria.objects.create(
+                origem='Praca',
+                user=self.request.user,
+                obs=f'Praça atualizada: {praca.praca}'
+            )
+            
+            messages.success(self.request, f'Praça "{praca.praca}" atualizada com sucesso!')
+            return super().form_valid(form)
+        except Exception as e:
+            messages.error(self.request, f'Erro ao atualizar praça: {str(e)}')
+            return self.form_invalid(form)
+
+    def form_invalid(self, form):
+        messages.error(self.request, 'Erro ao atualizar praça. Verifique os dados.')
+        return super().form_invalid(form)
+
+
+class PracaDeleteView(LoginRequiredMixin, View):
+    def post(self, request, pk):
+        try:
+            praca = get_object_or_404(Praca, pk=pk)
+            nome_praca = praca.praca
+            
+            # Verificar se há clientes associados
+            clientes_associados = praca.clienteerp_set.count()
+            if clientes_associados > 0:
+                messages.error(request, f'Não é possível excluir a praça "{nome_praca}" pois existem {clientes_associados} cliente(s) associado(s).')
+                return redirect('list_praca')
+            
+            # Excluir praça
+            praca.delete()
+            
+            # Registrar na auditoria
+            Auditoria.objects.create(
+                origem='Praca',
+                user=request.user,
+                obs=f'Praça excluída: {nome_praca}'
+            )
+            
+            messages.success(request, f'Praça "{nome_praca}" excluída com sucesso!')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao excluir praça: {str(e)}')
+        
+        return redirect('list_praca')
+
+class GerenciarEnderecosPracaView(LoginRequiredMixin, View):
+    template_name = 'praca/gerenciar_enderecos.html'
+
+    def get(self, request, pk):
+        praca = get_object_or_404(Praca, pk=pk)
+        
+        # Buscar endereços que já estão associados a esta praça
+        enderecos_associados = EnderecoCliente.objects.filter(praca=praca).select_related('clienteERP')
+        
+        # Buscar endereços que não estão associados a nenhuma praça
+        enderecos_disponiveis = EnderecoCliente.objects.filter(praca__isnull=True).select_related('clienteERP')
+        
+        # Filtros
+        search = request.GET.get('search')
+        if search:
+            enderecos_disponiveis = enderecos_disponiveis.filter(
+                Q(clienteERP__descr_cliente__icontains=search) |
+                Q(clienteERP__razao_cliente__icontains=search) |
+                Q(end__icontains=search) |
+                Q(cidade__icontains=search)
+            )
+        
+        context = {
+            'praca': praca,
+            'enderecos_associados': enderecos_associados,
+            'enderecos_disponiveis': enderecos_disponiveis,
+            'search': search,
+            'total_associados': enderecos_associados.count(),
+            'total_disponiveis': enderecos_disponiveis.count(),
+        }
+        
+        return render(request, self.template_name, context)
+
+    def post(self, request, pk):
+        praca = get_object_or_404(Praca, pk=pk)
+        action = request.POST.get('action')
+        
+        try:
+            if action == 'associar':
+                endereco_id = request.POST.get('endereco_id')
+                endereco = get_object_or_404(EnderecoCliente, pk=endereco_id)
+                
+                # Verificar se o endereço já está associado a outra praça
+                if endereco.praca and endereco.praca != praca:
+                    messages.warning(request, f'Endereço já está associado à praça "{endereco.praca.praca}"')
+                else:
+                    endereco.praca = praca
+                    endereco.save()
+                    
+                    # Registrar na auditoria
+                    Auditoria.objects.create(
+                        origem='Praca',
+                        user=request.user,
+                        obs=f'Endereço associado à praça: {endereco.clienteERP.descr_cliente} - {endereco.end}, {endereco.num_end} -> {praca.praca}'
+                    )
+                    
+                    messages.success(request, f'Endereço associado com sucesso à praça "{praca.praca}"')
+            
+            elif action == 'desassociar':
+                endereco_id = request.POST.get('endereco_id')
+                endereco = get_object_or_404(EnderecoCliente, pk=endereco_id, praca=praca)
+                
+                endereco.praca = None
+                endereco.save()
+                
+                # Registrar na auditoria
+                Auditoria.objects.create(
+                    origem='Praca',
+                    user=request.user,
+                    obs=f'Endereço desassociado da praça: {endereco.clienteERP.descr_cliente} - {endereco.end}, {endereco.num_end} <- {praca.praca}'
+                )
+                
+                messages.success(request, f'Endereço desassociado com sucesso da praça "{praca.praca}"')
+            
+            elif action == 'associar_multiplos':
+                endereco_ids = request.POST.getlist('endereco_ids')
+                if endereco_ids:
+                    enderecos = EnderecoCliente.objects.filter(
+                        pk__in=endereco_ids, 
+                        praca__isnull=True
+                    )
+                    
+                    for endereco in enderecos:
+                        endereco.praca = praca
+                        endereco.save()
+                    
+                    # Registrar na auditoria
+                    Auditoria.objects.create(
+                        origem='Praca',
+                        user=request.user,
+                        obs=f'{enderecos.count()} endereço(s) associado(s) à praça "{praca.praca}"'
+                    )
+                    
+                    messages.success(request, f'{enderecos.count()} endereço(s) associado(s) com sucesso à praça "{praca.praca}"')
+                else:
+                    messages.warning(request, 'Nenhum endereço selecionado para associar.')
+            
+        except Exception as e:
+            messages.error(request, f'Erro ao processar ação: {str(e)}')
+        
+        return redirect('gerenciar_enderecos_praca', pk=pk)
