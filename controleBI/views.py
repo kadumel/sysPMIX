@@ -460,8 +460,15 @@ class ListPedidoView(LoginRequiredMixin, View):
         # Ordenar por data mais recente e ID para garantir ordem consistente
         pedidos = pedidos.order_by('-data_pedido', '-id')
         
-        # Paginação
-        items_per_page = 10
+        # Paginação - obter itens por página da query string ou usar padrão
+        try:
+            items_per_page = int(request.GET.get('per_page', 10))
+            # Limitar valores válidos para evitar sobrecarga
+            if items_per_page not in [5, 10, 25, 50, 100]:
+                items_per_page = 10
+        except ValueError:
+            items_per_page = 10
+        
         paginator = Paginator(pedidos, items_per_page)
         
         try:
@@ -507,7 +514,8 @@ class ListPedidoView(LoginRequiredMixin, View):
             'show_first': show_first,
             'show_last': show_last,
             'total_pages': total_pages,
-            'current_page': current_page
+            'current_page': current_page,
+            'items_per_page': items_per_page
         }
         
         return render(request, 'pedido/listPedido.html', context)

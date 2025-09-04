@@ -46,6 +46,16 @@
                     <input type="date" class="form-control" id="data_fim" name="data_fim" 
                            value="{{ request.GET.data_fim }}">
                 </div>
+                <div class="col-md-2">
+                    <label for="per_page" class="form-label">Itens por página</label>
+                    <select class="form-select" id="per_page" name="per_page" onchange="this.form.submit()">
+                        <option value="5" {% if request.GET.per_page == '5' %}selected{% endif %}>5</option>
+                        <option value="10" {% if request.GET.per_page == '10' or not request.GET.per_page %}selected{% endif %}>10</option>
+                        <option value="25" {% if request.GET.per_page == '25' %}selected{% endif %}>25</option>
+                        <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+                        <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+                    </select>
+                </div>
                 <div class="col-md-3 d-flex align-items-end gap-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-search"></i> Filtrar
@@ -159,12 +169,12 @@
                     <!-- Botão Anterior -->
                     {% if pedidos.has_previous %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Primeira">
+                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}" aria-label="Primeira">
                                 <span aria-hidden="true">&laquo;&laquo;</span>
                             </a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ pedidos.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Anterior">
+                            <a class="page-link" href="?page={{ pedidos.previous_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}" aria-label="Anterior">
                                 <span aria-hidden="true">&laquo;</span>
                             </a>
                         </li>
@@ -180,7 +190,7 @@
                     <!-- Números das Páginas -->
                     {% if show_first %}
                         <li class="page-item">
-                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">1</a>
+                            <a class="page-link" href="?page=1{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}">1</a>
                         </li>
                         {% if page_range.0 != 2 %}
                             <li class="page-item disabled">
@@ -191,7 +201,7 @@
 
                     {% for i in page_range %}
                         <li class="page-item {% if pedidos.number == i %}active{% endif %}">
-                            <a class="page-link" href="?page={{ i }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">{{ i }}</a>
+                            <a class="page-link" href="?page={{ i }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}">{{ i }}</a>
                         </li>
                     {% endfor %}
 
@@ -202,19 +212,19 @@
                             </li>
                         {% endif %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}">{{ total_pages }}</a>
+                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}">{{ total_pages }}</a>
                         </li>
                     {% endif %}
 
                     <!-- Botão Próximo -->
                     {% if pedidos.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ pedidos.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Próximo">
+                            <a class="page-link" href="?page={{ pedidos.next_page_number }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}" aria-label="Próximo">
                                 <span aria-hidden="true">&raquo;</span>
                             </a>
                         </li>
                         <li class="page-item">
-                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}" aria-label="Última">
+                            <a class="page-link" href="?page={{ total_pages }}{% if current_search %}&search={{ current_search }}{% endif %}{% if current_status %}&status={{ current_status }}{% endif %}{% if current_tipo %}&tipo={{ current_tipo }}{% endif %}{% if current_data_inicio %}&data_inicio={{ current_data_inicio }}{% endif %}{% if current_data_fim %}&data_fim={{ current_data_fim }}{% endif %}{% if current_sincronizado %}&sincronizado={{ current_sincronizado }}{% endif %}{% if current_per_page %}&per_page={{ current_per_page }}{% endif %}" aria-label="Última">
                                 <span aria-hidden="true">&raquo;&raquo;</span>
                             </a>
                         </li>

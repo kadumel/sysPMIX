@@ -66,6 +66,8 @@ class FuncionarioService:
                 Funcionario.objects.filter(pk=funcionario.pk).update(sincronizado=True)
                 return True, "Dados enviados com sucesso"
             else:
+                logger.error(soap_xml)
+                logger.error(response.text)
                 return False, f"Erro ao enviar dados: {response.text}"
                 
         except Exception as e:
@@ -132,6 +134,8 @@ class VeiculoService:
                 Veiculo.objects.filter(pk=veiculo.pk).update(sincronizado=True)
                 return True, "Dados enviados com sucesso"
             else:
+                logger.error(soap_xml)
+                logger.error(response.text)
                 return False, f"Erro ao enviar dados: {response.text}"
                 
         except Exception as e:
@@ -286,12 +290,13 @@ class PedidoService:
                 timeout=30
             )
             
-            print(soap_envelope)
+            
             # Verificar resposta
             if response.status_code == 200:
                 # Verificar se a resposta contém erro
                 if 'Error' in response.text:
                     error_msg = response.text.split('<Error>')[1].split('</Error>')[0]
+                    logger.error(soap_envelope)
                     logger.error(f"Erro no web service: {error_msg}")
                     return False, error_msg
                 return True, "Pedidos enviados com sucesso"
@@ -471,6 +476,7 @@ class ClienteService:
                     # Verificar se a resposta contém erro
                     if 'Error' in response.text:
                         error_msg = response.text.split('<Error>')[1].split('</Error>')[0]
+                        logger.error(soap_envelope)
                         logger.error(f"Erro no web service para bloco: {error_msg}")
                         erros.append(error_msg)
                         continue
