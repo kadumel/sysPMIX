@@ -115,7 +115,11 @@ DATABASES = {
 """
 
 DATABASES = {
-    'default': dj_database_url.config(default=os.getenv('url_db'))
+    'default': dj_database_url.config(
+        default=os.getenv('DATABASE_URL'),  # variável padrão do Railway
+        conn_max_age=600,                  # mantém conexões abertas (melhora performance)
+        ssl_require=True                    # obrigatório para produção na Railway
+    )
 }
 
 # Password validation
