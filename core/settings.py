@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 from pathlib import Path
 from dotenv import load_dotenv
 import os
+import dj_database_url
 
 load_dotenv()
 
@@ -78,7 +79,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-
+"""
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
@@ -111,7 +112,11 @@ DATABASES = {
         },
     }
 }
+"""
 
+DATABASES = {
+    'default': dj_database_url.config(default=os.getenv('url_db'))
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
