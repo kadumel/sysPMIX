@@ -3,6 +3,7 @@
 pmxenv/
 *.pdf
 teste.py
+pVenv/
 
 # Python
 __pycache__/
