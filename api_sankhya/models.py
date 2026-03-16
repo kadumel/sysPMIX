@@ -563,3 +563,46 @@ class ItemPedido(models.Model):
 
     def __str__(self):
         return f"{self.pedido_id} - Seq {self.sequencia} - {self.descricao_produto or 'N/A'}"
+
+
+class Contato(models.Model):
+    """
+    Modelo para armazenar contatos (parceiros) da API Sankhya.
+    Chave: CODPARC + CODCONTATO.
+    """
+    codparc = models.IntegerField(verbose_name="Código Parceiro")
+    codcontato = models.IntegerField(verbose_name="Código Contato")
+    nomecontato = models.CharField(max_length=200, null=True, blank=True, verbose_name="Nome Contato")
+    apelido = models.CharField(max_length=100, null=True, blank=True, verbose_name="Apelido")
+    codend = models.IntegerField(null=True, blank=True, verbose_name="Código Endereço")
+    numend = models.CharField(max_length=20, null=True, blank=True, verbose_name="Número Endereço")
+    complemento = models.CharField(max_length=100, null=True, blank=True, verbose_name="Complemento")
+    codbai = models.IntegerField(null=True, blank=True, verbose_name="Código Bairro")
+    codcid = models.IntegerField(null=True, blank=True, verbose_name="Código Cidade")
+    cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP")
+    telefone = models.CharField(max_length=20, null=True, blank=True, verbose_name="Telefone")
+    email = models.EmailField(max_length=100, null=True, blank=True, verbose_name="E-mail")
+    celular = models.CharField(max_length=20, null=True, blank=True, verbose_name="Celular")
+    latitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Latitude")
+    longitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Longitude")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Contato Sankhya'
+        verbose_name_plural = 'Contatos Sankhya'
+        ordering = ['codparc', 'codcontato']
+        db_table = 'sankhya_contato'
+        unique_together = [['codparc', 'codcontato']]
+        indexes = [
+            models.Index(fields=['codparc']),
+            models.Index(fields=['codcontato']),
+            models.Index(fields=['email']),
+            models.Index(fields=['codcid']),
+        ]
+
+    def __str__(self):
+        return f"{self.nomecontato or self.apelido or 'N/A'} (Parc: {self.codparc}, Cont: {self.codcontato})"
+
+
+

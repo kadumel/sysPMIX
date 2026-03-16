@@ -10,7 +10,7 @@ django.setup()
 import requests, json
 from api_sankhya.models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato
 )
 from datetime import datetime
 
@@ -1749,6 +1749,164 @@ def getGruposProduto():
         'total_atualizados': total_atualizados
     }
 
-#print(json.dumps(getPedidos(), indent=4)) 
+# print(json.dumps(getPedidosJson(), indent=4))
 
-print(getToken())
+
+def _contato_int(val):
+    if val is None or val == '':
+        return None
+    try:
+        return int(float(val))
+    except (TypeError, ValueError):
+        return None
+
+
+def _contato_str(val, max_len=None):
+    if val is None:
+        return None
+    s = str(val).strip()
+    if s == '' or s.lower() == 'null':
+        return None
+    if max_len and len(s) > max_len:
+        return s[:max_len]
+    return s
+
+
+def getContatos():
+    """
+    Busca contatos da API Sankhya (CRUDServiceProvider.loadRecords, entity Contato)
+    em todas as páginas (começando em 0 enquanto hasMoreResult for true).
+    Faz merge no banco: atualiza se existir (codparc + codcontato), insere se for novo.
+    """
+    url = "https://api.sankhya.com.br/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.loadRecords&outputType=json"
+    campos = [
+        "CODPARC", "CODCONTATO", "NOMECONTATO", "APELIDO", "CODEND", "NUMEND",
+        "COMPLEMENTO", "CODBAI", "CODCID", "CEP", "TELEFONE", "EMAIL", "CELULAR",
+        "LATITUDE", "LONGITUDE"
+    ]
+    headers = getToken()
+    headers['Content-Type'] = 'application/json'
+    total_processados = 0
+    total_inseridos = 0
+    total_atualizados = 0
+    offset_page = 0
+    has_more = True
+
+    def _get_f_val(cell):
+        if isinstance(cell, dict) and '$' in cell:
+            return cell['$']
+        return cell if cell != {} else None
+
+    while has_more:
+        request_body = {
+            "serviceName": "CRUDServiceProvider.loadRecords",
+            "requestBody": {
+                "dataSet": {
+                    "rootEntity": "Contato",
+                    "includePresentationFields": "S",
+                    "offsetPage": str(offset_page),
+                    "entity": {
+                        "fieldset": {
+                            "list": ",".join(campos)
+                        }
+                    }
+                }
+            }
+        }
+        try:
+            resp = requests.post(url, headers=headers, json=request_body)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"Erro ao chamar API de contatos (página {offset_page}): {e}")
+            break
+
+        entities_data = (data.get('responseBody') or data).get('entities') or {}
+        raw_entity_list = entities_data.get('entity') or []
+        if isinstance(raw_entity_list, dict):
+            raw_entity_list = [raw_entity_list]
+        metadata = entities_data.get('metadata') or {}
+        fields_meta = metadata.get('fields') or {}
+        field_list = fields_meta.get('field') or []
+        if isinstance(field_list, dict):
+            field_list = [field_list]
+
+        idx_to_name = {}
+        for i, f in enumerate(field_list):
+            name = f.get('name') if isinstance(f, dict) else None
+            if name:
+                idx_to_name[f'f{i}'] = name
+
+        def _row_to_record(row):
+            out = {}
+            for fi, name in idx_to_name.items():
+                if fi in row:
+                    out[name] = _get_f_val(row[fi])
+            return out
+
+        records = [_row_to_record(r) for r in raw_entity_list]
+        has_more_val = entities_data.get('hasMoreResult', 'false')
+        has_more = has_more_val in (True, 'true', 'True', 'S', 's', '1')
+
+        print(f"Página {offset_page}: {len(records)} registros (hasMoreResult={has_more_val})")
+
+        for rec in records:
+            def get_field(r, *keys):
+                for k in keys:
+                    if isinstance(r, dict) and k in r and r[k] is not None:
+                        return r[k]
+                return None
+
+            codparc = _contato_int(get_field(rec, 'CODPARC', 'codparc'))
+            codcontato = _contato_int(get_field(rec, 'CODCONTATO', 'codcontato'))
+            if codparc is None or codcontato is None:
+                print("  ⚠ Registro sem CODPARC ou CODCONTATO ignorado.")
+                continue
+
+            defaults = {
+                'nomecontato': _contato_str(get_field(rec, 'NOMECONTATO', 'nomecontato'), 200),
+                'apelido': _contato_str(get_field(rec, 'APELIDO', 'apelido'), 100),
+                'codend': _contato_int(get_field(rec, 'CODEND', 'codend')),
+                'numend': _contato_str(get_field(rec, 'NUMEND', 'numend'), 20),
+                'complemento': _contato_str(get_field(rec, 'COMPLEMENTO', 'complemento'), 100),
+                'codbai': _contato_int(get_field(rec, 'CODBAI', 'codbai')),
+                'codcid': _contato_int(get_field(rec, 'CODCID', 'codcid')),
+                'cep': _contato_str(get_field(rec, 'CEP', 'cep'), 10),
+                'telefone': _contato_str(get_field(rec, 'TELEFONE', 'telefone'), 20),
+                'email': _contato_str(get_field(rec, 'EMAIL', 'email'), 100),
+                'celular': _contato_str(get_field(rec, 'CELULAR', 'celular'), 20),
+                'latitude': _contato_str(get_field(rec, 'LATITUDE', 'latitude'), 50),
+                'longitude': _contato_str(get_field(rec, 'LONGITUDE', 'longitude'), 50),
+            }
+            defaults = {k: v for k, v in defaults.items() if v is not None}
+
+            try:
+                obj, created = Contato.objects.update_or_create(
+                    codparc=codparc,
+                    codcontato=codcontato,
+                    defaults=defaults
+                )
+                total_processados += 1
+                if created:
+                    total_inseridos += 1
+                    print(f"  ✓ Inserido: Parc {codparc} Cont {codcontato} - {obj.nomecontato or 'N/A'}")
+                else:
+                    total_atualizados += 1
+                    print(f"  ↻ Atualizado: Parc {codparc} Cont {codcontato} - {obj.nomecontato or 'N/A'}")
+            except Exception as e:
+                print(f"  ✗ Erro ao processar contato Parc {codparc} Cont {codcontato}: {e}")
+
+        if not has_more:
+            break
+        offset_page += 1
+
+    print(f"Sincronização de contatos: {total_processados} processados, {total_inseridos} inseridos, {total_atualizados} atualizados.")
+    return {
+        'total_processados': total_processados,
+        'total_inseridos': total_inseridos,
+        'total_atualizados': total_atualizados
+    }
+
+
+
+getClientes()

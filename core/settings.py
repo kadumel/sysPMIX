@@ -80,50 +80,51 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-"""
+
 # Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('ENGINE'),
-        'NAME': os.getenv('DATABASE'),
-        'USER': os.getenv('USER_DB'),
-        'PASSWORD': os.getenv('PASSWORD_DB'),
-        'HOST': os.getenv('HOST'),
-        'PORT': os.getenv('PORT'),
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'TrustServerCertificate': 'yes',
-            'unicode_results': True,
-            'extra_params': 'tds_version=7.3'
-        },
-    },
-    'erp': {
-        'ENGINE': os.getenv('ENGINE'),
-        'NAME': os.getenv('DATABASE_ERP'),
-        'USER': os.getenv('USER_ERP'),
-        'PASSWORD': os.getenv('PASSWORD_ERP'),
-        'HOST': os.getenv('HOST_ERP'),
-        'PORT': os.getenv('PORT_ERP'),
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'TrustServerCertificate': 'yes',
-            'unicode_results': True,
-            'extra_params': 'tds_version=7.3'
-        },
+# Se DATABASE_URL existir (Railway/produção), usa PostgreSQL via dj_database_url.
+# Caso contrário, usa SQL Server local (desenvolvimento).
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
-"""
-
-print("DATABASE_URL:", os.environ.get("DATABASE_URL"))
-
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),  # variável padrão do Railway
-        conn_max_age=600,                  # mantém conexões abertas (melhora performance)
-        ssl_require=True                    # obrigatório para produção na Railway
-    )
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('ENGINE'),
+            'NAME': os.getenv('DATABASE'),
+            'USER': os.getenv('USER_DB'),
+            'PASSWORD': os.getenv('PASSWORD_DB'),
+            'HOST': os.getenv('HOST'),
+            'PORT': os.getenv('PORT'),
+            'OPTIONS': {
+                'driver': 'ODBC Driver 17 for SQL Server',
+                'TrustServerCertificate': 'yes',
+                'unicode_results': True,
+                'extra_params': 'tds_version=7.3'
+            },
+        },
+        'erp': {
+            'ENGINE': os.getenv('ENGINE'),
+            'NAME': os.getenv('DATABASE_ERP'),
+            'USER': os.getenv('USER_ERP'),
+            'PASSWORD': os.getenv('PASSWORD_ERP'),
+            'HOST': os.getenv('HOST_ERP'),
+            'PORT': os.getenv('PORT_ERP'),
+            'OPTIONS': {
+                'driver': 'ODBC Driver 17 for SQL Server',
+                'TrustServerCertificate': 'yes',
+                'unicode_results': True,
+                'extra_params': 'tds_version=7.3'
+            },
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators

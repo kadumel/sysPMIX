@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato
 )
 
 
@@ -370,6 +370,34 @@ class PedidoAdmin(admin.ModelAdmin):
         }),
         ('Logística', {
             'fields': ('codigo_ordem_carga', 'codigo_transportadora', 'nome_transportadora', 'codigo_veiculo', 'placa_veiculo', 'codigo_motorista', 'nome_motorista', 'quantidade_volumes', 'peso_bruto')
+        }),
+        ('Auditoria', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(Contato)
+class ContatoAdmin(admin.ModelAdmin):
+    list_display = ('codparc', 'codcontato', 'nomecontato', 'apelido', 'email', 'telefone', 'celular', 'codcid', 'updated_at')
+    list_filter = ('codcid',)
+    search_fields = ('codparc', 'codcontato', 'nomecontato', 'apelido', 'email', 'telefone', 'celular')
+    readonly_fields = ('created_at', 'updated_at')
+    list_per_page = 50
+
+    fieldsets = (
+        ('Parceiro / Contato', {
+            'fields': ('codparc', 'codcontato', 'nomecontato', 'apelido')
+        }),
+        ('Endereço', {
+            'fields': ('codend', 'numend', 'complemento', 'codbai', 'codcid', 'cep')
+        }),
+        ('Contato', {
+            'fields': ('telefone', 'email', 'celular')
+        }),
+        ('Localização', {
+            'fields': ('latitude', 'longitude')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),
