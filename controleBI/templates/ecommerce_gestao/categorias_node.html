@@ -1,0 +1,19 @@
+{% with g=node.grupo %}
+<tr>
+    <td class="align-middle" style="padding-left: calc({{ depth }} * 1.35rem + 0.75rem)">
+        <div class="form-check mb-0 py-1">
+            <input class="form-check-input" type="checkbox" name="mostrar_ecommerce"
+                   value="{{ g.codigo_grupo_produto }}"
+                   id="grupo_{{ g.codigo_grupo_produto }}"
+                   {% if g.mostrar_no_ecommerce %}checked{% endif %}>
+            <label class="form-check-label" for="grupo_{{ g.codigo_grupo_produto }}">
+                <span class="fw-medium">{{ g.nome|default:"(sem nome)" }}</span>
+                <span class="text-muted small ms-1">#{{ g.codigo_grupo_produto }}</span>
+            </label>
+        </div>
+    </td>
+</tr>
+{% endwith %}
+{% for child in node.filhos %}
+    {% include 'ecommerce_gestao/categorias_node.html' with node=child depth=depth|add:1 %}
+{% endfor %}

@@ -88,12 +88,19 @@ class Empresa(models.Model):
 
 class Cidade(models.Model):
     """
-    Modelo para armazenar dados de cidades da API Sankhya
+    Cidades Sankhya. Campos alinhados ao retorno de getCidadeLegado (CRUD Cidade):
+    CODCID -> codigo_cidade, NOMECID -> nome, UF -> uf, CODREG -> codigo_regiao,
+    DTALTER -> dt_alteracao.
+    Campos nome_regiao, nome_correio e codigo_municipio_fiscal vêm de outras integrações (API v1).
     """
-    codigo_cidade = models.IntegerField(unique=True, verbose_name="Código da Cidade")
-    nome = models.CharField(max_length=100, verbose_name="Nome")
+    codigo_cidade = models.IntegerField(unique=True, verbose_name="Código da Cidade (CODCID)")
+    nome = models.CharField(max_length=200, verbose_name="Nome (NOMECID)")
     uf = models.CharField(max_length=2, null=True, blank=True, verbose_name="UF")
-    codigo_regiao = models.IntegerField(null=True, blank=True, verbose_name="Código da Região")
+    codigo_regiao = models.IntegerField(null=True, blank=True, verbose_name="Código da Região (CODREG)")
+    dt_alteracao = models.CharField(
+        max_length=50, null=True, blank=True,
+        verbose_name="Data alteração legado (DTALTER)",
+    )
     nome_regiao = models.CharField(max_length=100, null=True, blank=True, verbose_name="Nome da Região")
     nome_correio = models.CharField(max_length=100, null=True, blank=True, verbose_name="Nome Correio")
     codigo_municipio_fiscal = models.IntegerField(null=True, blank=True, verbose_name="Código Município Fiscal")
@@ -400,6 +407,11 @@ class GrupoProduto(models.Model):
     grupo_icms = models.IntegerField(null=True, blank=True, verbose_name="Grupo ICMS")
     analitico = models.BooleanField(default=False, verbose_name="Analítico")
     ativo = models.BooleanField(default=True, verbose_name="Ativo")
+    mostrar_no_ecommerce = models.BooleanField(
+        default=False,
+        verbose_name='Mostrar no e-commerce',
+        help_text='Se marcado, a categoria aparece na navegação da loja (respeitando a hierarquia).',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
     
@@ -414,6 +426,7 @@ class GrupoProduto(models.Model):
             models.Index(fields=['codigo_grupo_produto_pai']),
             models.Index(fields=['ativo']),
             models.Index(fields=['grupo_icms']),
+            models.Index(fields=['ativo', 'mostrar_no_ecommerce']),
         ]
     
     def __str__(self):
@@ -603,6 +616,115 @@ class Contato(models.Model):
 
     def __str__(self):
         return f"{self.nomecontato or self.apelido or 'N/A'} (Parc: {self.codparc}, Cont: {self.codcontato})"
+
+
+class Funcionario(models.Model):
+    """
+    Funcionário Sankhya (dados consolidados a partir das APIs de resumo e detalhe).
+    Chave natural: empresa_codigo + codigo_funcionario.
+    """
+    # Identificação básica
+    empresa_codigo = models.IntegerField(verbose_name="Código Empresa")
+    codigo_funcionario = models.IntegerField(verbose_name="Código Funcionário")
+    cpf = models.CharField(max_length=14, null=True, blank=True, verbose_name="CPF")
+    nome = models.CharField(max_length=200, null=True, blank=True, verbose_name="Nome")
+    matricula = models.IntegerField(null=True, blank=True, verbose_name="Matrícula")
+
+    # Dados pessoais
+    nascimento = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Nascimento")
+    sexo = models.CharField(max_length=1, null=True, blank=True, verbose_name="Sexo")
+    celular = models.CharField(max_length=20, null=True, blank=True, verbose_name="Celular")
+    email = models.EmailField(max_length=150, null=True, blank=True, verbose_name="E-mail")
+    nome_mae = models.CharField(max_length=200, null=True, blank=True, verbose_name="Nome da Mãe")
+
+    # Endereço
+    endereco_cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP")
+    endereco_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Endereço")
+    endereco_descricao = models.CharField(max_length=200, null=True, blank=True, verbose_name="Logradouro")
+    endereco_numero = models.CharField(max_length=20, null=True, blank=True, verbose_name="Número")
+    endereco_complemento = models.CharField(max_length=100, null=True, blank=True, verbose_name="Complemento")
+    bairro_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Bairro")
+    bairro_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Bairro")
+    cidade_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Cidade")
+    cidade_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Cidade")
+    cidade_codigo_ibge = models.IntegerField(null=True, blank=True, verbose_name="Código IBGE Cidade")
+
+    # Dados contratuais / empresa
+    empresa_cnpj = models.CharField(max_length=20, null=True, blank=True, verbose_name="CNPJ Empresa")
+    empresa_razao_social = models.CharField(max_length=200, null=True, blank=True, verbose_name="Razão Social Empresa")
+    data_admissao = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Admissão")
+    codigo_categoria_esocial = models.IntegerField(null=True, blank=True, verbose_name="Categoria eSocial")
+    situacao = models.CharField(max_length=2, null=True, blank=True, verbose_name="Situação")
+    salario_base = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name="Salário Base")
+    bolsa_estagio_ou_pro_labore = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True, verbose_name="Bolsa Estágio / Pró-labore")
+
+    departamento_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Departamento")
+    departamento_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Departamento")
+
+    cargo_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Cargo")
+    cargo_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Cargo")
+    cargo_cbo = models.IntegerField(null=True, blank=True, verbose_name="CBO Cargo")
+
+    funcao_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Função")
+    funcao_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Função")
+    funcao_cbo = models.IntegerField(null=True, blank=True, verbose_name="CBO Função")
+
+    local_trabalho_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Local Trabalho")
+    local_trabalho_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Local Trabalho")
+
+    cidade_trabalho_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Cidade Trabalho")
+    cidade_trabalho_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Cidade Trabalho")
+    cidade_trabalho_codigo_ibge = models.IntegerField(null=True, blank=True, verbose_name="Código IBGE Cidade Trabalho")
+
+    sindicato_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Sindicato")
+    sindicato_nome = models.CharField(max_length=200, null=True, blank=True, verbose_name="Sindicato")
+    sindicato_cnpj = models.CharField(max_length=20, null=True, blank=True, verbose_name="CNPJ Sindicato")
+
+    carga_horaria_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Carga Horária")
+    carga_horaria_descricao = models.CharField(max_length=150, null=True, blank=True, verbose_name="Carga Horária")
+
+    # Afastamento
+    afast_motivo_desligamento_esocial = models.CharField(max_length=200, null=True, blank=True, verbose_name="Motivo Desligamento eSocial")
+    afast_data_afastamento = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Afastamento")
+    afast_causa_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Causa Afastamento")
+    afast_causa_descricao = models.CharField(max_length=200, null=True, blank=True, verbose_name="Causa Afastamento")
+    afast_tipo_rescisao_codigo = models.IntegerField(null=True, blank=True, verbose_name="Código Tipo Rescisão")
+    afast_tipo_rescisao_descricao = models.CharField(max_length=200, null=True, blank=True, verbose_name="Tipo Rescisão")
+    afast_data_desligamento = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Desligamento")
+    afast_data_aviso_previo = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Aviso Prévio")
+
+    # Transferência
+    transf_data_transferencia_destino = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Transferência Destino")
+    transf_empresa_destino = models.IntegerField(null=True, blank=True, verbose_name="Empresa Destino")
+    transf_cnpj_empresa_destino = models.CharField(max_length=20, null=True, blank=True, verbose_name="CNPJ Empresa Destino")
+    transf_codigo_funcionario_destino = models.IntegerField(null=True, blank=True, verbose_name="Código Funcionário Destino")
+    transf_motivo_desligamento = models.CharField(max_length=200, null=True, blank=True, verbose_name="Motivo Desligamento (Transferência)")
+    transf_data_transferencia = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Transferência")
+    transf_empresa_origem = models.IntegerField(null=True, blank=True, verbose_name="Empresa Origem")
+    transf_codigo_funcionario_origem = models.IntegerField(null=True, blank=True, verbose_name="Código Funcionário Origem")
+    transf_data_inicio_vinculo = models.CharField(max_length=10, null=True, blank=True, verbose_name="Data Início Vínculo")
+    transf_cnpj_empresa_anterior = models.CharField(max_length=20, null=True, blank=True, verbose_name="CNPJ Empresa Anterior")
+    transf_matricula_empresa_anterior = models.IntegerField(null=True, blank=True, verbose_name="Matrícula Empresa Anterior")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Funcionário Sankhya'
+        verbose_name_plural = 'Funcionários Sankhya'
+        db_table = 'sankhya_funcionario'
+        ordering = ['empresa_codigo', 'codigo_funcionario']
+        unique_together = [['empresa_codigo', 'codigo_funcionario']]
+        indexes = [
+            models.Index(fields=['empresa_codigo']),
+            models.Index(fields=['codigo_funcionario']),
+            models.Index(fields=['cpf']),
+            models.Index(fields=['matricula']),
+            models.Index(fields=['situacao']),
+        ]
+
+    def __str__(self):
+        return f"{self.nome or 'N/A'} (Emp: {self.empresa_codigo}, Func: {self.codigo_funcionario})"
 
 
 

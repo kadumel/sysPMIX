@@ -78,21 +78,18 @@ class EmpresaAdmin(admin.ModelAdmin):
 
 @admin.register(Cidade)
 class CidadeAdmin(admin.ModelAdmin):
-    list_display = ('codigo_cidade', 'nome', 'uf', 'nome_regiao', 'codigo_municipio_fiscal', 'updated_at')
+    list_display = ('codigo_cidade', 'nome', 'uf', 'codigo_regiao', 'dt_alteracao', 'nome_regiao', 'codigo_municipio_fiscal', 'updated_at')
     list_filter = ('uf', 'codigo_regiao')
     search_fields = ('codigo_cidade', 'nome', 'uf', 'nome_regiao', 'nome_correio', 'codigo_municipio_fiscal')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
     
     fieldsets = (
-        ('Informações Básicas', {
-            'fields': ('codigo_cidade', 'nome', 'uf')
+        ('Legado CRUD (getCidadeLegado)', {
+            'fields': ('codigo_cidade', 'nome', 'uf', 'codigo_regiao', 'dt_alteracao')
         }),
-        ('Região', {
-            'fields': ('codigo_regiao', 'nome_regiao')
-        }),
-        ('Dados Fiscais', {
-            'fields': ('nome_correio', 'codigo_municipio_fiscal')
+        ('API v1 / complemento', {
+            'fields': ('nome_regiao', 'nome_correio', 'codigo_municipio_fiscal')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),
@@ -314,8 +311,18 @@ class ProdutoAdmin(admin.ModelAdmin):
 
 @admin.register(GrupoProduto)
 class GrupoProdutoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau', 'grupo_icms', 'analitico', 'ativo', 'updated_at')
-    list_filter = ('ativo', 'analitico', 'grau', 'grupo_icms')
+    list_display = (
+        'codigo_grupo_produto',
+        'nome',
+        'codigo_grupo_produto_pai',
+        'grau',
+        'grupo_icms',
+        'analitico',
+        'ativo',
+        'mostrar_no_ecommerce',
+        'updated_at',
+    )
+    list_filter = ('ativo', 'analitico', 'mostrar_no_ecommerce', 'grau', 'grupo_icms')
     search_fields = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
@@ -325,7 +332,7 @@ class GrupoProdutoAdmin(admin.ModelAdmin):
             'fields': ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau')
         }),
         ('Configurações', {
-            'fields': ('grupo_icms', 'analitico', 'ativo')
+            'fields': ('grupo_icms', 'analitico', 'ativo', 'mostrar_no_ecommerce')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),

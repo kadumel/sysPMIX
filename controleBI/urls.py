@@ -5,7 +5,9 @@ from .views import (
     ListVeiculoView, CadastrarVeiculoView, VeiculoDetailView, VeiculoEditView, VeiculoDeleteView,
     ListPedidoView, CadastrarPedidoView, ViewPedidoView, DeletePedidoView,
     RelatorioPedidoView, sync_pedido, sync_pedido_batch, edit_pedido,
-    ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView
+    ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView,
+    ListClienteSankhyaGestaoView, GestaoUsuariosClienteSankhyaView,
+    GestaoCategoriasEcommerceView,
 )
 from django.views.generic import TemplateView
 from . import views
@@ -46,6 +48,19 @@ urlpatterns = [
     path('pracas/<int:pk>/edit/', PracaEditView.as_view(), name='praca_edit'),
     path('pracas/<int:pk>/delete/', PracaDeleteView.as_view(), name='praca_delete'),
     path('pracas/<int:pk>/enderecos/', GerenciarEnderecosPracaView.as_view(), name='gerenciar_enderecos_praca'),
+
+    # Clientes Sankhya — gestão de usuários (tabela sankhya_cliente)
+    path('clientes-sankhya/', ListClienteSankhyaGestaoView.as_view(), name='gestao_clientes_sankhya'),
+    path(
+        'clientes-sankhya/<int:pk>/usuarios/',
+        GestaoUsuariosClienteSankhyaView.as_view(),
+        name='gestao_usuarios_cliente_sankhya',
+    ),
+    path(
+        'categorias-ecommerce/',
+        GestaoCategoriasEcommerceView.as_view(),
+        name='gestao_categorias_ecommerce',
+    ),
     
     path('teste/', TemplateView.as_view(template_name='teste/base.html'), name='login'),
 ]

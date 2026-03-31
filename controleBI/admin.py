@@ -1,5 +1,6 @@
 from django.contrib import admin
-from django.contrib.admin import AdminSite
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.models import User
 from django.utils.translation import gettext_lazy as _
 from .models import *
 from django.contrib import messages
@@ -10,6 +11,13 @@ admin.site.site_header = _('Pannemix')
 admin.site.site_title = _('Pannemix')
 admin.site.index_title = _('Pannemix')
 
+
+def _admin_site_only_superuser(request):
+    """Django Admin (/admin/) só para quem tem is_superuser; perfil do sistema é outro conceito."""
+    return request.user.is_active and request.user.is_superuser
+
+
+admin.site.has_permission = _admin_site_only_superuser
 
 
 @admin.register(Cliente)
@@ -230,4 +238,19 @@ class EnderecoClienteAdmin(admin.ModelAdmin):
     list_per_page = 10
 
 
+class PerfilUsuarioInline(admin.StackedInline):
+    model = PerfilUsuario
+    can_delete = False
+    fk_name = 'user'
+    extra = 0
+    verbose_name_plural = 'Perfil de acesso'
+
+
+class UserAdmin(BaseUserAdmin):
+    inlines = (*getattr(BaseUserAdmin, 'inlines', ()), PerfilUsuarioInline)
+
+
+if admin.site.is_registered(User):
+    admin.site.unregister(User)
+admin.site.register(User, UserAdmin)
 

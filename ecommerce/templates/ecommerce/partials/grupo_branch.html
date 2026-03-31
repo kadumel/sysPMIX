@@ -1,0 +1,13 @@
+<li class="mb-1">
+    <a
+        href="{% url 'ecommerce_home' %}?grupo={{ branch.grupo.codigo_grupo_produto }}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}"
+        class="text-decoration-none {% if grupo_atual and grupo_atual.codigo_grupo_produto == branch.grupo.codigo_grupo_produto %}fw-bold{% else %}text-body-secondary{% endif %}"
+    >{{ branch.grupo.nome }}</a>
+    {% if branch.filhos %}
+    <ul>
+        {% for child in branch.filhos %}
+            {% include "ecommerce/partials/grupo_branch.html" with branch=child %}
+        {% endfor %}
+    </ul>
+    {% endif %}
+</li>

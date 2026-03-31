@@ -1,13 +1,32 @@
+from urllib.parse import urlencode
+
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from .models import Funcionario, Veiculo, Pedido, ItemPedido, Auditoria, Praca, EnderecoCliente
-from .forms import VeiculoForm
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto
+from ecommerce import catalog as catalog_ecommerce
+from .models import (
+    Funcionario,
+    Veiculo,
+    Pedido,
+    ItemPedido,
+    Auditoria,
+    Praca,
+    EnderecoCliente,
+    PerfilUsuario,
+    UsuarioClienteSankhya,
+)
+from .forms import VeiculoForm, CriarUsuarioClienteSankhyaForm, AlterarSenhaUsuarioClienteForm
 from .services import FuncionarioService, PedidoService
 from django.db.models import Count, Sum, Q
 from django.db.models.functions import TruncMonth
 from datetime import datetime, timedelta
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
-from django.contrib.auth.mixins import LoginRequiredMixin
+from .mixins import PerfilBIAccessMixin
+from .decorators import requer_acesso_bi
 from django.views import View
 from django.contrib import messages
 from django.urls import reverse
@@ -41,7 +60,7 @@ def log_exception(request, origem, error, context=None):
         obs=f"EXCEÇÃO: {json.dumps(error_details, indent=2)}"
     )
 
-class IndexView(LoginRequiredMixin, View):
+class IndexView(PerfilBIAccessMixin, View):
     def get(self, request):
         if request.user.is_authenticated:
             # Contagem de funcionários por tipo
@@ -110,7 +129,7 @@ class IndexView(LoginRequiredMixin, View):
             return render(request, 'home_globo.html', context)
         return render(request, 'index.html')
 
-class DashboardView(LoginRequiredMixin, View):
+class DashboardView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Contagem de funcionários por tipo
         total_motoristas = Funcionario.objects.filter(tipo='Motorista').count()
@@ -166,7 +185,7 @@ class DashboardView(LoginRequiredMixin, View):
         
         return render(request, 'dashboard.html', context)
 
-class ListFuncionarioView(LoginRequiredMixin, ListView):
+class ListFuncionarioView(PerfilBIAccessMixin, ListView):
     model = Funcionario
     template_name = 'funcionario/listFuncionario.html'
     context_object_name = 'funcionarios'
@@ -216,7 +235,7 @@ class ListFuncionarioView(LoginRequiredMixin, ListView):
         
         return context
 
-class CadastrarFuncionarioView(LoginRequiredMixin, View):
+class CadastrarFuncionarioView(PerfilBIAccessMixin, View):
     def get(self, request):
         return render(request, 'funcionario/addFuncionario.html')
         
@@ -243,7 +262,7 @@ class CadastrarFuncionarioView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao cadastrar funcionário: {str(e)}')
             return render(request, 'funcionario/addFuncionario.html')
 
-class ListVeiculoView(LoginRequiredMixin, ListView):
+class ListVeiculoView(PerfilBIAccessMixin, ListView):
     model = Veiculo
     template_name = 'veiculo/listVeiculo.html'
     context_object_name = 'veiculos'
@@ -295,7 +314,7 @@ class ListVeiculoView(LoginRequiredMixin, ListView):
         
         return context
 
-class CadastrarVeiculoView(LoginRequiredMixin, View):
+class CadastrarVeiculoView(PerfilBIAccessMixin, View):
     def get(self, request):
         return render(request, 'veiculo/addVeiculo.html')
     
@@ -370,7 +389,7 @@ class CadastrarVeiculoView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao cadastrar veículo: {str(e)}')
             return render(request, 'veiculo/addVeiculo.html')
 
-class CadastrarPedidoView(LoginRequiredMixin, View):
+class CadastrarPedidoView(PerfilBIAccessMixin, View):
     template_name = 'pedido/addPedido.html'
     
     def get(self, request):
@@ -422,7 +441,7 @@ class CadastrarPedidoView(LoginRequiredMixin, View):
         
         return redirect('list_pedido')
 
-class ListPedidoView(LoginRequiredMixin, View):
+class ListPedidoView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Inicializar queryset
         pedidos = Pedido.objects.all()
@@ -520,7 +539,7 @@ class ListPedidoView(LoginRequiredMixin, View):
         
         return render(request, 'pedido/listPedido.html', context)
 
-class ViewPedidoView(LoginRequiredMixin, View):
+class ViewPedidoView(PerfilBIAccessMixin, View):
     def get(self, request, pedido_id):
         pedido = Pedido.objects.get(id=pedido_id)
         itens = ItemPedido.objects.filter(pedido=pedido)
@@ -545,6 +564,7 @@ class ViewPedidoView(LoginRequiredMixin, View):
         return render(request, 'pedido/viewPedido.html', context)
 
 @login_required
+@requer_acesso_bi
 def edit_pedido(request, pedido_id):
     pedido = get_object_or_404(Pedido, id=pedido_id)
     itens = ItemPedido.objects.filter(pedido=pedido)
@@ -583,7 +603,7 @@ def edit_pedido(request, pedido_id):
 
     return render(request, 'pedido/addPedido.html', {'pedido': pedido, 'itens': itens})
 
-class DeletePedidoView(LoginRequiredMixin, View):
+class DeletePedidoView(PerfilBIAccessMixin, View):
     def post(self, request, pedido_id):
         try:
             pedido = Pedido.objects.get(id=pedido_id)
@@ -627,6 +647,7 @@ class DeletePedidoView(LoginRequiredMixin, View):
             }, status=500)
 
 @login_required
+@requer_acesso_bi
 def add_pedido(request):
     if request.method == 'POST':
         try:
@@ -675,6 +696,7 @@ def add_pedido(request):
     return render(request, 'pedido/addPedido.html')
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def sync_pedido(request, pk):
     try:
@@ -703,6 +725,7 @@ def sync_pedido(request, pk):
         }, status=500)
 
 @login_required
+@requer_acesso_bi
 def sync_pedido_batch(request):
     if request.method == 'POST':
         try:
@@ -741,7 +764,7 @@ def sync_pedido_batch(request):
     
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
 
-class RelatorioPedidoView(LoginRequiredMixin, View):
+class RelatorioPedidoView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Inicializar queryset
         pedidos = Pedido.objects.all()
@@ -811,7 +834,7 @@ class RelatorioPedidoView(LoginRequiredMixin, View):
         
         return render(request, 'pedido/relatorioPedido.html', context)
 
-class VeiculoDetailView(LoginRequiredMixin, View):
+class VeiculoDetailView(PerfilBIAccessMixin, View):
     def get(self, request, pk):
         veiculo = get_object_or_404(Veiculo, pk=pk)
         
@@ -824,7 +847,7 @@ class VeiculoDetailView(LoginRequiredMixin, View):
     def post(self, request, pk):
         return self.get(request, pk)
 
-class VeiculoEditView(LoginRequiredMixin, View):
+class VeiculoEditView(PerfilBIAccessMixin, View):
     def get(self, request, pk):
         veiculo = get_object_or_404(Veiculo, pk=pk)
         return render(request, 'veiculo/veiculo_edit.html', {'veiculo': veiculo})
@@ -898,7 +921,7 @@ class VeiculoEditView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao atualizar veículo: {str(e)}')
             return render(request, 'veiculo/veiculo_edit.html', {'veiculo': veiculo})
 
-class VeiculoDeleteView(LoginRequiredMixin, View):
+class VeiculoDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             veiculo = get_object_or_404(Veiculo, pk=pk)
@@ -941,7 +964,7 @@ class VeiculoDeleteView(LoginRequiredMixin, View):
                 'message': f'Erro ao excluir veículo: {str(e)}'
             }, status=500)
 
-class FuncionarioEditView(LoginRequiredMixin, UpdateView):
+class FuncionarioEditView(PerfilBIAccessMixin, UpdateView):
     model = Funcionario
     template_name = 'funcionario/funcionario_edit.html'
     fields = ['nome', 'cpf', 'codigo_erp', 'tipo', 'status']
@@ -955,7 +978,7 @@ class FuncionarioEditView(LoginRequiredMixin, UpdateView):
         messages.error(self.request, 'Erro ao atualizar funcionário.')
         return super().form_invalid(form)
 
-class FuncionarioDeleteView(LoginRequiredMixin, View):
+class FuncionarioDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             funcionario = get_object_or_404(Funcionario, pk=pk)
@@ -999,6 +1022,7 @@ class FuncionarioDeleteView(LoginRequiredMixin, View):
             }, status=500)
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def import_pedidos(request):
     max_retries = 3
@@ -1087,6 +1111,7 @@ def import_pedidos(request):
                 }, status=500)
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def import_veiculos(request):
     max_retries = 3
@@ -1240,6 +1265,7 @@ class VeiculoUpdateView(UpdateView):
             raise
 
 @login_required
+@requer_acesso_bi
 def import_funcionarios(request):
     if request.method == 'POST':
         max_retries = 3
@@ -1391,7 +1417,7 @@ def atualizar_nf_pedidos():
 
 
 # Views para gestão de Praças
-class ListPracaView(LoginRequiredMixin, ListView):
+class ListPracaView(PerfilBIAccessMixin, ListView):
     model = Praca
     template_name = 'praca/listPraca.html'
     context_object_name = 'pracas'
@@ -1422,7 +1448,7 @@ class ListPracaView(LoginRequiredMixin, ListView):
         return context
 
 
-class CadastrarPracaView(LoginRequiredMixin, View):
+class CadastrarPracaView(PerfilBIAccessMixin, View):
     template_name = 'praca/addPraca.html'
 
     def get(self, request):
@@ -1465,7 +1491,7 @@ class CadastrarPracaView(LoginRequiredMixin, View):
             return render(request, self.template_name)
 
 
-class PracaEditView(LoginRequiredMixin, UpdateView):
+class PracaEditView(PerfilBIAccessMixin, UpdateView):
     model = Praca
     template_name = 'praca/praca_edit.html'
     fields = ['praca']
@@ -1495,7 +1521,7 @@ class PracaEditView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class PracaDeleteView(LoginRequiredMixin, View):
+class PracaDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             praca = get_object_or_404(Praca, pk=pk)
@@ -1524,7 +1550,7 @@ class PracaDeleteView(LoginRequiredMixin, View):
         
         return redirect('list_praca')
 
-class GerenciarEnderecosPracaView(LoginRequiredMixin, View):
+class GerenciarEnderecosPracaView(PerfilBIAccessMixin, View):
     template_name = 'praca/gerenciar_enderecos.html'
 
     def get(self, request, pk):
@@ -1625,3 +1651,237 @@ class GerenciarEnderecosPracaView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao processar ação: {str(e)}')
         
         return redirect('gerenciar_enderecos_praca', pk=pk)
+
+
+class ListClienteSankhyaGestaoView(PerfilBIAccessMixin, ListView):
+    """Lista clientes da tabela sankhya_cliente para gestão de usuários do sistema."""
+
+    model = ClienteSankhya
+    template_name = 'cliente_sankhya/list_clientes_gestao.html'
+    context_object_name = 'clientes'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = ClienteSankhya.objects.annotate(qtd_usuarios=Count('usuarios_sistema'))
+        search = self.request.GET.get('search', '').strip()
+        if search:
+            q = (
+                Q(nome__icontains=search)
+                | Q(razao__icontains=search)
+                | Q(cnpj_cpf__icontains=search)
+            )
+            if search.isdigit():
+                q |= Q(codigo_cliente=int(search))
+            qs = qs.filter(q)
+        return qs.order_by('nome', 'razao', 'codigo_cliente')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['current_search'] = self.request.GET.get('search', '')
+        return ctx
+
+
+class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
+    """Por cliente: criar usuários (perfil cliente) e alterar senhas."""
+
+    template_name = 'cliente_sankhya/gestao_usuarios_cliente.html'
+
+    def get_cliente(self, pk):
+        return get_object_or_404(ClienteSankhya, pk=pk)
+
+    def get(self, request, pk):
+        cliente = self.get_cliente(pk)
+        vinculos = (
+            UsuarioClienteSankhya.objects.filter(cliente=cliente)
+            .select_related('user')
+            .order_by('user__username')
+        )
+        form = CriarUsuarioClienteSankhyaForm()
+        return render(
+            request,
+            self.template_name,
+            {
+                'cliente': cliente,
+                'vinculos': vinculos,
+                'form_criar': form,
+                'form_senha': AlterarSenhaUsuarioClienteForm(),
+            },
+        )
+
+    def post(self, request, pk):
+        cliente = self.get_cliente(pk)
+        action = request.POST.get('action')
+
+        if action == 'criar_usuario':
+            form = CriarUsuarioClienteSankhyaForm(request.POST)
+            if form.is_valid():
+                try:
+                    validate_password(form.cleaned_data['password'], user=User(username=form.cleaned_data['username']))
+                except DjangoValidationError as e:
+                    for err in e.messages:
+                        form.add_error('password', err)
+            if form.is_valid():
+                try:
+                    with transaction.atomic():
+                        user = User.objects.create_user(
+                            username=form.cleaned_data['username'],
+                            email=form.cleaned_data.get('email') or '',
+                            password=form.cleaned_data['password'],
+                            first_name=form.cleaned_data.get('first_name') or '',
+                        )
+                        PerfilUsuario.objects.filter(user=user).update(perfil=PerfilUsuario.Perfil.CLIENTE)
+                        UsuarioClienteSankhya.objects.create(cliente=cliente, user=user)
+                    messages.success(
+                        request,
+                        f'Usuário "{user.username}" criado e vinculado ao cliente.',
+                    )
+                    return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+                except Exception as exc:
+                    messages.error(request, f'Erro ao criar usuário: {exc}')
+            vinculos = (
+                UsuarioClienteSankhya.objects.filter(cliente=cliente)
+                .select_related('user')
+                .order_by('user__username')
+            )
+            return render(
+                request,
+                self.template_name,
+                {
+                    'cliente': cliente,
+                    'vinculos': vinculos,
+                    'form_criar': form,
+                    'form_senha': AlterarSenhaUsuarioClienteForm(),
+                },
+            )
+
+        if action == 'alterar_senha':
+            raw_uid = request.POST.get('user_id')
+            user = get_object_or_404(User, pk=raw_uid)
+            vinculo = UsuarioClienteSankhya.objects.filter(cliente=cliente, user=user).first()
+            if not vinculo:
+                messages.error(request, 'Usuário não pertence a este cliente.')
+                return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+            form_senha = AlterarSenhaUsuarioClienteForm(request.POST)
+            if form_senha.is_valid():
+                pwd = form_senha.cleaned_data['new_password']
+                try:
+                    validate_password(pwd, user=user)
+                except DjangoValidationError as e:
+                    for err in e.messages:
+                        form_senha.add_error('new_password', err)
+            if form_senha.is_valid():
+                user.set_password(form_senha.cleaned_data['new_password'])
+                user.save()
+                messages.success(request, f'Senha do usuário "{user.username}" atualizada.')
+                return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+            vinculos = (
+                UsuarioClienteSankhya.objects.filter(cliente=cliente)
+                .select_related('user')
+                .order_by('user__username')
+            )
+            return render(
+                request,
+                self.template_name,
+                {
+                    'cliente': cliente,
+                    'vinculos': vinculos,
+                    'form_criar': CriarUsuarioClienteSankhyaForm(),
+                    'form_senha': form_senha,
+                    'senha_user_id': raw_uid,
+                    'abrir_modal_senha': True,
+                },
+            )
+
+        return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+
+
+def _collect_codigos_arvore_grupos(nodes: list[dict]) -> list[int]:
+    out: list[int] = []
+    for n in nodes:
+        out.append(n['grupo'].codigo_grupo_produto)
+        out.extend(_collect_codigos_arvore_grupos(n['filhos']))
+    return out
+
+
+class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
+    """Hierarquia sankhya_grupo_produto: define quais categorias aparecem na loja."""
+
+    template_name = 'ecommerce_gestao/categorias.html'
+
+    def get(self, request):
+        search = catalog_ecommerce.normalizar_busca(request.GET.get('search'))
+        _by_id, by_pai, raizes = catalog_ecommerce.grupos_ativos_map(apenas_visiveis_loja=False)
+        arvore_full = catalog_ecommerce.arvore_grupos_nested(raizes, by_pai)
+        tem_grupos_no_sistema = bool(raizes)
+
+        if search:
+            mids = catalog_ecommerce.matching_grupo_produto_ids_por_texto(
+                list(_by_id.values()), search
+            )
+            vis = catalog_ecommerce.ids_grupos_com_hierarquia_busca(mids, _by_id, by_pai)
+            arvore = catalog_ecommerce.filtrar_arvore_grupos_por_ids(arvore_full, vis) if vis else []
+        else:
+            arvore = arvore_full
+
+        filtro_sem_resultado = bool(search) and not arvore and tem_grupos_no_sistema
+        visible_grupo_ids = _collect_codigos_arvore_grupos(arvore) if search and arvore else []
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'arvore': arvore,
+                'current_search': search,
+                'filtro_sem_resultado': filtro_sem_resultado,
+                'busca_categorias_max': catalog_ecommerce.BUSCA_MAX_LEN,
+                'visible_grupo_ids': visible_grupo_ids,
+            },
+        )
+
+    def post(self, request):
+        search = catalog_ecommerce.normalizar_busca(request.POST.get('search'))
+        codigos_marcados: list[int] = []
+        for x in request.POST.getlist('mostrar_ecommerce'):
+            try:
+                codigos_marcados.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        visiveis_tela: set[int] = set()
+        for x in request.POST.getlist('visivel'):
+            try:
+                visiveis_tela.add(int(x))
+            except (TypeError, ValueError):
+                continue
+
+        if search and visiveis_tela:
+            marcados_set = set(codigos_marcados) & visiveis_tela
+            with transaction.atomic():
+                GrupoProduto.objects.filter(
+                    ativo=True,
+                    codigo_grupo_produto__in=visiveis_tela,
+                ).update(mostrar_no_ecommerce=False)
+                if marcados_set:
+                    GrupoProduto.objects.filter(
+                        ativo=True,
+                        codigo_grupo_produto__in=marcados_set,
+                    ).update(mostrar_no_ecommerce=True)
+            messages.success(request, 'Categorias visíveis na loja foram atualizadas (apenas itens do filtro).')
+        elif search and not visiveis_tela:
+            messages.warning(
+                request,
+                'Com o filtro atual não há categorias na tela; nenhuma alteração foi salva. Limpe o filtro para editar tudo.',
+            )
+        else:
+            with transaction.atomic():
+                GrupoProduto.objects.filter(ativo=True).update(mostrar_no_ecommerce=False)
+                if codigos_marcados:
+                    GrupoProduto.objects.filter(
+                        ativo=True,
+                        codigo_grupo_produto__in=codigos_marcados,
+                    ).update(mostrar_no_ecommerce=True)
+            messages.success(request, 'Categorias visíveis na loja foram atualizadas.')
+
+        redir = reverse('gestao_categorias_ecommerce')
+        if search:
+            redir = f'{redir}?{urlencode({"search": search})}'
+        return redirect(redir)

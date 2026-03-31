@@ -1,0 +1,54 @@
+{% extends "ecommerce/base.html" %}
+{% block title %}Pedido #{{ pedido.pk }} — Loja Pannemix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <nav aria-label="breadcrumb" class="mb-3">
+            <ol class="breadcrumb mb-0 small">
+                <li class="breadcrumb-item"><a href="{% url 'ecommerce_pedidos' %}">Meus pedidos</a></li>
+                <li class="breadcrumb-item active" aria-current="page">#{{ pedido.pk }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-3">
+            <h1 class="h3 mb-0">Pedido #{{ pedido.pk }}</h1>
+            <div>
+                {% if pedido.status == 'pendente' %}
+                <span class="badge text-bg-warning text-dark">Pendente — aguardando comercial</span>
+                {% elif pedido.status == 'autorizado' %}
+                <span class="badge text-bg-success">Autorizado</span>
+                {% else %}
+                <span class="badge text-bg-secondary">Rejeitado</span>
+                {% endif %}
+            </div>
+        </div>
+
+        <p class="text-muted small mb-4">Registrado em {{ pedido.criado_em|date:"d/m/Y H:i" }}{% if pedido.codigo_pedido_externo %} · Referência no sistema: <strong>{{ pedido.codigo_pedido_externo }}</strong>{% endif %}</p>
+
+        {% if pedido.observacao_comercial %}
+        <div class="alert alert-info border-0 small mb-4">
+            <strong class="d-block mb-1"><i class="bi bi-chat-left-text me-1"></i>Mensagem do comercial</strong>
+            {{ pedido.observacao_comercial|linebreaksbr }}
+        </div>
+        {% endif %}
+
+        <div class="card ecommerce-cart-card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-box-seam me-2"></i>Itens</div>
+            <ul class="list-group list-group-flush">
+                {% for it in itens %}
+                <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2 py-3">
+                    <div>
+                        <span class="fw-medium">{{ it.nome }}</span>
+                        <span class="text-muted small d-block">Cód. {{ it.codigo_produto }}</span>
+                    </div>
+                    <span class="text-muted small">Qtd. {{ it.qty_label }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a href="{% url 'ecommerce_pedidos' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>Voltar aos pedidos</a>
+    </div>
+</div>
+{% endblock %}

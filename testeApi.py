@@ -10,7 +10,7 @@ django.setup()
 import requests, json
 from api_sankhya.models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato, Funcionario
 )
 from datetime import datetime
 
@@ -1772,6 +1772,200 @@ def _contato_str(val, max_len=None):
     return s
 
 
+def _crud_entities_to_records(data):
+    """
+    Converte responseBody.entities (f0, f1, ... + metadata.fields.field) em lista de dicts nomeados.
+    """
+    entities_data = (data.get('responseBody') or data).get('entities') or {}
+    raw_entity_list = entities_data.get('entity') or []
+    if isinstance(raw_entity_list, dict):
+        raw_entity_list = [raw_entity_list]
+    metadata = entities_data.get('metadata') or {}
+    fields_meta = metadata.get('fields') or {}
+    field_list = fields_meta.get('field') or []
+    if isinstance(field_list, dict):
+        field_list = [field_list]
+
+    idx_to_name = {}
+    for i, f in enumerate(field_list):
+        name = f.get('name') if isinstance(f, dict) else None
+        if name:
+            idx_to_name[f'f{i}'] = name
+
+    def _get_f_val(cell):
+        if isinstance(cell, dict) and '$' in cell:
+            return cell['$']
+        return cell if cell != {} else None
+
+    def _row_to_record(row):
+        out = {}
+        for fi, name in idx_to_name.items():
+            if fi in row:
+                out[name] = _get_f_val(row[fi])
+        return out
+
+    return [_row_to_record(r) for r in raw_entity_list], entities_data
+
+
+def _crud_val_por_campo(rec, *aliases):
+    """
+    Obtém valor de um registro CRUD (dict com nomes vindos do metadata).
+    Aceita nomes exatos e chaves compostas da Sankhya (ex.: Cidade_AD_UF, UF, NOMECID).
+    """
+    if not isinstance(rec, dict):
+        return None
+    # 1) Chave exata (primeiro valor não vazio)
+    for a in aliases:
+        if a in rec:
+            v = rec[a]
+            if v is not None and v != '':
+                return v
+    # 2) Correspondência por sufixo / fragmento no nome do campo (ordem: aliases mais longos primeiro)
+    ordered = sorted(aliases, key=lambda x: len(str(x)), reverse=True)
+    for key, val in rec.items():
+        if val is None or val == '':
+            continue
+        ku = str(key).upper().replace('.', '_')
+        for a in ordered:
+            au = str(a).upper()
+            if ku == au or ku.endswith('_' + au):
+                return val
+    return None
+
+
+def getCidadeLegado(campos=None, salvar_banco=True):
+    """
+    Busca todas as cidades na API Sankhya (CRUDServiceProvider.loadRecords, rootEntity Cidade),
+    sem filtro — percorre todas as páginas enquanto hasMoreResult for true (igual getContatos).
+
+    Por padrão grava em `Cidade` (tabela sankhya_cidade). Use salvar_banco=False só para inspecionar a API.
+
+    Retorno:
+    - salvar_banco=False: lista de dicts.
+    - salvar_banco=True: dict com cidades, total_registros, total_inseridos, total_atualizados.
+    """
+    if campos is None:
+        campos = ["CODCID", "NOMECID", "UnidadeFederativa_UF", "CODREG", "DTALTER"]
+
+    url = "https://api.sankhya.com.br/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.loadRecords&outputType=json"
+    headers = getToken()
+    headers['Content-Type'] = 'application/json'
+
+    offset_page = 0
+    has_more = True
+    resultado = []
+    total_inseridos = 0
+    total_atualizados = 0
+
+    def _normaliza_cidade(rec):
+        codcid = _contato_int(_crud_val_por_campo(rec, 'CODCID', 'codcid'))
+        nomecid = _contato_str(_crud_val_por_campo(rec, 'NOMECID', 'nomecid', 'NOMECIDADE'), 200)
+        uf = _contato_str(_crud_val_por_campo(rec, 'UF', 'AD_UF', 'SIGLAUF'), 2)
+        item = {
+            'codcid': codcid,
+            'nomecid': nomecid,
+            'uf': uf,
+        }
+        cr = _crud_val_por_campo(rec, 'CODREG', 'codreg')
+        if cr is not None:
+            item['codreg'] = _contato_int(cr)
+        dta = _crud_val_por_campo(rec, 'DTALTER', 'dtalter')
+        if dta is not None:
+            item['dtalter'] = _contato_str(dta, 50)
+        return item
+
+    while has_more:
+        data_set = {
+            "rootEntity": "Cidade",
+            "includePresentationFields": "S",
+            "offsetPage": str(offset_page),
+            "entity": {
+                "fieldset": {
+                    "list": ",".join(campos),
+                },
+            },
+        }
+
+        request_body = {
+            "serviceName": "CRUDServiceProvider.loadRecords",
+            "requestBody": {
+                "dataSet": data_set,
+            },
+        }
+
+        try:
+            resp = requests.post(url, headers=headers, json=request_body)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"Erro ao buscar cidade legado (página {offset_page}): {e}")
+            break
+
+        st = data.get('status')
+        if st is not None and str(st) not in ('1', 'true', 'True'):
+            msg = data.get('statusMessage') or data.get('error') or data
+            print(f"API Sankhya retornou status {st} (página {offset_page}): {msg}")
+            break
+
+        records, entities_data = _crud_entities_to_records(data)
+        has_more_val = entities_data.get('hasMoreResult', 'false')
+        has_more = has_more_val in (True, 'true', 'True', 'S', 's', '1')
+
+        print(f"Cidade legado — página {offset_page}: {len(records)} registros (hasMoreResult={has_more_val})")
+
+        for rec in records:
+            item = _normaliza_cidade(rec)
+            resultado.append(item)
+
+            if salvar_banco:
+                codcid = item.get('codcid')
+                if codcid is None:
+                    print("  ⚠ Cidade legado sem CODCID ignorada.")
+                    continue
+                # nome é obrigatório no modelo; fallback se a API vier sem NOMECID
+                nome_db = item.get('nomecid') or f'Cidade {codcid}'
+                defaults = {
+                    'nome': nome_db,
+                    'uf': item.get('uf'),
+                    'codigo_regiao': item.get('codreg'),
+                    'dt_alteracao': item.get('dtalter'),
+                }
+                defaults = {k: v for k, v in defaults.items() if v is not None}
+                # nome sempre presente após fallback
+                if 'nome' not in defaults:
+                    defaults['nome'] = nome_db
+                try:
+                    obj, created = Cidade.objects.update_or_create(
+                        codigo_cidade=codcid,
+                        defaults=defaults
+                    )
+                    if created:
+                        total_inseridos += 1
+                    else:
+                        total_atualizados += 1
+                except Exception as e:
+                    print(f"  ✗ Erro ao salvar cidade legado CODCID={codcid}: {e}")
+
+        if not has_more:
+            break
+        offset_page += 1
+
+    if not salvar_banco:
+        return resultado
+
+    out = {
+        'cidades': resultado,
+        'total_registros': len(resultado),
+        'total_inseridos': total_inseridos,
+        'total_atualizados': total_atualizados,
+    }
+    print(
+        f"Cidades legado persistidas: {total_inseridos} inseridas, "
+        f"{total_atualizados} atualizadas (total linhas API: {len(resultado)})."
+    )
+    return out
+
+
 def getContatos():
     """
     Busca contatos da API Sankhya (CRUDServiceProvider.loadRecords, entity Contato)
@@ -1908,5 +2102,241 @@ def getContatos():
     }
 
 
+def _func_int(val):
+    if val is None or val == '':
+        return None
+    if isinstance(val, (int, float)):
+        return int(val)
+    if isinstance(val, str):
+        v = val.strip()
+        if not v:
+            return None
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+    return None
 
-getClientes()
+
+def _func_str(val, max_len=None):
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        val = str(val)
+    s = str(val).strip()
+    if s == '' or s.lower() == 'null':
+        return None
+    if max_len and len(s) > max_len:
+        return s[:max_len]
+    return s
+
+
+def _func_decimal(val):
+    if val is None or val == '':
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def getFuncionarios():
+    """
+    Busca funcionários na API Sankhya:
+    1) Chama API de resumo (lista códigos + paginação).
+    2) Para cada código, chama API de detalhes e faz merge no modelo Funcionario.
+    """
+    url_resumo = "https://api.sankhya.com.br/v1/pessoal/funcionarios"
+     
+
+    headers = getToken()
+    headers['accept'] = 'application/json'
+
+    page = 10
+    has_more = True
+
+    total_processados = 0
+    total_inseridos = 0
+    total_atualizados = 0
+
+    print("Iniciando sincronização de funcionários...")
+
+    while has_more:
+        try:
+            resp = requests.get(url_resumo, headers=headers, params={'page': page})
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            print(f"Erro ao chamar API de funcionários (resumo, página {page}): {e}")
+            break
+
+        # Resposta no formato: [ { 'codigos': [...], 'pagination': {...} } ]
+        bloco = data[0] if isinstance(data, list) and data else data
+        codigos = bloco.get('codigos', [])
+        pagination = bloco.get('pagination', {})
+
+        has_more_str = str(pagination.get('hasMore', 'false'))
+        has_more = has_more_str.lower() == 'true'
+
+        print(
+            f"Página {pagination.get('page', page)} - "
+            f"Offset: {pagination.get('offset', 0)}, "
+            f"Total: {pagination.get('total', 0)}, "
+            f"HasMore: {has_more_str}"
+        )
+
+        for resumo in codigos:
+            codigo_empresa = _func_int(resumo.get('codigoEmpresa'))
+            codigo_funcionario = _func_int(resumo.get('codigoFuncionario'))
+
+            hash_info = True
+            while hash_info:
+                hash_info = False
+                if codigo_empresa is None or codigo_funcionario is None:
+                    print(f"  ⚠ Resumo sem código de empresa ou funcionário ignorado: {resumo}")
+                    continue
+                try:
+                    url_detalhe = f"https://api.sankhya.com.br/v1/pessoal/funcionarios/{codigo_funcionario}/empresa/{codigo_empresa}"  
+                    det_resp = requests.get(url_detalhe, headers=headers)
+                    det_resp.raise_for_status()
+                    detalhe = det_resp.json()
+                except Exception as e:
+                    print(f"  ✗ Erro ao buscar detalhes do funcionário Emp {codigo_empresa} Func {codigo_funcionario}: {e}")
+                    hash_info = True
+                    continue
+
+                dados_pessoais = detalhe.get('dadosPessoais', {}) or {}
+                endereco = detalhe.get('endereco', {}) or {}
+                bairro = endereco.get('bairro', {}) or {}
+                cidade = endereco.get('cidade', {}) or {}
+                dados_contratuais = detalhe.get('dadosContratuais', {}) or {}
+                emp = dados_contratuais.get('empresa', {}) or {}
+                depto = dados_contratuais.get('departamento', {}) or {}
+                cargo = dados_contratuais.get('cargo', {}) or {}
+                funcao = dados_contratuais.get('funcao', {}) or {}
+                local_trabalho = dados_contratuais.get('localTrabalho', {}) or {}
+                cidade_trab = dados_contratuais.get('cidadeTrabalho', {}) or {}
+                sindicato = dados_contratuais.get('sindicato', {}) or {}
+                carga_horaria = dados_contratuais.get('cargaHoraria', {}) or {}
+                afast = detalhe.get('afastamento', {}) or {}
+                causa_afast = afast.get('causaAfastamento', {}) or {}
+                tipo_rescisao = afast.get('tipoRescisao', {}) or {}
+                transf = detalhe.get('transferencia', {}) or {}
+
+                defaults = {
+                    'cpf': _func_str(detalhe.get('cpf'), 14),
+                    'nome': _func_str(detalhe.get('nome'), 200),
+                    'matricula': _func_int(detalhe.get('matricula')),
+
+                    'nascimento': _func_str(dados_pessoais.get('nascimento'), 10),
+                    'sexo': _func_str(dados_pessoais.get('sexo'), 1),
+                    'celular': _func_str(dados_pessoais.get('celular'), 20),
+                    'email': _func_str(dados_pessoais.get('email'), 150),
+                    'nome_mae': _func_str(dados_pessoais.get('nomeMae') or detalhe.get('nomeMae'), 200),
+
+                    'endereco_cep': _func_str(endereco.get('cep'), 10),
+                    'endereco_codigo': _func_int(endereco.get('codigo')),
+                    'endereco_descricao': _func_str(endereco.get('descricao'), 200),
+                    'endereco_numero': _func_str(endereco.get('numero'), 20),
+                    'endereco_complemento': _func_str(endereco.get('complemento'), 100),
+                    'bairro_codigo': _func_int(bairro.get('codigo')),
+                    'bairro_descricao': _func_str(bairro.get('descricao'), 150),
+                    'cidade_codigo': _func_int(cidade.get('codigo')),
+                    'cidade_descricao': _func_str(cidade.get('descricao'), 150),
+                    'cidade_codigo_ibge': _func_int(cidade.get('codigoIBGE')),
+
+                    'empresa_cnpj': _func_str(emp.get('cnpj'), 20),
+                    'empresa_razao_social': _func_str(emp.get('razaoSocial'), 200),
+                    'data_admissao': _func_str(dados_contratuais.get('dataAdmissao'), 10),
+                    'codigo_categoria_esocial': _func_int(dados_contratuais.get('codigoCategoriaEsocial')),
+                    'situacao': _func_str(dados_contratuais.get('situacao') or resumo.get('situacao'), 2),
+                    'salario_base': _func_decimal(dados_contratuais.get('salarioBase')),
+                    'bolsa_estagio_ou_pro_labore': _func_decimal(dados_contratuais.get('bolsaEstagioOuProLabore')),
+
+                    'departamento_codigo': _func_int(depto.get('codigo')),
+                    'departamento_descricao': _func_str(depto.get('descricao'), 150),
+
+                    'cargo_codigo': _func_int(cargo.get('codigo')),
+                    'cargo_descricao': _func_str(cargo.get('descricao'), 150),
+                    'cargo_cbo': _func_int(cargo.get('cbo')),
+
+                    'funcao_codigo': _func_int(funcao.get('codigo')),
+                    'funcao_descricao': _func_str(funcao.get('descricao'), 150),
+                    'funcao_cbo': _func_int(funcao.get('cbo')),
+
+                    'local_trabalho_codigo': _func_int(local_trabalho.get('codigo')),
+                    'local_trabalho_descricao': _func_str(local_trabalho.get('descricao'), 150),
+
+                    'cidade_trabalho_codigo': _func_int(cidade_trab.get('codigo')),
+                    'cidade_trabalho_descricao': _func_str(cidade_trab.get('descricao'), 150),
+                    'cidade_trabalho_codigo_ibge': _func_int(cidade_trab.get('codigoIBGE')),
+
+                    'sindicato_codigo': _func_int(sindicato.get('codigo')),
+                    'sindicato_nome': _func_str(sindicato.get('nome'), 200),
+                    'sindicato_cnpj': _func_str(sindicato.get('cnpj'), 20),
+
+                    'carga_horaria_codigo': _func_int(carga_horaria.get('codigo')),
+                    'carga_horaria_descricao': _func_str(carga_horaria.get('descricao'), 150),
+
+                    'afast_motivo_desligamento_esocial': _func_str(afast.get('motivoDesligamentoEsocial'), 200),
+                    'afast_data_afastamento': _func_str(afast.get('dataAfastamento'), 10),
+                    'afast_causa_codigo': _func_int(causa_afast.get('codigo')),
+                    'afast_causa_descricao': _func_str(causa_afast.get('descricao'), 200),
+                    'afast_tipo_rescisao_codigo': _func_int(tipo_rescisao.get('codigo')),
+                    'afast_tipo_rescisao_descricao': _func_str(tipo_rescisao.get('descricao'), 200),
+                    'afast_data_desligamento': _func_str(afast.get('dataDesligamento'), 10),
+                    'afast_data_aviso_previo': _func_str(afast.get('dataAvisoPrevio'), 10),
+
+                    'transf_data_transferencia_destino': _func_str(transf.get('dataTransferenciaDestino'), 10),
+                    'transf_empresa_destino': _func_int(transf.get('empresaDestino')),
+                    'transf_cnpj_empresa_destino': _func_str(transf.get('cnpjEmpresaDestino'), 20),
+                    'transf_codigo_funcionario_destino': _func_int(transf.get('codigoFuncionarioDestino')),
+                    'transf_motivo_desligamento': _func_str(transf.get('motivoDesligamento'), 200),
+                    'transf_data_transferencia': _func_str(transf.get('dataTransferencia'), 10),
+                    'transf_empresa_origem': _func_int(transf.get('empresaOrigem')),
+                    'transf_codigo_funcionario_origem': _func_int(transf.get('codigoFuncionarioOrigem')),
+                    'transf_data_inicio_vinculo': _func_str(transf.get('dataInicioVinculo'), 10),
+                    'transf_cnpj_empresa_anterior': _func_str(transf.get('cnpjNaEmpresaAnterior'), 20),
+                    'transf_matricula_empresa_anterior': _func_int(transf.get('matriculaNaEmpresaAnterior')),
+                }
+
+                defaults = {k: v for k, v in defaults.items() if v is not None}
+
+                try:
+                    obj, created = Funcionario.objects.update_or_create(
+                        empresa_codigo=codigo_empresa,
+                        codigo_funcionario=codigo_funcionario,
+                        defaults=defaults
+                    )
+                    total_processados += 1
+                    if created:
+                        total_inseridos += 1
+                        print(f"  ✓ Inserido: {obj.nome or 'N/A'} (Emp {codigo_empresa}, Func {codigo_funcionario})")
+                    else:
+                        total_atualizados += 1
+                        print(f"  ↻ Atualizado: {obj.nome or 'N/A'} (Emp {codigo_empresa}, Func {codigo_funcionario})")
+                except Exception as e:
+                    print(f"  ✗ Erro ao salvar funcionário Emp {codigo_empresa} Func {codigo_funcionario}: {e}")
+                    continue
+
+            if not has_more:
+                break
+            page += 1
+
+    print(f"\n{'='*50}")
+    print("Sincronização de funcionários concluída!")
+    print(f"Total processados: {total_processados}")
+    print(f"Total inseridos: {total_inseridos}")
+    print(f"Total atualizados: {total_atualizados}")
+    print(f"{'='*50}")
+
+    return {
+        'total_processados': total_processados,
+        'total_inseridos': total_inseridos,
+        'total_atualizados': total_atualizados
+    }
+
+
+
+
+print(getToken())

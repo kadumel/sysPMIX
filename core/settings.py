@@ -47,6 +47,8 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'controleBI',
     'api_sankhya',
+    'pwa',
+    'ecommerce',
 ]
 
 MIDDLEWARE = [
@@ -56,6 +58,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'ecommerce.middleware.EcommerceLoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -73,6 +76,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'ecommerce.context_processors.ecommerce_nav',
             ],
         },
     },
@@ -160,7 +164,15 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+RAILWAY_VOLUME_MOUNT_PATH = os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
+MEDIA_ROOT = (
+    os.getenv('MEDIA_ROOT')
+    or (
+        os.path.join(RAILWAY_VOLUME_MOUNT_PATH, 'media')
+        if RAILWAY_VOLUME_MOUNT_PATH
+        else os.path.join(BASE_DIR, 'media')
+    )
+)
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
@@ -175,6 +187,22 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Progressive Web App (django-pwa) — vitrine / loja em /ecommerce/
+PWA_APP_NAME = 'PMIX Shop'
+PWA_APP_DESCRIPTION = 'Loja online responsiva e instalável (PWA).'
+PWA_APP_THEME_COLOR = '#0ea5e9'
+PWA_APP_BACKGROUND_COLOR = '#ffffff'
+PWA_APP_DISPLAY = 'standalone'
+PWA_APP_SCOPE = '/'
+PWA_APP_ORIENTATION = 'portrait-primary'
+PWA_APP_START_URL = '/ecommerce/'
+PWA_APP_FETCH_URL = '/ecommerce/'
+PWA_APP_DEBUG_MODE = DEBUG
+PWA_APP_ICONS = [
+    {'src': '/static/ecommerce/icons/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+    {'src': '/static/ecommerce/icons/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+]
+PWA_APP_SPLASH_SCREEN = []
 
 # Authentication settings
 LOGIN_URL = 'login'

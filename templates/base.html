@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Pannemix</title>
+    <title>{% block title %}Sistema Pannemix{% endblock %}</title>
     {% load static %}
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -17,25 +17,27 @@
             --navbar-height: 60px;
         }
 
-        /* Ajustes para o layout principal */
+        /* Layout principal: evitar z-index aqui — o backdrop do modal fica no body (1050) e
+           ficaria por cima de tudo que estiver num ancestral com z-index baixo (ex.: 1). */
         .main-content {
             position: relative;
-            z-index: 1;
         }
 
         .container-fluid {
             position: relative;
-            z-index: 1;
         }
 
-        /* Estilos do Modal */
+        /* Bootstrap 5: backdrop 1050, modal 1055. Nunca igualar .modal ao backdrop. */
+        .modal-backdrop {
+            z-index: 1050;
+        }
+
         .modal {
-            z-index: 1050 !important;
+            z-index: 1055;
         }
 
         .modal-dialog {
             margin: 1.75rem auto;
-            z-index: 1051 !important;
         }
 
         /* Resto dos estilos existentes */
@@ -197,11 +199,21 @@
             color: var(--secondary-color);
         }
 
+        .sidebar .submenu .nav-link {
+            padding-left: 2rem;
+            font-size: 0.95rem;
+        }
+
+        .sidebar .nav-link[data-bs-toggle="collapse"] {
+            cursor: pointer;
+        }
+
         /* Hover Effects */
         .btn-link:hover {
             color: var(--secondary-color) !important;
         }
     </style>
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
     <!-- Navbar -->
@@ -256,27 +268,83 @@
     <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="nav flex-column">
-            <a href="{% url 'dashboard' %}" class="nav-link active">
-                <i class="bi bi-house-door"></i>
-                Dashboard
+            {% if request.resolver_match %}
+            {% with u=request.resolver_match.url_name %}
+            <a class="nav-link d-flex align-items-center justify-content-between w-100 {% if u == 'dashboard' or u == 'index' or u == 'list_veiculo' or u == 'add_veiculo' or u == 'veiculo_detail' or u == 'veiculo_edit' or u == 'veiculo_delete' or u == 'import_veiculos' or u == 'list_funcionario' or u == 'add_funcionario' or u == 'funcionario_edit' or u == 'funcionario_delete' or u == 'import_funcionarios' or u == 'list_praca' or u == 'add_praca' or u == 'praca_edit' or u == 'praca_delete' or u == 'gerenciar_enderecos_praca' or u == 'list_pedido' or u == 'add_pedido' or u == 'view_pedido' or u == 'edit_pedido' or u == 'delete_pedido' or u == 'relatorio_pedido' or u == 'sync_pedido' or u == 'sync_pedido_batch' or u == 'import_pedidos' %}active{% endif %}" data-bs-toggle="collapse" href="#submenuLogistica" role="button" aria-expanded="{% if u == 'dashboard' or u == 'index' or u == 'list_veiculo' or u == 'add_veiculo' or u == 'veiculo_detail' or u == 'veiculo_edit' or u == 'veiculo_delete' or u == 'import_veiculos' or u == 'list_funcionario' or u == 'add_funcionario' or u == 'funcionario_edit' or u == 'funcionario_delete' or u == 'import_funcionarios' or u == 'list_praca' or u == 'add_praca' or u == 'praca_edit' or u == 'praca_delete' or u == 'gerenciar_enderecos_praca' or u == 'list_pedido' or u == 'add_pedido' or u == 'view_pedido' or u == 'edit_pedido' or u == 'delete_pedido' or u == 'relatorio_pedido' or u == 'sync_pedido' or u == 'sync_pedido_batch' or u == 'import_pedidos' %}true{% else %}false{% endif %}" aria-controls="submenuLogistica">
+                <span class="d-flex align-items-center gap-2"><i class="bi bi-truck"></i> Logística</span>
+                <i class="bi bi-chevron-down small"></i>
             </a>
-            <a href="{% url 'list_veiculo' %}" class="nav-link">
-                <i class="bi bi-truck"></i>
-                Veículos
+            <div class="collapse submenu {% if u == 'dashboard' or u == 'index' or u == 'list_veiculo' or u == 'add_veiculo' or u == 'veiculo_detail' or u == 'veiculo_edit' or u == 'veiculo_delete' or u == 'import_veiculos' or u == 'list_funcionario' or u == 'add_funcionario' or u == 'funcionario_edit' or u == 'funcionario_delete' or u == 'import_funcionarios' or u == 'list_praca' or u == 'add_praca' or u == 'praca_edit' or u == 'praca_delete' or u == 'gerenciar_enderecos_praca' or u == 'list_pedido' or u == 'add_pedido' or u == 'view_pedido' or u == 'edit_pedido' or u == 'delete_pedido' or u == 'relatorio_pedido' or u == 'sync_pedido' or u == 'sync_pedido_batch' or u == 'import_pedidos' %}show{% endif %}" id="submenuLogistica">
+                <a href="{% url 'dashboard' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'dashboard' or u == 'index' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-house-door"></i> Dashboard</span>
+                </a>
+                <a href="{% url 'list_veiculo' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'list_veiculo' or u == 'add_veiculo' or u == 'veiculo_detail' or u == 'veiculo_edit' or u == 'veiculo_delete' or u == 'import_veiculos' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-truck"></i> Veículos</span>
+                </a>
+                <a href="{% url 'list_funcionario' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'list_funcionario' or u == 'add_funcionario' or u == 'funcionario_edit' or u == 'funcionario_delete' or u == 'import_funcionarios' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> Funcionários</span>
+                </a>
+                <a href="{% url 'list_praca' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'list_praca' or u == 'add_praca' or u == 'praca_edit' or u == 'praca_delete' or u == 'gerenciar_enderecos_praca' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> Praças</span>
+                </a>
+                <a href="{% url 'list_pedido' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'list_pedido' or u == 'add_pedido' or u == 'view_pedido' or u == 'edit_pedido' or u == 'delete_pedido' or u == 'relatorio_pedido' or u == 'sync_pedido' or u == 'sync_pedido_batch' or u == 'import_pedidos' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-box-seam"></i> Pedidos</span>
+                </a>
+            </div>
+            <a class="nav-link d-flex align-items-center justify-content-between w-100 {% if u == 'ecommerce_home' or u == 'ecommerce_cart' or u == 'ecommerce_add_cart' or u == 'ecommerce_remove_cart' or u == 'ecommerce_clear_cart' or u == 'ecommerce_htmx_destaque' or u == 'gestao_clientes_sankhya' or u == 'gestao_usuarios_cliente_sankhya' or u == 'gestao_categorias_ecommerce' %}active{% endif %}" data-bs-toggle="collapse" href="#submenuEcommerce" role="button" aria-expanded="{% if u == 'ecommerce_home' or u == 'ecommerce_cart' or u == 'ecommerce_add_cart' or u == 'ecommerce_remove_cart' or u == 'ecommerce_clear_cart' or u == 'ecommerce_htmx_destaque' or u == 'gestao_clientes_sankhya' or u == 'gestao_usuarios_cliente_sankhya' or u == 'gestao_categorias_ecommerce' %}true{% else %}false{% endif %}" aria-controls="submenuEcommerce">
+                <span class="d-flex align-items-center gap-2"><i class="bi bi-cart3"></i> E-Commerce</span>
+                <i class="bi bi-chevron-down small"></i>
             </a>
-            <a href="{% url 'list_funcionario' %}" class="nav-link">
-                <i class="bi bi-people"></i>
-                Funcionários
+            <div class="collapse submenu {% if u == 'ecommerce_home' or u == 'ecommerce_cart' or u == 'ecommerce_add_cart' or u == 'ecommerce_remove_cart' or u == 'ecommerce_clear_cart' or u == 'ecommerce_htmx_destaque' or u == 'gestao_clientes_sankhya' or u == 'gestao_usuarios_cliente_sankhya' or u == 'gestao_categorias_ecommerce' %}show{% endif %}" id="submenuEcommerce">
+                <a href="{% url 'ecommerce_home' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'ecommerce_home' or u == 'ecommerce_cart' or u == 'ecommerce_add_cart' or u == 'ecommerce_remove_cart' or u == 'ecommerce_clear_cart' or u == 'ecommerce_htmx_destaque' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-shop"></i> Loja</span>
+                </a>
+                <a href="{% url 'gestao_clientes_sankhya' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'gestao_clientes_sankhya' or u == 'gestao_usuarios_cliente_sankhya' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-building"></i> Clientes</span>
+                </a>
+                <a href="{% url 'gestao_categorias_ecommerce' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'gestao_categorias_ecommerce' %}active{% endif %}">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-tags"></i> Categorias</span>
+                </a>
+            </div>
+            {% endwith %}
+            {% else %}
+            <a class="nav-link d-flex align-items-center justify-content-between w-100" data-bs-toggle="collapse" href="#submenuLogistica" role="button" aria-expanded="false" aria-controls="submenuLogistica">
+                <span class="d-flex align-items-center gap-2"><i class="bi bi-truck"></i> Logística</span>
+                <i class="bi bi-chevron-down small"></i>
             </a>
-            <a href="{% url 'list_praca' %}" class="nav-link">
-                <i class="bi bi-geo-alt"></i>
-                Praças
+            <div class="collapse submenu" id="submenuLogistica">
+                <a href="{% url 'dashboard' %}" class="nav-link d-flex align-items-center w-100 active">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-house-door"></i> Dashboard</span>
+                </a>
+                <a href="{% url 'list_veiculo' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-truck"></i> Veículos</span>
+                </a>
+                <a href="{% url 'list_funcionario' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-people"></i> Funcionários</span>
+                </a>
+                <a href="{% url 'list_praca' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-geo-alt"></i> Praças</span>
+                </a>
+                <a href="{% url 'list_pedido' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-box-seam"></i> Pedidos</span>
+                </a>
+            </div>
+            <a class="nav-link d-flex align-items-center justify-content-between w-100" data-bs-toggle="collapse" href="#submenuEcommerce" role="button" aria-expanded="false" aria-controls="submenuEcommerce">
+                <span class="d-flex align-items-center gap-2"><i class="bi bi-cart3"></i> E-Commerce</span>
+                <i class="bi bi-chevron-down small"></i>
             </a>
-            <a href="{% url 'list_pedido' %}" class="nav-link">
-                <i class="bi bi-box-seam"></i>
-                Pedidos
-            </a>
-           
+            <div class="collapse submenu" id="submenuEcommerce">
+                <a href="{% url 'ecommerce_home' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-shop"></i> Loja</span>
+                </a>
+                <a href="{% url 'gestao_clientes_sankhya' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-building"></i> Clientes</span>
+                </a>
+                <a href="{% url 'gestao_categorias_ecommerce' %}" class="nav-link d-flex align-items-center w-100">
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-tags"></i> Categorias</span>
+                </a>
+            </div>
+            {% endif %}
         </div>
     </div>
 

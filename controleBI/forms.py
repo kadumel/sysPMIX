@@ -1,5 +1,66 @@
 from django import forms
+from django.contrib.auth.models import User
+
 from .models import Veiculo
+
+
+class CriarUsuarioClienteSankhyaForm(forms.Form):
+    username = forms.CharField(
+        label='Usuário (login)',
+        max_length=150,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'autocomplete': 'username'}),
+    )
+    email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={'class': 'form-control', 'autocomplete': 'email'}),
+    )
+    first_name = forms.CharField(
+        label='Nome',
+        required=False,
+        max_length=150,
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+    )
+    password = forms.CharField(
+        label='Senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+    password_confirm = forms.CharField(
+        label='Confirmar senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+
+    def clean_username(self):
+        u = self.cleaned_data['username'].strip()
+        if User.objects.filter(username__iexact=u).exists():
+            raise forms.ValidationError('Já existe um usuário com este login.')
+        return u
+
+    def clean(self):
+        data = super().clean()
+        p1 = data.get('password')
+        p2 = data.get('password_confirm')
+        if p1 and p2 and p1 != p2:
+            raise forms.ValidationError('As senhas não conferem.')
+        return data
+
+
+class AlterarSenhaUsuarioClienteForm(forms.Form):
+    new_password = forms.CharField(
+        label='Nova senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+    new_password_confirm = forms.CharField(
+        label='Confirmar nova senha',
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'autocomplete': 'new-password'}),
+    )
+
+    def clean(self):
+        data = super().clean()
+        p1 = data.get('new_password')
+        p2 = data.get('new_password_confirm')
+        if p1 and p2 and p1 != p2:
+            raise forms.ValidationError('As senhas não conferem.')
+        return data
 
 class VeiculoForm(forms.ModelForm):
     class Meta:

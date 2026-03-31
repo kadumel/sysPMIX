@@ -20,10 +20,14 @@ from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.conf.urls.static import static
 
+from core.auth_views import PerfilLoginView
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', include('pwa.urls')),
+    path('ecommerce/', include('ecommerce.urls')),
     path('', include('controleBI.urls')),
-    path('accounts/login/', auth_views.LoginView.as_view(template_name='registration/login.html'), name='login'),
+    path('accounts/login/', PerfilLoginView.as_view(), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
 ]
 

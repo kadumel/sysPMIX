@@ -1,0 +1,30 @@
+<div class="col">
+    <div class="card h-100">
+        <div class="ecommerce-product-thumb" aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</div>
+        <div class="card-body d-flex flex-column">
+            {% if p.nome_grupo_produto %}
+            <span class="badge rounded-pill align-self-start mb-2 text-truncate" style="max-width: 100%;" title="{{ p.nome_grupo_produto }}">{{ p.nome_grupo_produto }}</span>
+            {% endif %}
+            <h3 class="card-title h6">{{ p.nome|default:"Sem nome" }}</h3>
+            {% if p.complemento %}
+            <p class="card-text small text-muted flex-grow-1">{{ p.complemento|truncatewords:22 }}</p>
+            {% elif p.caracteristicas %}
+            <p class="card-text small text-muted flex-grow-1">{{ p.caracteristicas|truncatewords:22 }}</p>
+            {% else %}
+            <div class="flex-grow-1"></div>
+            {% endif %}
+            <p class="small text-muted mb-2">Cód. {{ p.codigo_produto }}</p>
+            <button
+                type="button"
+                class="btn btn-primary btn-sm w-100 mt-auto"
+                data-bs-toggle="modal"
+                data-bs-target="#ecommerceModalAddCart"
+                data-product-codigo="{{ p.codigo_produto }}"
+                data-product-nome="{{ p.nome|default:'Sem nome' }}"
+                data-next="{{ request.get_full_path }}"
+            >
+                <i class="bi bi-cart-plus me-1"></i>Adicionar
+            </button>
+        </div>
+    </div>
+</div>

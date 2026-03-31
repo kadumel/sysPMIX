@@ -1,0 +1,48 @@
+{% extends "ecommerce/base.html" %}
+{% block title %}Notificações — Loja Pannemix{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+            <h1 class="h3 mb-0"><i class="bi bi-bell me-2" style="color: var(--secondary-color);"></i>Notificações</h1>
+            {% if notificacoes %}
+            <form method="post" action="{% url 'ecommerce_notificacoes_lidas' %}" class="m-0">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-secondary btn-sm">Marcar todas como lidas</button>
+            </form>
+            {% endif %}
+        </div>
+
+        {% if notificacoes %}
+        <ul class="list-group shadow-sm border-0">
+            {% for n in notificacoes %}
+            <li class="list-group-item py-3 {% if not n.lida %}list-group-item-light border-start border-3 border-warning{% endif %}">
+                <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                    <div class="flex-grow-1" style="min-width: 0;">
+                        <p class="fw-semibold mb-1 {% if not n.lida %}text-dark{% else %}text-muted{% endif %}">{{ n.titulo }}</p>
+                        <p class="small mb-2 text-muted mb-0">{{ n.mensagem|linebreaksbr }}</p>
+                        <p class="small text-muted mb-0">{{ n.criado_em|date:"d/m/Y H:i" }}{% if n.pedido %} · <a href="{% url 'ecommerce_pedido_detail' n.pedido.pk %}">Pedido #{{ n.pedido.pk }}</a>{% endif %}</p>
+                    </div>
+                    {% if not n.lida %}
+                    <form method="post" action="{% url 'ecommerce_notificacao_lida' n.pk %}" class="m-0 flex-shrink-0">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Marcar lida</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center py-5 text-muted">
+                <i class="bi bi-bell-slash fs-1 d-block mb-3"></i>
+                <p class="mb-0">Nenhuma notificação.</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

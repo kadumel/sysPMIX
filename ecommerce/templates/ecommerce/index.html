@@ -1,0 +1,201 @@
+{% extends "ecommerce/base.html" %}
+
+{% block title %}Início — Loja Pannemix{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        {% if banners %}
+        <div id="ecommerceCarouselBanners" class="carousel slide shadow rounded overflow-hidden" data-bs-ride="carousel">
+            <div class="carousel-indicators mb-1">
+                {% for banner in banners %}
+                <button
+                    type="button"
+                    data-bs-target="#ecommerceCarouselBanners"
+                    data-bs-slide-to="{{ forloop.counter0 }}"
+                    {% if forloop.first %}class="active" aria-current="true"{% endif %}
+                    aria-label="Banner {{ forloop.counter }}"
+                ></button>
+                {% endfor %}
+            </div>
+            <div class="carousel-inner bg-light">
+                {% for banner in banners %}
+                <div class="carousel-item {% if forloop.first %}active{% endif %}">
+                    {% if banner.link %}
+                    <a href="{{ banner.link }}" target="_blank" rel="noopener noreferrer">
+                        <img src="{{ banner.imagem.url }}" class="d-block w-100" alt="{{ banner.titulo|default:'Banner promocional' }}" style="max-height: 360px; object-fit: cover;">
+                    </a>
+                    {% else %}
+                    <img src="{{ banner.imagem.url }}" class="d-block w-100" alt="{{ banner.titulo|default:'Banner promocional' }}" style="max-height: 360px; object-fit: cover;">
+                    {% endif %}
+                    {% if banner.titulo or banner.descricao_curta or banner.descricao_longa or banner.call_to_action %}
+                    <div class="carousel-caption text-start start-0 end-auto top-0 bottom-0 d-flex align-items-center">
+                        <div class="p-3 p-md-4 rounded-3 bg-dark bg-opacity-50 ms-2 ms-md-4 mb-3 mb-md-4" style="max-width: min(78vw, 680px);">
+                            {% if banner.titulo %}
+                            <h5 class="mb-2">{{ banner.titulo }}</h5>
+                            {% endif %}
+                            {% if banner.descricao_curta %}
+                            <p class="mb-2 fw-semibold">{{ banner.descricao_curta }}</p>
+                            {% endif %}
+                            {% if banner.descricao_longa %}
+                            <p class="mb-2 small">{{ banner.descricao_longa|truncatewords:32 }}</p>
+                            {% endif %}
+                            {% if banner.call_to_action %}
+                            <span class="btn btn-sm btn-light text-dark">{{ banner.call_to_action }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% if banners|length > 1 %}
+            <button class="carousel-control-prev" type="button" data-bs-target="#ecommerceCarouselBanners" data-bs-slide="prev">
+                <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Anterior</span>
+            </button>
+            <button class="carousel-control-next" type="button" data-bs-target="#ecommerceCarouselBanners" data-bs-slide="next">
+                <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                <span class="visually-hidden">Próximo</span>
+            </button>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="card border-0 text-white ecommerce-hero-gradient shadow">
+            <div class="card-body p-4 p-lg-5">
+                <p class="small text-white-50 text-uppercase fw-semibold mb-2 tracking-wide">Loja Pannemix</p>
+                <h1 class="card-title display-6 fw-bold mb-3">Catálogo</h1>
+                <p class="card-text lead mb-4" style="color: rgba(255,255,255,0.9);">
+                    Produtos do Sankhya (<code class="text-white bg-white bg-opacity-25 px-1 rounded small">sankhya_produto</code> e
+                    <code class="text-white bg-white bg-opacity-25 px-1 rounded small">sankhya_grupo_produto</code>), com categorias em hierarquia.
+                </p>
+                <a href="#catalogo" class="btn btn-light">Ver catálogo</a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<section id="catalogo" class="pb-4">
+    <div class="mb-4">
+        <h2 class="h3 mb-1 d-flex align-items-center flex-wrap gap-2">
+            <i class="bi bi-grid-3x3-gap" style="color: var(--secondary-color);"></i>
+            Catálogo
+        </h2>
+        <p class="text-muted mb-0">Escolha a categoria ao lado, adicione ao carrinho e finalize quando o checkout estiver disponível.</p>
+    </div>
+
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}{% if ecommerce_busca %}?q={{ ecommerce_busca|urlencode }}{% endif %}">Todas as categorias</a></li>
+            {% for g in grupo_ancestrais %}
+                {% if not forloop.last %}
+                <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}?grupo={{ g.codigo_grupo_produto }}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">{{ g.nome }}</a></li>
+                {% else %}
+                <li class="breadcrumb-item active" aria-current="page">{{ g.nome }}</li>
+                {% endif %}
+            {% endfor %}
+        </ol>
+    </nav>
+
+    <div class="row g-4">
+        <aside class="col-lg-3">
+            <div class="card mb-4">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-folder2-open me-2" style="color: var(--secondary-color);"></i>
+                    <span class="fw-semibold">Categorias</span>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="d-lg-none mb-3">
+                        {% if ecommerce_busca %}
+                        <input type="hidden" name="q" value="{{ ecommerce_busca }}">
+                        {% endif %}
+                        <label for="grupo-select" class="form-label small text-muted mb-1">Grupo</label>
+                        <select id="grupo-select" name="grupo" class="form-select form-select-sm" onchange="this.form.submit()">
+                            <option value="">Todas</option>
+                            {% for row in grupos_flat %}
+                            <option value="{{ row.grupo.codigo_grupo_produto }}" {% if grupo_atual and grupo_atual.codigo_grupo_produto == row.grupo.codigo_grupo_produto %}selected{% endif %} style="padding-left: calc(0.5rem + {{ row.depth }} * 0.75rem)">{{ row.grupo.nome }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    <ul class="ecommerce-grupo-tree list-unstyled mb-0 d-none d-lg-block small">
+                        <li class="mb-2">
+                            <a href="{% url 'ecommerce_home' %}{% if ecommerce_busca %}?q={{ ecommerce_busca|urlencode }}{% endif %}" class="text-decoration-none {% if not grupo_atual %}fw-bold{% else %}text-muted{% endif %}">Todas</a>
+                        </li>
+                        {% for branch in arvore_grupos %}
+                            {% include "ecommerce/partials/grupo_branch.html" %}
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </aside>
+
+        <div class="col-lg-9">
+            <div class="card mb-3 ecommerce-cart-card border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <form method="get" class="row g-2 align-items-end">
+                        {% if grupo_atual %}
+                        <input type="hidden" name="grupo" value="{{ grupo_atual.codigo_grupo_produto }}">
+                        {% endif %}
+                        <div class="col">
+                            <label for="catalogBusca" class="form-label small text-muted mb-1">Buscar no catálogo</label>
+                            <input type="search" id="catalogBusca" name="q" class="form-control" placeholder="Nome, referência, código…" value="{{ ecommerce_busca }}" maxlength="120" autocomplete="off">
+                        </div>
+                        <div class="col-auto d-flex flex-wrap gap-1">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Buscar</button>
+                            {% if ecommerce_busca %}
+                            <a href="{% url 'ecommerce_home' %}{% if grupo_atual %}?grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}" class="btn btn-outline-secondary">Limpar</a>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 small text-muted">
+                <span>{{ paginator.count }} produto{{ paginator.count|pluralize }}</span>
+                {% if produtos.paginator.num_pages > 1 %}
+                <span>Página {{ produtos.number }} de {{ produtos.paginator.num_pages }}</span>
+                {% endif %}
+            </div>
+
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+                {% for p in produtos %}
+                    {% include "ecommerce/partials/produto_card.html" %}
+                {% empty %}
+                <div class="col-12">
+                    <div class="alert alert-light border text-center py-5 mb-0">
+                        <p class="fw-semibold mb-1">Nenhum produto encontrado.</p>
+                        <p class="small text-muted mb-0">Ajuste o filtro ou verifique dados em sankhya_produto (ativos).</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            {% if produtos.paginator.num_pages > 1 %}
+            <div class="btn-group mt-4" role="group" aria-label="Paginação">
+                {% if produtos.has_previous %}
+                <a class="btn btn-outline-primary" href="?page={{ produtos.previous_page_number }}{% if grupo_atual %}&grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">Anterior</a>
+                {% endif %}
+                <button type="button" class="btn btn-primary disabled" disabled>{{ produtos.number }} / {{ produtos.paginator.num_pages }}</button>
+                {% if produtos.has_next %}
+                <a class="btn btn-outline-primary" href="?page={{ produtos.next_page_number }}{% if grupo_atual %}&grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">Próxima</a>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <div id="destaque-htmx" class="mt-4">
+                {% if paginator.count > produtos.paginator.per_page %}
+                <button
+                    type="button"
+                    class="btn btn-outline-secondary"
+                    hx-get="{% url 'ecommerce_htmx_destaque' %}{% if grupo_atual or ecommerce_busca %}?{% endif %}{% if grupo_atual %}grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if grupo_atual and ecommerce_busca %}&{% endif %}{% if ecommerce_busca %}q={{ ecommerce_busca|urlencode }}{% endif %}"
+                    hx-target="#destaque-htmx"
+                    hx-swap="innerHTML"
+                >
+                    <i class="bi bi-plus-lg me-1"></i> Carregar mais (HTMX — 2ª página)
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock content %}

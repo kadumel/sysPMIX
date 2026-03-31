@@ -1,0 +1,162 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{% url 'gestao_clientes_sankhya' %}">Clientes Sankhya</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ cliente.nome|default:cliente.razao|default:"Cliente" }}</li>
+        </ol>
+    </nav>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="bi bi-person-plus me-2"></i>Novo usuário para este cliente</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small">
+                        O login terá perfil <strong>Cliente (e-commerce)</strong>. Um mesmo cliente pode ter vários usuários.
+                    </p>
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="criar_usuario">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_username">{{ form_criar.username.label }}</label>
+                            {{ form_criar.username }}
+                            {% if form_criar.username.errors %}<div class="text-danger small">{{ form_criar.username.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_email">{{ form_criar.email.label }}</label>
+                            {{ form_criar.email }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_first_name">{{ form_criar.first_name.label }}</label>
+                            {{ form_criar.first_name }}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_password">{{ form_criar.password.label }}</label>
+                            {{ form_criar.password }}
+                            {% if form_criar.password.errors %}<div class="text-danger small">{{ form_criar.password.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_password_confirm">{{ form_criar.password_confirm.label }}</label>
+                            {{ form_criar.password_confirm }}
+                        </div>
+                        {% if form_criar.non_field_errors %}
+                        <div class="alert alert-danger">{{ form_criar.non_field_errors }}</div>
+                        {% endif %}
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>Criar usuário
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="card-title mb-0"><i class="bi bi-people me-2"></i>Usuários vinculados</h5>
+                    <span class="badge bg-primary">Cód. cliente: {{ cliente.codigo_cliente }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Login</th>
+                                    <th>Nome</th>
+                                    <th>E-mail</th>
+                                    <th class="text-end">Senha</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for v in vinculos %}
+                                <tr>
+                                    <td>{{ v.user.username }}</td>
+                                    <td>{{ v.user.first_name|default:"—" }}</td>
+                                    <td>{{ v.user.email|default:"—" }}</td>
+                                    <td class="text-end">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary btn-abrir-senha"
+                                                data-user-id="{{ v.user.pk }}"
+                                                data-username="{{ v.user.username }}">
+                                            <i class="bi bi-key"></i> Alterar
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-4">Nenhum usuário vinculado ainda.</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAlterarSenha" tabindex="-1" aria-labelledby="modalAlterarSenhaTitulo" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="formAlterarSenha">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="alterar_senha">
+                <input type="hidden" name="user_id" id="senha_user_id" value="{{ senha_user_id|default:'' }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalAlterarSenhaTitulo">Alterar senha</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="id_new_password">{{ form_senha.new_password.label }}</label>
+                        {{ form_senha.new_password }}
+                        {% if form_senha.new_password.errors %}<div class="text-danger small">{{ form_senha.new_password.errors }}</div>{% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="id_new_password_confirm">{{ form_senha.new_password_confirm.label }}</label>
+                        {{ form_senha.new_password_confirm }}
+                    </div>
+                    {% if form_senha.non_field_errors %}
+                    <div class="alert alert-danger">{{ form_senha.non_field_errors }}</div>
+                    {% endif %}
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Salvar senha</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var modalEl = document.getElementById('modalAlterarSenha');
+    if (!modalEl || !window.bootstrap) return;
+    var modal = new bootstrap.Modal(modalEl);
+    document.querySelectorAll('.btn-abrir-senha').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('senha_user_id').value = btn.getAttribute('data-user-id');
+            document.getElementById('modalAlterarSenhaTitulo').textContent =
+                'Nova senha — ' + btn.getAttribute('data-username');
+            var f = document.getElementById('formAlterarSenha');
+            if (f) {
+                f.querySelectorAll('input[type="password"]').forEach(function (inp) { inp.value = ''; });
+            }
+            modal.show();
+        });
+    });
+    {% if abrir_modal_senha %}
+    modal.show();
+    {% endif %}
+});
+</script>
+{% endblock %}
