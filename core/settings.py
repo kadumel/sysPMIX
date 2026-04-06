@@ -38,6 +38,15 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
+# HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
+# Lista separada por vírgula; padrão inclui o ambiente dev PMIX
+_csrf_env = os.getenv('CSRF_TRUSTED_ORIGINS')
+
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_env.split(',') if o.strip()]
+
+# Encaminhamento TLS pelo proxy (evita redirects/URLs errados em alguns deploys)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Application definition
 
