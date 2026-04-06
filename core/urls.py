@@ -19,6 +19,7 @@ from django.urls import path, include
 from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.conf.urls.static import static
+from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 
 from core.auth_views import PerfilLoginView
 
@@ -31,6 +32,9 @@ urlpatterns = [
     path('accounts/login/', PerfilLoginView.as_view(), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += staticfiles_urlpatterns()
 
 # Servir arquivos de mídia (imagens enviadas) em desenvolvimento e no Railway
 if settings.MEDIA_ROOT and settings.MEDIA_URL:

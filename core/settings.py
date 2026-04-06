@@ -34,7 +34,10 @@ SANKHYA_X_TOKEN = os.getenv('SANKHYA_X_TOKEN')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG')
+# Sem DEBUG no .env → True (runserver serve /static/ a partir de STATICFILES_DIRS).
+# Em produção defina explicitamente DEBUG=false ou DEBUG=0.
+_debug_env = os.environ.get('DEBUG', 'true').strip().lower()
+DEBUG = _debug_env in ('1', 'true', 'yes', 'on')
 
 # Vírgula na env; ausente ou vazia → * (dev / Railway sem lista explícita)
 _allowed_hosts = (os.environ.get('ALLOWED_HOSTS') or '*').strip()
@@ -64,6 +67,7 @@ INSTALLED_APPS = [
     'api_sankhya',
     'pwa',
     'ecommerce',
+    'django_q',
 ]
 
 MIDDLEWARE = [
@@ -175,6 +179,22 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Django Q2 — filas em background (integrações Sankhya lentas; não bloqueia o request HTTP).
+# Broker ORM usa o mesmo PostgreSQL (sem Redis). Em produção rode: python manage.py qcluster
+# (Railway: segundo serviço com esse comando). Para testar sem worker: DJANGO_Q_SYNC=1 no .env.
+Q_CLUSTER = {
+    'name': 'sysPMIX',
+    'workers': 2,
+    # Integrações Sankhya podem levar horas; retry deve ser > timeout (evita reexecução duplicada).
+    'timeout': 86400,
+    'retry': 90000,
+    'queue_limit': 100,
+    'bulk': 5,
+    'orm': 'default',
+    'catch_up': False,
+    'sync': os.environ.get('DJANGO_Q_SYNC', '').lower() in ('1', 'true', 'yes'),
+}
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
@@ -211,8 +231,11 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-# WhiteNoise: servir arquivos estáticos em produção (Railway, etc.)
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# WhiteNoise em produção; em DEBUG usa storage padrão (evita manifest/collectstatic no dev).
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field

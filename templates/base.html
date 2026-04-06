@@ -224,7 +224,10 @@
             </button>
             <a class="navbar-brand ms-2" href="#">
                 <div class="logo-container">
-                    <img src="{% static 'img/logo.png.avif' %}" alt="Pannemix">
+                    <picture>
+                        <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
+                        <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
+                    </picture>
                 </div>
                 
             </a>

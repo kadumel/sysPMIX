@@ -178,7 +178,10 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="{% url 'ecommerce_home' %}">
                 <span class="logo-container">
-                    <img src="{% static 'img/logo.png.avif' %}" alt="Pannemix" onerror="this.style.display='none'">
+                    <picture>
+                        <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
+                        <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
+                    </picture>
                 </span>
                 <span class="ecommerce-brand-name text-truncate d-inline-block" title="{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja{% endif %}">{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja{% endif %}</span>
             </a>

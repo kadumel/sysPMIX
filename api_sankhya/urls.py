@@ -4,6 +4,11 @@ from . import views
 
 urlpatterns = [
     path(
+        "integracoes/sankhya/task/<str:task_id>/status/",
+        views.integracao_task_status,
+        name="api_sankhya_integracao_task_status",
+    ),
+    path(
         "integracoes/sankhya/",
         views.gestao_integracoes,
         name="api_sankhya_gestao_integracoes",

@@ -2,8 +2,9 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.db.models import Max
+from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -11,9 +12,13 @@ from typing import Any, Callable
 import os
 
 import requests
+from django_q.tasks import async_task
 
 from controleBI.decorators import requer_acesso_bi
 
+from django_q.models import Task
+
+from .tasks import run_integracao_sankhya, run_todas_integracoes_sankhya
 from .models import (
     Bairro,
     Cidade,
@@ -29,6 +34,23 @@ from .models import (
     Produto,
     Veiculo,
 )
+
+
+def _wants_json(request: HttpRequest) -> bool:
+    return "application/json" in (request.headers.get("Accept") or "")
+
+
+def _json_safe(value: Any):
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(x) for x in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, Decimal):
+        return str(value)
+    return str(value)
+
 
 def getToken():
     url = _get_env_or_setting("SANKHYA_URL_AUTH")
@@ -350,8 +372,13 @@ def getFuncionarios():
                 headers=headers,
                 timeout=120,
             )
-            det.raise_for_status()
-            detalhe = det.json()
+            # Não usar det.ok: em requests, .ok chama raise_for_status() e dispara exceção em 4xx/5xx.
+            if det.status_code >= 400:
+                continue
+            try:
+                detalhe = det.json()
+            except ValueError:
+                continue
             defaults = {"cpf": _to_str(detalhe.get("cpf"), 14), "nome": _to_str(detalhe.get("nome"), 200), "matricula": _to_int(detalhe.get("matricula"))}
             _, created = Funcionario.objects.update_or_create(
                 empresa_codigo=codigo_empresa,
@@ -422,27 +449,88 @@ def gestao_integracoes(request):
 
 @login_required
 @requer_acesso_bi
+@require_GET
+def integracao_task_status(request, task_id: str):
+    """JSON para polling: tarefa pendente na fila/worker ou finalizada (django_q.Task)."""
+    t = Task.objects.filter(id=task_id).first()
+    if not t:
+        return JsonResponse({"status": "pending"})
+    payload = _json_safe(t.result) if t.result is not None else None
+    return JsonResponse(
+        {
+            "status": "done",
+            "success": t.success,
+            "result": payload,
+        }
+    )
+
+
+@login_required
+@requer_acesso_bi
 @require_POST
 def atualizar_integracao(request, chave: str):
     if chave not in INTEGRACOES:
+        if _wants_json(request):
+            return JsonResponse({"error": "Integração inválida."}, status=400)
         messages.error(request, "Integração inválida.")
         return redirect("api_sankhya_gestao_integracoes")
     integracao = INTEGRACOES[chave]
     nome = integracao["nome"]
+    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
-        resultado = integracao["runner"]()
-        if not isinstance(resultado, dict):
-            resultado = {}
-        messages.success(
-            request,
-            (
-                f"{nome} atualizado com sucesso. "
-                f"Processados: {resultado.get('total_processados', resultado.get('total_registros', '-'))} | "
-                f"Inseridos: {resultado.get('total_inseridos', '-')} | "
-                f"Atualizados: {resultado.get('total_atualizados', '-')}"
-            ),
-        )
+        if q_sync:
+            resultado = run_integracao_sankhya(chave)
+            if resultado.get("erro"):
+                if _wants_json(request):
+                    return JsonResponse(
+                        {"completed": True, "sync": True, "success": False, "nome": nome, "error": resultado.get("erro")},
+                        status=400,
+                    )
+                messages.error(request, f"Erro ao atualizar {nome}: {resultado.get('erro')}")
+            else:
+                if _wants_json(request):
+                    return JsonResponse(
+                        {
+                            "completed": True,
+                            "sync": True,
+                            "success": True,
+                            "nome": nome,
+                            "resultado": _json_safe(resultado),
+                        }
+                    )
+                messages.success(
+                    request,
+                    (
+                        f"{nome} atualizado com sucesso. "
+                        f"Processados: {resultado.get('total_processados', resultado.get('total_registros', '-'))} | "
+                        f"Inseridos: {resultado.get('total_inseridos', '-')} | "
+                        f"Atualizados: {resultado.get('total_atualizados', '-')}"
+                    ),
+                )
+        else:
+            task_id = async_task(
+                "api_sankhya.tasks.run_integracao_sankhya",
+                chave,
+                task_name=f"Sankhya: {nome}",
+            )
+            if _wants_json(request):
+                return JsonResponse(
+                    {
+                        "completed": False,
+                        "sync": False,
+                        "task_id": task_id,
+                        "chave": chave,
+                        "nome": nome,
+                    }
+                )
+            messages.success(
+                request,
+                f"{nome}: sincronização enfileirada e executada em segundo plano pelo worker "
+                "(python manage.py qcluster). Atualize esta página em alguns minutos para ver os totais.",
+            )
     except Exception as exc:
+        if _wants_json(request):
+            return JsonResponse({"error": str(exc), "nome": nome}, status=500)
         messages.error(request, f"Erro ao atualizar {nome}: {exc}")
     return redirect("api_sankhya_gestao_integracoes")
 
@@ -451,21 +539,57 @@ def atualizar_integracao(request, chave: str):
 @requer_acesso_bi
 @require_POST
 def atualizar_todas_integracoes(request):
-    erros: list[str] = []
-    for _chave, integracao in INTEGRACOES.items():
-        nome = integracao["nome"]
-        try:
-            integracao["runner"]()
-        except Exception as exc:
-            erros.append(f"{nome}: {exc}")
-    if erros:
-        messages.warning(
-            request,
-            "Algumas integrações falharam: " + " | ".join(erros[:5]),
-        )
-    else:
-        messages.success(
-            request,
-            "Atualização completa concluída com sucesso.",
-        )
+    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
+    try:
+        if q_sync:
+            resultado = run_todas_integracoes_sankhya()
+            erros = resultado.get("erros") or []
+            if erros:
+                if _wants_json(request):
+                    return JsonResponse(
+                        {
+                            "completed": True,
+                            "sync": True,
+                            "success": False,
+                            "erros": erros,
+                        },
+                        status=400,
+                    )
+                messages.warning(
+                    request,
+                    "Algumas integrações falharam: " + " | ".join(erros[:5]),
+                )
+            else:
+                if _wants_json(request):
+                    return JsonResponse(
+                        {"completed": True, "sync": True, "success": True, "resultado": _json_safe(resultado)}
+                    )
+                messages.success(
+                    request,
+                    "Atualização completa concluída com sucesso.",
+                )
+        else:
+            task_id = async_task(
+                "api_sankhya.tasks.run_todas_integracoes_sankhya",
+                task_name="Sankhya: todas as integrações",
+            )
+            if _wants_json(request):
+                return JsonResponse(
+                    {
+                        "completed": False,
+                        "sync": False,
+                        "task_id": task_id,
+                        "chave": "__todas__",
+                        "nome": "Todas as integrações",
+                    }
+                )
+            messages.success(
+                request,
+                "Todas as integrações foram enfileiradas; o worker processará em sequência. "
+                "Confira o serviço qcluster (Railway) ou use DJANGO_Q_SYNC=1 só para testes locais.",
+            )
+    except Exception as exc:
+        if _wants_json(request):
+            return JsonResponse({"error": str(exc)}, status=500)
+        messages.error(request, f"Erro ao enfileirar integrações: {exc}")
     return redirect("api_sankhya_gestao_integracoes")

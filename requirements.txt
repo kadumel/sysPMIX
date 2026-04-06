@@ -19,3 +19,4 @@ psycopg2==2.9.11
 gunicorn==23.0.0
 whitenoise==6.8.2
 django-pwa==2.0.1
+django-q2==1.8.0
