@@ -21,6 +21,11 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Sankhya API (obrigatório para integração no app api_sankhya)
+SANKHYA_CLIENT_ID = os.getenv('SANKHYA_CLIENT_ID')
+SANKHYA_CLIENT_SECRET = os.getenv('SANKHYA_CLIENT_SECRET')
+SANKHYA_X_TOKEN = os.getenv('SANKHYA_X_TOKEN')
+
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
@@ -163,8 +168,17 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
-MEDIA_URL = '/media/'
+#
+# Mídia (uploads / imagens de produto baixadas da integração):
+#   MEDIA_URL              — URL pública (ex.: /media/ ou CDN)
+#   MEDIA_ROOT             — pasta absoluta no disco (opcional; senão BASE_DIR/media ou volume Railway)
+#   MEDIA_PRODUCT_IMAGES_UPLOAD_TO — subpasta relativa a MEDIA_ROOT para imagens de produto
+#   MEDIA_PUBLIC_BASE_URL  — base absoluta do site (ex.: https://app.exemplo.com) para montar URLs completas
 RAILWAY_VOLUME_MOUNT_PATH = os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
+MEDIA_URL = os.getenv('MEDIA_URL')
+if MEDIA_URL and not MEDIA_URL.endswith('/'):
+    MEDIA_URL = MEDIA_URL + '/'
+
 MEDIA_ROOT = (
     os.getenv('MEDIA_ROOT')
     or (
@@ -173,6 +187,14 @@ MEDIA_ROOT = (
         else os.path.join(BASE_DIR, 'media')
     )
 )
+
+# Caminho relativo dentro de MEDIA_ROOT (ImageField upload_to + scripts de download)
+MEDIA_PRODUCT_IMAGES_UPLOAD_TO = os.getenv('MEDIA_PRODUCT_IMAGES_UPLOAD_TO')
+_MEDIA_PI = MEDIA_PRODUCT_IMAGES_UPLOAD_TO.strip().strip('/')
+MEDIA_PRODUCT_IMAGES_UPLOAD_TO = f'{_MEDIA_PI}/' if _MEDIA_PI else 'ecommerce/produtos/'
+
+# Opcional: ex.: https://seudominio.com — usado para URLs absolutas de mídia em e-mails / APIs
+MEDIA_PUBLIC_BASE_URL = (os.getenv('MEDIA_PUBLIC_BASE_URL') or '').rstrip('/')
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [

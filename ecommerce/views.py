@@ -45,6 +45,7 @@ def index(request):
 
     qs = catalog.produtos_queryset(grupo_id, by_id, by_pai, codigos_grupo_loja)
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
+    qs = catalog.prefetch_imagens_produto_loja(qs)
     paginator = Paginator(qs, catalog.PAGE_SIZE)
     page = paginator.get_page(request.GET.get('page'))
 
@@ -72,6 +73,7 @@ def partial_destaque(request):
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
     qs = catalog.produtos_queryset(grupo_id, by_id, by_pai, codigos_grupo_loja)
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
+    qs = catalog.prefetch_imagens_produto_loja(qs)
     start = catalog.PAGE_SIZE
     limit = catalog.PAGE_SIZE + 1
     chunk = list(qs[start : start + limit])
@@ -90,7 +92,7 @@ def partial_destaque(request):
 def cart_view(request):
     raw = get_cart(request)
     codigos = [int(i['codigo_produto']) for i in raw if i.get('codigo_produto') is not None]
-    produtos = {p.codigo_produto: p for p in Produto.objects.filter(codigo_produto__in=codigos)} if codigos else {}
+    produtos = {p.codigo_produto: p for p in catalog.prefetch_imagens_produto_loja(Produto.objects.filter(codigo_produto__in=codigos))} if codigos else {}
     linhas = []
     for item in raw:
         cid = item.get('codigo_produto')

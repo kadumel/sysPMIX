@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão de Integrações Sankhya{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h4 mb-1">Gestão de Integrações Sankhya</h1>
+        <p class="text-muted mb-0">Controle de atualização por tabela e execução completa.</p>
+    </div>
+    <form method="post" action="{% url 'api_sankhya_atualizar_todas_integracoes' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-arrow-repeat me-1"></i>Atualizar Todas
+        </button>
+    </form>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tabela</th>
+                        <th>Total de Registros</th>
+                        <th>Última Atualização</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in integracoes %}
+                    <tr>
+                        <td>
+                            <div class="fw-semibold">{{ item.nome }}</div>
+                            {% if item.observacao %}
+                                <div class="small text-muted">{{ item.observacao }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.total_registros }}</td>
+                        <td>
+                            {% if item.ultima_atualizacao %}
+                                {{ item.ultima_atualizacao|date:"d/m/Y H:i:s" }}
+                            {% else %}
+                                <span class="text-muted">Sem atualização</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if item.permite_execucao %}
+                                <form method="post" action="{% url 'api_sankhya_atualizar_integracao' item.chave %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-primary btn-sm">
+                                        Atualizar
+                                    </button>
+                                </form>
+                            {% else %}
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled>Indisponível</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

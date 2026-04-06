@@ -26,6 +26,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('pwa.urls')),
     path('ecommerce/', include('ecommerce.urls')),
+    path('', include('api_sankhya.urls')),
     path('', include('controleBI.urls')),
     path('accounts/login/', PerfilLoginView.as_view(), name='login'),
     path('accounts/logout/', auth_views.LogoutView.as_view(), name='logout'),

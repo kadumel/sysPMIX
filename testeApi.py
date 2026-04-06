@@ -613,6 +613,7 @@ def getCidades():
                     'codigo_municipio_fiscal': cidade_data.get('codigoMunicipioFiscal'),
                 }
                 
+                print(cidade_data, 15*'-')
                 # Remove valores None para não sobrescrever campos existentes com None
                 # Mantém apenas campos com valores válidos
                 dados_cidade = {k: v for k, v in dados_cidade.items() if v is not None}
@@ -2337,6 +2338,4 @@ def getFuncionarios():
     }
 
 
-
-
-print(getToken())
+getCidades()

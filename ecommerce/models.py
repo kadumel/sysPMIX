@@ -134,6 +134,15 @@ class BannerPromocional(models.Model):
         return self.titulo or f'Banner #{self.pk}'
 
 
+def _produto_imagem_upload_to(instance, filename):
+    """Subpasta configurável via MEDIA_PRODUCT_IMAGES_UPLOAD_TO em settings."""
+    sub = getattr(settings, 'MEDIA_PRODUCT_IMAGES_UPLOAD_TO', 'ecommerce/produtos/')
+    sub = sub.strip().strip('/')
+    if not sub:
+        sub = 'ecommerce/produtos'
+    return f'{sub}/{filename}'
+
+
 class ProdutoImagem(models.Model):
     produto = models.ForeignKey(
         'api_sankhya.Produto',
@@ -142,7 +151,7 @@ class ProdutoImagem(models.Model):
         verbose_name='Produto Sankhya',
     )
     nome_imagem = models.CharField('Nome da imagem', max_length=255, blank=True)
-    imagem = models.ImageField('Imagem', upload_to='ecommerce/produtos/')
+    imagem = models.ImageField('Imagem', upload_to=_produto_imagem_upload_to)
     ativo = models.BooleanField('Ativo', default=True, db_index=True)
     criado_em = models.DateTimeField('Criado em', auto_now_add=True)
     atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)

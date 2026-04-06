@@ -3,9 +3,10 @@ Catálogo a partir das tabelas Sankhya: sankhya_produto e sankhya_grupo_produto.
 """
 from __future__ import annotations
 
-from django.db.models import Q, QuerySet
+from django.db.models import Prefetch, Q, QuerySet
 
 from api_sankhya.models import GrupoProduto, Produto
+from ecommerce.models import ProdutoImagem
 
 PAGE_SIZE = 24
 BUSCA_MAX_LEN = 120
@@ -201,6 +202,16 @@ def normalizar_busca(value: str | None) -> str:
     if len(s) > BUSCA_MAX_LEN:
         s = s[:BUSCA_MAX_LEN]
     return s
+
+
+def prefetch_imagens_produto_loja(qs: QuerySet[Produto]) -> QuerySet[Produto]:
+    """Evita N+1 ao exibir imagens do e-commerce (modelo ProdutoImagem)."""
+    return qs.prefetch_related(
+        Prefetch(
+            'imagens_ecommerce',
+            queryset=ProdutoImagem.objects.filter(ativo=True).order_by('id'),
+        )
+    )
 
 
 def aplicar_busca_produtos(qs: QuerySet[Produto], termo: str) -> QuerySet[Produto]:

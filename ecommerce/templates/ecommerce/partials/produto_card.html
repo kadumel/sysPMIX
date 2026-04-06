@@ -1,6 +1,18 @@
 <div class="col">
     <div class="card h-100">
-        <div class="ecommerce-product-thumb" aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</div>
+        <div class="ecommerce-product-thumb overflow-hidden">
+            {% for im in p.imagens_ecommerce.all %}
+                {% if forloop.first %}
+                    {% if im.imagem %}
+                        <img src="{{ im.imagem.url }}" alt="" class="ecommerce-product-thumb-img" width="800" height="448" loading="lazy" decoding="async">
+                    {% else %}
+                        <span aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</span>
+                    {% endif %}
+                {% endif %}
+            {% empty %}
+                <span aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</span>
+            {% endfor %}
+        </div>
         <div class="card-body d-flex flex-column">
             {% if p.nome_grupo_produto %}
             <span class="badge rounded-pill align-self-start mb-2 text-truncate" style="max-width: 100%;" title="{{ p.nome_grupo_produto }}">{{ p.nome_grupo_produto }}</span>
