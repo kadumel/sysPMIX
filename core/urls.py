@@ -16,6 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.views.generic import RedirectView
 from django.contrib.auth import views as auth_views
 from django.conf import settings
 from django.conf.urls.static import static
@@ -25,6 +26,11 @@ from core.auth_views import PerfilLoginView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path(
+        'configuracoes-admin/',
+        RedirectView.as_view(pattern_name='admin:index', permanent=False),
+        name='configuracoes_admin',
+    ),
     path('', include('pwa.urls')),
     path('ecommerce/', include('ecommerce.urls')),
     path('', include('api_sankhya.urls')),

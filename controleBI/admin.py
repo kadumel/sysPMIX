@@ -12,14 +12,6 @@ admin.site.site_title = _('Pannemix')
 admin.site.index_title = _('Pannemix')
 
 
-def _admin_site_only_superuser(request):
-    """Django Admin (/admin/) só para quem tem is_superuser; perfil do sistema é outro conceito."""
-    return request.user.is_active and request.user.is_superuser
-
-
-admin.site.has_permission = _admin_site_only_superuser
-
-
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
     list_display = ('codigo', 'cliente', 'fantasia', 'cnpj', 'sincronizado')
