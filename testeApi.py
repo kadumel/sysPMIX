@@ -2338,4 +2338,4 @@ def getFuncionarios():
     }
 
 
-getCidades()
+print(getToken())
