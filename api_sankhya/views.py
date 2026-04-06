@@ -97,7 +97,7 @@ def _sync_paginated(url: str, list_key: str, callback: Callable[[dict[str, Any]]
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
     headers = getToken()
     while has_more:
-        resp = requests.get(url, headers=headers, params={"page": page}, timeout=120)
+        resp = requests.get(url, headers=headers, params={"page": page}, timeout=360)
         resp.raise_for_status()
         data = resp.json()
         pagination = data.get("pagination", {})
@@ -224,73 +224,16 @@ def getProdutos():
 
 
 def getGruposProduto():
-    """
-    Busca grupos de produtos na API Sankhya e faz merge no banco (mesma lógica que testeApi.getGruposProduto):
-    URL v1/grupos-produto, paginação com/sem bloco pagination, campos grau/grupo_icms/analitico e defaults sem None.
-    """
-    url = (
-        getattr(settings, "SANKHYA_URL_GRUPOS_PRODUTO", None)
-        or os.getenv("SANKHYA_URL_GRUPOS_PRODUTO")
-    )
-    page = 0
-    has_more = True
-    out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
-    headers = getToken()
+    def cb(v):
+        codigo = _to_int(v.get("codigoGrupoProduto"))
+        nome = _to_str(v.get("nome"), 200)
+        if not codigo or not nome:
+            return False, False
+        defaults = {"nome": nome, "codigo_grupo_produto_pai": _to_int(v.get("codigoGrupoProdutoPai")), "ativo": bool(v.get("ativo", True))}
+        _, created = GrupoProduto.objects.update_or_create(codigo_grupo_produto=codigo, defaults=defaults)
+        return created, True
 
-    while has_more:
-        resp = requests.get(url, headers=headers, params={"page": page}, timeout=120)
-        resp.raise_for_status()
-        data = resp.json()
-
-        if isinstance(data, list):
-            pagination = {}
-            grupos = data
-        else:
-            pagination = data.get("pagination") or {}
-            grupos = data.get("grupos", [])
-
-        if not pagination:
-            has_more = False
-        else:
-            hm = pagination.get("hasMore", "false")
-            if isinstance(hm, str):
-                has_more = hm.lower() == "true"
-            else:
-                has_more = bool(hm)
-
-        for grupo_data in grupos:
-            try:
-                codigo = _to_int(grupo_data.get("codigoGrupoProduto"))
-                if not codigo:
-                    continue
-
-                dados = {
-                    "nome": _to_str(grupo_data.get("nome"), 200),
-                    "codigo_grupo_produto_pai": _to_int(grupo_data.get("codigoGrupoProdutoPai")),
-                    "grau": _to_int(grupo_data.get("grau")),
-                    "grupo_icms": _to_int(grupo_data.get("grupoIcms")),
-                    "analitico": grupo_data.get("analitico", False),
-                    "ativo": grupo_data.get("ativo", True),
-                }
-                dados = {k: v for k, v in dados.items() if v is not None}
-                _, created = GrupoProduto.objects.update_or_create(
-                    codigo_grupo_produto=codigo,
-                    defaults=dados,
-                )
-                out["total_processados"] += 1
-                if created:
-                    out["total_inseridos"] += 1
-                else:
-                    out["total_atualizados"] += 1
-            except Exception:
-                continue
-
-        if pagination:
-            page += 1
-        else:
-            break
-
-    return out
+    return _sync_paginated(_get_env_or_setting("SANKHYA_URL_GRUPOS_PRODUTO"), "grupos", cb)
 
 
 def getPedidosJson():
@@ -299,7 +242,7 @@ def getPedidosJson():
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
     headers = getToken()
     while has_more:
-        resp = requests.get(_get_env_or_setting("SANKHYA_URL_PEDIDOS"), headers=headers, params={"page": page}, timeout=120)
+        resp = requests.get(_get_env_or_setting("SANKHYA_URL_PEDIDOS"), headers=headers, params={"page": page}, timeout=360)
         resp.raise_for_status()
         data = resp.json()
         has_more = str((data.get("pagination") or {}).get("hasMore", "false")).lower() == "true"
@@ -352,7 +295,7 @@ def getContatos():
             "serviceName": "CRUDServiceProvider.loadRecords",
             "requestBody": {"dataSet": {"rootEntity": "Contato", "includePresentationFields": "S", "offsetPage": str(page), "entity": {"fieldset": {"list": "CODPARC,CODCONTATO,NOMECONTATO,EMAIL,TELEFONE,CELULAR"}}}},
         }
-        resp = requests.post(url, headers=headers, json=body, timeout=120)
+        resp = requests.post(url, headers=headers, json=body, timeout=360)
         resp.raise_for_status()
         data = resp.json()
         entities = (data.get("responseBody") or data).get("entities") or {}
@@ -387,7 +330,7 @@ def getFuncionarios():
     has_more = True
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
     while has_more:
-        resp = requests.get(_get_env_or_setting("SANKHYA_URL_FUNCIONARIOS"), headers=headers, params={"page": page}, timeout=120)
+        resp = requests.get(_get_env_or_setting("SANKHYA_URL_FUNCIONARIOS"), headers=headers, params={"page": page}, timeout=360)
         resp.raise_for_status()
         data = resp.json()
         bloco = data[0] if isinstance(data, list) and data else data
