@@ -34,9 +34,11 @@ SANKHYA_X_TOKEN = os.getenv('SANKHYA_X_TOKEN')
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG')
 
-ALLOWED_HOSTS = ['*']
+# Vírgula na env; ausente ou vazia → * (dev / Railway sem lista explícita)
+_allowed_hosts = (os.environ.get('ALLOWED_HOSTS') or '*').strip()
+ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(',') if h.strip()]
 
 # HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
 # Lista separada por vírgula. Env ausente ou vazia → padrão (evita None.split).
