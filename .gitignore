@@ -52,3 +52,6 @@ Thumbs.db
 # Additional changes
 *.sqlite3
 *.pyc
+
+
+.media/
