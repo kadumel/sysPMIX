@@ -18,7 +18,7 @@ import re
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env", override=True)
+load_dotenv(BASE_DIR / ".env", override=False)
 
 # Sankhya API (obrigatório para integração no app api_sankhya)
 SANKHYA_CLIENT_ID = os.getenv('SANKHYA_CLIENT_ID')
@@ -40,16 +40,31 @@ DEBUG = _debug_env in ('1', 'true', 'yes', 'on')
 
 # Vírgula na env; ausente ou vazia → * (dev / Railway sem lista explícita)
 _allowed_hosts = (os.environ.get('ALLOWED_HOSTS') or '*').strip()
-ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(',') if h.strip()]
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in re.split(r"[,\s;]+", _allowed_hosts)
+    if h.strip()
+]
 
 # HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
 # Lista em env pode vir separada por vírgula, ponto e vírgula ou espaço; com/sem esquema.
 _csrf_env = (os.getenv('CSRF_TRUSTED_ORIGINS') or '').strip()
 _csrf_items = [item.strip().strip('"').strip("'") for item in re.split(r"[,\s;]+", _csrf_env) if item.strip()]
-CSRF_TRUSTED_ORIGINS = [
+
+_csrf_from_env = [
     item if item.startswith(("http://", "https://")) else f"https://{item}"
     for item in _csrf_items
 ]
+
+_csrf_from_hosts = []
+for host in ALLOWED_HOSTS:
+    h = host.lstrip('.')
+    if h in {'*', 'localhost', '127.0.0.1', '[::1]'}:
+        continue
+    # Para host explícito, aceita origem HTTPS correspondente.
+    _csrf_from_hosts.append(f"https://{h}")
+
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_from_env + _csrf_from_hosts))
 
 # Encaminhamento TLS via proxy.
 # Em dev local (DEBUG=True), mantenha desligado por padrão para evitar conflito com runserver HTTP.
