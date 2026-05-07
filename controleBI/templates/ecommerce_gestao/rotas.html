@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-sign-turn-right me-2"></i>Gestão de rotas</h4>
+            <div class="d-flex gap-2">
+                <a href="{% url 'gestao_rotas_dia_list' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-list-check me-1"></i>Rotas a executar
+                </a>
+                <a href="{% url 'gestao_rota_dia_builder' %}" class="btn btn-outline-primary">
+                    <i class="bi bi-calendar3 me-1"></i>Rota do dia
+                </a>
+                <a href="{% url 'gestao_rota_padrao_nova' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Nova rota
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Rota</th>
+                            <th>Responsável</th>
+                            <th>Veículo</th>
+                            <th>Motorista</th>
+                            <th class="text-center">Ajudantes</th>
+                            <th>Clientes</th>
+                            <th>Status</th>
+                            <th style="width: 220px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rota in rotas %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ rota.nome }}</div>
+                                {% if rota.descricao %}<div class="small text-muted">{{ rota.descricao }}</div>{% endif %}
+                            </td>
+                            <td>{{ rota.responsavel.get_full_name|default:rota.responsavel.username }}</td>
+                            <td>{% if rota.veiculo %}{{ rota.veiculo.placa }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td>{% if rota.motorista %}{{ rota.motorista.nome }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-center">{{ rota.total_ajudantes }}</td>
+                            <td>{{ rota.clientes_rota.count }}</td>
+                            <td>
+                                {% if rota.ativa %}
+                                <span class="badge text-bg-success">Ativa</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary">Inativa</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-2">
+                                    <a href="{% url 'gestao_rota_padrao_editar' rota.pk %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-pencil me-1"></i>Editar
+                                    </a>
+                                    <a href="{% url 'gestao_rota_dia_builder' %}?rota_padrao={{ rota.pk }}" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-diagram-3 me-1"></i>Montar dia
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">Nenhuma rota cadastrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

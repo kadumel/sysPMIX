@@ -1,0 +1,533 @@
+{% extends 'base.html' %}
+
+{% block extra_head %}
+<style>
+    .rota-dnd-box { min-height: 320px; border: 1px dashed #c3c9d1; border-radius: 0.5rem; background: #fff; }
+    .rota-dnd-box.rota-dnd-slot-single { min-height: 120px; }
+    .rota-dnd-item { cursor: move; user-select: none; }
+    .rota-dnd-box.drag-over { border-color: #0d6efd; background: #f3f7ff; }
+    .rota-montagem-tabs .nav-link { color: #495057; }
+    .rota-montagem-tabs .nav-link.active { font-weight: 600; color: #0d6efd; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-diagram-3 me-2"></i>Rota do dia</h4>
+            <a href="{% url 'gestao_rotas_ecommerce' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Voltar para rotas
+            </a>
+        </div>
+        <div class="card-body">
+            <form method="get" id="filtroRotaPadraoForm" class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <label class="form-label">Data</label>
+                    <input type="date" id="filtroDataRota" name="data" class="form-control" value="{{ data_rota|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Rota padrão (carregar clientes)</label>
+                    <select id="filtroRotaPadrao" name="rota_padrao" class="form-select">
+                        <option value="">Sem rota padrão</option>
+                        {% for rota in rotas_padrao %}
+                            <option value="{{ rota.id }}" {% if rota_padrao_id_selecionada == rota.id|stringformat:'s' %}selected{% endif %}>
+                            {{ rota.nome }} ({{ rota.responsavel.get_full_name|default:rota.responsavel.username }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <input type="hidden" name="aplicar_padrao" value="1">
+                    <div class="form-text">Ao trocar a rota padrão, os clientes e a equipe padrão são carregados na rota executada.</div>
+                </div>
+            </form>
+
+            <form method="post" id="formRotaDia">
+                {% csrf_token %}
+                <input type="hidden" name="veiculo" id="hiddenVeiculo" value="{% if rota_dia and rota_dia.veiculo_id %}{{ rota_dia.veiculo_id }}{% endif %}">
+                <input type="hidden" name="motorista" id="hiddenMotorista" value="{% if rota_dia and rota_dia.motorista_id %}{{ rota_dia.motorista_id }}{% endif %}">
+                <div class="row g-3 mb-3">
+                    <input type="hidden" name="data" value="{{ data_rota|date:'Y-m-d' }}">
+                    <input type="hidden" name="rota_padrao" value="{{ rota_padrao_id_selecionada }}">
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100" {% if not rota_selecionada %}disabled{% endif %}><i class="bi bi-check-lg me-1"></i>Salvar rota executada</button>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Observações</label>
+                    <textarea name="observacao" class="form-control" rows="2">{% if rota_dia %}{{ rota_dia.observacao }}{% endif %}</textarea>
+                </div>
+
+                {% if rota_selecionada %}
+                <div class="rota-montagem-tabs">
+                    <ul class="nav nav-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="tab-btn-clientes" data-bs-toggle="tab" data-bs-target="#tabClientes" type="button" role="tab">Clientes</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tab-btn-veiculos" data-bs-toggle="tab" data-bs-target="#tabVeiculos" type="button" role="tab">Veículos</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tab-btn-motoristas" data-bs-toggle="tab" data-bs-target="#tabMotoristas" type="button" role="tab">Motoristas</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="tab-btn-ajudantes" data-bs-toggle="tab" data-bs-target="#tabAjudantes" type="button" role="tab">Ajudantes</button>
+                        </li>
+                    </ul>
+                    <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white mb-3">
+                        <div class="tab-pane fade show active" id="tabClientes" role="tabpanel">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Disponíveis</h6>
+                                    <div class="mb-2">
+                                        <input type="text" id="filtroClientesDisponiveis" class="form-control form-control-sm" placeholder="Filtrar por nome, razão ou código...">
+                                    </div>
+                                    <div id="clientesDisponiveis" class="rota-dnd-box p-2">
+                                        {% for cliente in clientes_disponiveis %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ cliente.id }}">
+                                            {{ cliente.nome|default:cliente.razao|default:'Cliente sem nome' }} - {{ cliente.codigo_cliente }}
+                                        </div>
+                                        {% empty %}
+                                        <div class="text-muted small p-2">Sem clientes disponíveis.</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Na rota executada</h6>
+                                    <div id="clientesRota" class="rota-dnd-box p-2">
+                                        <div class="text-muted small p-2 rota-dnd-empty-hint {% if clientes_rota %}d-none{% endif %}">Arraste clientes para a rota.</div>
+                                        {% for item in clientes_rota %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ item.cliente_id }}">
+                                            {{ item.cliente.nome|default:item.cliente.razao|default:'Cliente sem nome' }} - {{ item.cliente.codigo_cliente }}
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tabVeiculos" role="tabpanel">
+                            <p class="text-muted small mb-2">Apenas um veículo. Ao arrastar outro, o anterior volta para disponíveis.</p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Disponíveis</h6>
+                                    <div class="mb-2">
+                                        <input type="text" id="filtroVeiculosDisp" class="form-control form-control-sm" placeholder="Filtrar por placa ou descrição...">
+                                    </div>
+                                    <div id="veiculosDisponiveis" class="rota-dnd-box rota-dnd-slot-single p-2">
+                                        {% for v in veiculos_disponiveis %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ v.id }}">
+                                            {{ v.placa }} — {{ v.descricao }}
+                                        </div>
+                                        {% empty %}
+                                        <div class="text-muted small p-2">Nenhum veículo disponível aqui.</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Veículo da rota</h6>
+                                    <div id="veiculoRota" class="rota-dnd-box rota-dnd-slot-single p-2">
+                                        {% if rota_dia and rota_dia.veiculo %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ rota_dia.veiculo.id }}">
+                                            {{ rota_dia.veiculo.placa }} — {{ rota_dia.veiculo.descricao }}
+                                        </div>
+                                        {% endif %}
+                                        <div class="text-muted small p-2 rota-dnd-empty-hint {% if rota_dia and rota_dia.veiculo %}d-none{% endif %}">Arraste um veículo (opcional).</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tabMotoristas" role="tabpanel">
+                            <p class="text-muted small mb-2">Apenas um motorista. Ao arrastar outro, o anterior volta para disponíveis.</p>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Disponíveis</h6>
+                                    <div class="mb-2">
+                                        <input type="text" id="filtroMotoristasDisp" class="form-control form-control-sm" placeholder="Filtrar por nome ou código...">
+                                    </div>
+                                    <div id="motoristasDisponiveis" class="rota-dnd-box rota-dnd-slot-single p-2">
+                                        {% for m in motoristas_disponiveis %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ m.id }}">
+                                            {{ m.nome }} ({{ m.codigo_erp }})
+                                        </div>
+                                        {% empty %}
+                                        <div class="text-muted small p-2">Nenhum motorista disponível aqui.</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Motorista da rota</h6>
+                                    <div id="motoristaRota" class="rota-dnd-box rota-dnd-slot-single p-2">
+                                        {% if rota_dia and rota_dia.motorista %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ rota_dia.motorista.id }}">
+                                            {{ rota_dia.motorista.nome }} ({{ rota_dia.motorista.codigo_erp }})
+                                        </div>
+                                        {% endif %}
+                                        <div class="text-muted small p-2 rota-dnd-empty-hint {% if rota_dia and rota_dia.motorista %}d-none{% endif %}">Arraste um motorista (opcional).</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tabAjudantes" role="tabpanel">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Disponíveis</h6>
+                                    <div class="mb-2">
+                                        <input type="text" id="filtroAjudantesDisp" class="form-control form-control-sm" placeholder="Filtrar por nome ou código...">
+                                    </div>
+                                    <div id="ajudantesDisponiveis" class="rota-dnd-box p-2">
+                                        {% for a in ajudantes_disponiveis %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ a.id }}">
+                                            {{ a.nome }} ({{ a.codigo_erp }})
+                                        </div>
+                                        {% empty %}
+                                        <div class="text-muted small p-2">Sem ajudantes disponíveis.</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6 class="mb-2">Ajudantes na rota</h6>
+                                    <div id="ajudantesRota" class="rota-dnd-box p-2">
+                                        <div class="text-muted small p-2 rota-dnd-empty-hint {% if ajudantes_na_rota %}d-none{% endif %}">Arraste ajudantes para a rota.</div>
+                                        {% for row in ajudantes_na_rota %}
+                                        <div class="rota-dnd-item list-group-item mb-2 border rounded p-2" draggable="true" data-id="{{ row.funcionario_id }}">
+                                            {{ row.funcionario.nome }} ({{ row.funcionario.codigo_erp }})
+                                        </div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">Selecione uma rota padrão acima para montar clientes e equipe.</div>
+                {% endif %}
+
+                <div id="inputsClientesRota"></div>
+                <div id="inputsAjudantes"></div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalConflitosRota" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Recurso já usado em outra rota nesta data</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Itens abaixo já estão alocados em outra rota executada no mesmo dia:</p>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Identificação</th>
+                                <th>Rota atual</th>
+                            </tr>
+                        </thead>
+                        <tbody id="conflitosRotaBody"></tbody>
+                    </table>
+                </div>
+                <p class="mb-0 text-muted">Corrija as outras rotas do dia (retire o recurso ou troque a data) e salve novamente. O salvamento só é permitido quando não houver nenhum conflito.</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const filtroRotaPadrao = document.getElementById('filtroRotaPadrao');
+        const filtroDataRota = document.getElementById('filtroDataRota');
+        if (filtroRotaPadrao && filtroDataRota) {
+            filtroRotaPadrao.addEventListener('change', function () {
+                const data = encodeURIComponent(filtroDataRota.value || '');
+                const rota = encodeURIComponent(filtroRotaPadrao.value || '');
+                const query = '?data=' + data + '&rota_padrao=' + rota + '&aplicar_padrao=1';
+                window.location.href = window.location.pathname + query;
+            });
+        }
+
+        const form = document.getElementById('formRotaDia');
+        if (!form) return;
+
+        const conflitosBody = document.getElementById('conflitosRotaBody');
+        const modalEl = document.getElementById('modalConflitosRota');
+        const inputsClientesWrap = document.getElementById('inputsClientesRota');
+        const inputsAjudantesWrap = document.getElementById('inputsAjudantes');
+        const hiddenVeiculo = document.getElementById('hiddenVeiculo');
+        const hiddenMotorista = document.getElementById('hiddenMotorista');
+
+        let dragging = null;
+        let submitLiberado = false;
+        const conflitoModal = (typeof bootstrap !== 'undefined' && modalEl)
+            ? bootstrap.Modal.getOrCreateInstance(modalEl)
+            : null;
+
+        function getCsrfToken() {
+            const t = form.querySelector('[name=csrfmiddlewaretoken]');
+            return t ? t.value : '';
+        }
+
+        function bindItem(item) {
+            item.addEventListener('dragstart', function () {
+                dragging = item;
+                item.classList.add('opacity-50');
+            });
+            item.addEventListener('dragend', function () {
+                item.classList.remove('opacity-50');
+            });
+        }
+
+        function normalizeText(value) {
+            return (value || '')
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function bindFilter(inputEl, boxEl) {
+            if (!inputEl || !boxEl) return;
+            function apply() {
+                const term = normalizeText(inputEl.value.trim());
+                boxEl.querySelectorAll('.rota-dnd-item').forEach(function (item) {
+                    const txt = normalizeText(item.textContent);
+                    item.style.display = (!term || txt.indexOf(term) !== -1) ? '' : 'none';
+                });
+            }
+            inputEl.addEventListener('input', apply);
+            apply();
+        }
+
+        function toggleSingleHint(slotEl) {
+            if (!slotEl) return;
+            const hint = slotEl.querySelector('.rota-dnd-empty-hint');
+            if (!hint) return;
+            const has = slotEl.querySelectorAll('.rota-dnd-item').length > 0;
+            hint.classList.toggle('d-none', has);
+        }
+
+        function updateMultiSlotHint(rotaEl) {
+            if (!rotaEl) return;
+            const hint = rotaEl.querySelector('.rota-dnd-empty-hint');
+            if (!hint) return;
+            hint.classList.toggle('d-none', rotaEl.querySelectorAll('.rota-dnd-item').length > 0);
+        }
+
+        function mountClientesHidden() {
+            if (!inputsClientesWrap) return;
+            inputsClientesWrap.innerHTML = '';
+            const rota = document.getElementById('clientesRota');
+            if (!rota) return;
+            rota.querySelectorAll('.rota-dnd-item').forEach(function (item) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'clientes_rota';
+                input.value = item.dataset.id;
+                inputsClientesWrap.appendChild(input);
+            });
+        }
+
+        function mountAjudantesHidden() {
+            if (!inputsAjudantesWrap) return;
+            inputsAjudantesWrap.innerHTML = '';
+            const box = document.getElementById('ajudantesRota');
+            if (!box) return;
+            box.querySelectorAll('.rota-dnd-item').forEach(function (item) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = 'ajudantes';
+                input.value = item.dataset.id;
+                inputsAjudantesWrap.appendChild(input);
+            });
+        }
+
+        function syncVeiculoMotoristaHidden() {
+            const vSlot = document.getElementById('veiculoRota');
+            const mSlot = document.getElementById('motoristaRota');
+            if (hiddenVeiculo && vSlot) {
+                const el = vSlot.querySelector('.rota-dnd-item');
+                hiddenVeiculo.value = el ? (el.dataset.id || '') : '';
+            }
+            if (hiddenMotorista && mSlot) {
+                const el = mSlot.querySelector('.rota-dnd-item');
+                hiddenMotorista.value = el ? (el.dataset.id || '') : '';
+            }
+        }
+
+        function mountAllHidden() {
+            mountClientesHidden();
+            mountAjudantesHidden();
+            syncVeiculoMotoristaHidden();
+        }
+
+        function setupDnDMulti(disponiveisEl, rotaEl) {
+            if (!disponiveisEl || !rotaEl) return;
+            [disponiveisEl, rotaEl].forEach(function (box) {
+                box.querySelectorAll('.rota-dnd-item').forEach(bindItem);
+                box.addEventListener('dragover', function (event) {
+                    event.preventDefault();
+                    box.classList.add('drag-over');
+                });
+                box.addEventListener('dragleave', function () {
+                    box.classList.remove('drag-over');
+                });
+                box.addEventListener('drop', function (event) {
+                    event.preventDefault();
+                    box.classList.remove('drag-over');
+                    if (!dragging) return;
+                    box.appendChild(dragging);
+                    updateMultiSlotHint(rotaEl);
+                    mountAllHidden();
+                });
+            });
+        }
+
+        function setupDnDSingle(disponiveisEl, rotaEl) {
+            if (!disponiveisEl || !rotaEl) return;
+            function onDropToRota(event) {
+                event.preventDefault();
+                rotaEl.classList.remove('drag-over');
+                if (!dragging) return;
+                rotaEl.querySelectorAll('.rota-dnd-item').forEach(function (el) {
+                    if (el !== dragging) {
+                        disponiveisEl.appendChild(el);
+                    }
+                });
+                rotaEl.appendChild(dragging);
+                toggleSingleHint(rotaEl);
+                mountAllHidden();
+            }
+            disponiveisEl.querySelectorAll('.rota-dnd-item').forEach(bindItem);
+            rotaEl.querySelectorAll('.rota-dnd-item').forEach(bindItem);
+            disponiveisEl.addEventListener('dragover', function (event) {
+                event.preventDefault();
+                disponiveisEl.classList.add('drag-over');
+            });
+            disponiveisEl.addEventListener('dragleave', function () {
+                disponiveisEl.classList.remove('drag-over');
+            });
+            disponiveisEl.addEventListener('drop', function (event) {
+                event.preventDefault();
+                disponiveisEl.classList.remove('drag-over');
+                if (!dragging) return;
+                disponiveisEl.appendChild(dragging);
+                toggleSingleHint(rotaEl);
+                mountAllHidden();
+            });
+            rotaEl.addEventListener('dragover', function (event) {
+                event.preventDefault();
+                rotaEl.classList.add('drag-over');
+            });
+            rotaEl.addEventListener('dragleave', function () {
+                rotaEl.classList.remove('drag-over');
+            });
+            rotaEl.addEventListener('drop', onDropToRota);
+        }
+
+        const clientesDisp = document.getElementById('clientesDisponiveis');
+        const clientesRota = document.getElementById('clientesRota');
+        const filtroCli = document.getElementById('filtroClientesDisponiveis');
+        if (clientesDisp && clientesRota) {
+            setupDnDMulti(clientesDisp, clientesRota);
+            bindFilter(filtroCli, clientesDisp);
+        }
+
+        const veiDisp = document.getElementById('veiculosDisponiveis');
+        const veiRota = document.getElementById('veiculoRota');
+        if (veiDisp && veiRota) {
+            setupDnDSingle(veiDisp, veiRota);
+            bindFilter(document.getElementById('filtroVeiculosDisp'), veiDisp);
+        }
+
+        const motDisp = document.getElementById('motoristasDisponiveis');
+        const motRota = document.getElementById('motoristaRota');
+        if (motDisp && motRota) {
+            setupDnDSingle(motDisp, motRota);
+            bindFilter(document.getElementById('filtroMotoristasDisp'), motDisp);
+        }
+
+        const ajDisp = document.getElementById('ajudantesDisponiveis');
+        const ajRota = document.getElementById('ajudantesRota');
+        if (ajDisp && ajRota) {
+            setupDnDMulti(ajDisp, ajRota);
+            bindFilter(document.getElementById('filtroAjudantesDisp'), ajDisp);
+        }
+
+        form.addEventListener('submit', function (event) {
+            if (submitLiberado) {
+                return;
+            }
+            event.preventDefault();
+            mountAllHidden();
+
+            const fd = new FormData(form);
+            fd.append('only_check', '1');
+            fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCsrfToken(),
+                },
+                body: fd,
+                credentials: 'same-origin',
+            })
+                .then(function (res) {
+                    return res.json().then(function (data) {
+                        return { status: res.status, data: data };
+                    });
+                })
+                .then(function (payload) {
+                    function appendRow(tipo, ident, rotaAtual) {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = '<td>' + tipo + '</td><td>' + ident + '</td><td>' + rotaAtual + '</td>';
+                        conflitosBody.appendChild(tr);
+                    }
+                    function temConflitosSalvar(d) {
+                        if (!d) return false;
+                        if (Array.isArray(d.conflitos) && d.conflitos.length) return true;
+                        if (d.conflito_veiculo) return true;
+                        if (d.conflito_motorista) return true;
+                        if (Array.isArray(d.conflitos_ajudantes) && d.conflitos_ajudantes.length) return true;
+                        return false;
+                    }
+                    if (payload.status === 409 && payload.data && temConflitosSalvar(payload.data) && conflitosBody && conflitoModal) {
+                        conflitosBody.innerHTML = '';
+                        (payload.data.conflitos || []).forEach(function (c) {
+                            appendRow('Cliente', c.cliente + ' — ' + c.codigo_cliente, c.rota);
+                        });
+                        if (payload.data.conflito_veiculo) {
+                            const v = payload.data.conflito_veiculo;
+                            appendRow('Veículo', v.veiculo, v.rota);
+                        }
+                        if (payload.data.conflito_motorista) {
+                            const m = payload.data.conflito_motorista;
+                            appendRow('Motorista', m.motorista, m.rota);
+                        }
+                        (payload.data.conflitos_ajudantes || []).forEach(function (a) {
+                            appendRow('Ajudante', a.nome, a.rota);
+                        });
+                        conflitoModal.show();
+                        return;
+                    }
+                    if (payload.status >= 200 && payload.status < 300) {
+                        submitLiberado = true;
+                        form.submit();
+                    }
+                })
+                .catch(function () {
+                    window.alert('Não foi possível validar o salvamento. Verifique a conexão e tente de novo.');
+                });
+        });
+
+        mountAllHidden();
+    })();
+</script>
+{% endblock %}

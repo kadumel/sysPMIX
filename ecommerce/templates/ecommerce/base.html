@@ -1,0 +1,467 @@
+{% load static %}
+{% load pwa %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Loja Pannemix{% endblock %}</title>
+    {% progressive_web_app_meta %}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+    <style>
+        :root {
+            --primary-color: #004A8D;
+            --secondary-color: #F7941D;
+            --navbar-height: 60px;
+        }
+        body {
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .navbar-ecommerce {
+            height: var(--navbar-height);
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+            padding: 0 1rem;
+            position: fixed;
+            width: 100%;
+            top: 0;
+            z-index: 1030;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar-ecommerce .navbar-brand {
+            color: white !important;
+            font-weight: bold;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 0;
+            max-width: 100%;
+        }
+        .navbar-ecommerce .navbar-brand .ecommerce-brand-name {
+            min-width: 0;
+            max-width: min(52vw, 18rem);
+        }
+        .navbar-ecommerce .nav-link {
+            color: rgba(255,255,255,0.9) !important;
+        }
+        .navbar-ecommerce .nav-link:hover {
+            color: #fff !important;
+        }
+        .logo-container {
+            background-color: white;
+            padding: 5px;
+            border-radius: 5px;
+            border: 2px solid var(--secondary-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-container img {
+            max-height: 36px;
+            width: auto;
+        }
+        .ecommerce-main {
+            margin-top: var(--navbar-height);
+            min-height: calc(100vh - var(--navbar-height));
+            padding: 1.25rem 0 2rem;
+        }
+        .ecommerce-main > .container,
+        .ecommerce-main > .container-fluid {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+        .card {
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+            border-top: 3px solid var(--secondary-color);
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(247, 148, 29, 0.2);
+        }
+        .card-title {
+            color: var(--secondary-color);
+            font-weight: 600;
+        }
+        .btn-primary {
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+            border: none;
+        }
+        .btn-primary:hover {
+            background: linear-gradient(to right, #003366, #e67e00);
+            border: none;
+        }
+        .btn-outline-primary {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+        }
+        .btn-outline-primary:hover {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+            color: #fff;
+        }
+        .btn-outline-secondary {
+            border-color: #adb5bd;
+        }
+        .badge {
+            background-color: var(--secondary-color);
+        }
+        .ecommerce-hero-gradient {
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+        }
+        .ecommerce-product-thumb {
+            height: 14rem;
+            background: linear-gradient(135deg, rgba(0, 74, 141, 0.12), rgba(247, 148, 29, 0.18));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: 600;
+            color: rgba(0, 74, 141, 0.35);
+        }
+        .ecommerce-product-thumb:has(.ecommerce-product-thumb-img) {
+            display: block;
+            padding: 0;
+            line-height: 0;
+        }
+        .ecommerce-product-thumb .ecommerce-product-thumb-img {
+            width: 100%;
+            height: 14rem;
+            object-fit: cover;
+            display: block;
+        }
+        .ecommerce-grupo-tree ul {
+            list-style: none;
+            padding-left: 0.75rem;
+            margin: 0.25rem 0 0;
+            border-left: 2px solid var(--secondary-color);
+        }
+        .ecommerce-footer {
+            border-top: 1px solid #dee2e6;
+            background: #fff;
+            padding: 1.25rem 0;
+            margin-top: auto;
+        }
+        @media (min-width: 992px) {
+            .ecommerce-nav-pwa-hint {
+                border-left: 1px solid rgba(255, 255, 255, 0.28);
+            }
+        }
+        .navbar-ecommerce .dropdown-menu {
+            min-width: 16rem;
+        }
+        .navbar-ecommerce .navbar-cart-badge {
+            font-size: 0.65rem;
+            min-width: 1.15rem;
+            padding: 0.2em 0.45em;
+        }
+        .ecommerce-toast-wrap {
+            z-index: 1090;
+            margin-top: calc(var(--navbar-height) + 0.5rem);
+        }
+        .ecommerce-cart-card:hover {
+            transform: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="d-flex flex-column">
+    <nav class="navbar navbar-expand-lg navbar-ecommerce">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{% url 'ecommerce_home' %}">
+                <span class="logo-container">
+                    <picture>
+                        <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
+                        <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
+                    </picture>
+                </span>
+                <span class="ecommerce-brand-name text-truncate d-inline-block" title="{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja{% endif %}">{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja{% endif %}</span>
+            </a>
+            <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#ecommerceNav" aria-controls="ecommerceNav" aria-expanded="false" aria-label="Menu">
+                <i class="bi bi-list text-white fs-3"></i>
+            </button>
+            <div class="collapse navbar-collapse" id="ecommerceNav">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-stretch align-items-start flex-column flex-lg-row flex-lg-wrap gap-lg-1">
+                    <li class="nav-item">
+                        <a class="nav-link py-2" href="{% url 'ecommerce_home' %}"><i class="bi bi-house-door me-1"></i>Início</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2" href="{% url 'ecommerce_home' %}#catalogo"><i class="bi bi-grid me-1"></i>Catálogo</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-1"></i>Meus pedidos</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2 position-relative d-inline-flex align-items-center gap-1" href="{% url 'ecommerce_notificacoes' %}" title="Notificações">
+                            <i class="bi bi-bell fs-5"></i>
+                            <span class="d-none d-lg-inline">Notificações</span>
+                            {% if ecommerce_notificacoes_nao_lidas %}
+                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">{{ ecommerce_notificacoes_nao_lidas }}</span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link py-2 d-flex align-items-center gap-1" href="{% url 'ecommerce_cart' %}">
+                            <span class="position-relative d-inline-flex">
+                                <i class="bi bi-cart3 fs-5"></i>
+                                <span id="ecommerceCartBadgeNav" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-white text-danger border navbar-cart-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
+                            </span>
+                            Carrinho
+                        </a>
+                    </li>
+                    <li class="nav-item ms-lg-2 ps-lg-3 ecommerce-nav-pwa-hint d-none d-md-flex align-items-center">
+                        <span
+                            class="nav-link py-1 mb-0 small"
+                            style="font-size: 0.68rem; opacity: 0.7; cursor: default; line-height: 1.2;"
+                            title="No Chrome ou Edge: menu do navegador → Instalar aplicação ou Adicionar à tela inicial."
+                        >
+                            <i class="bi bi-phone me-1" aria-hidden="true"></i>PWA: instale pelo menu do navegador
+                        </span>
+                    </li>
+                    <li class="nav-item dropdown ms-lg-2">
+                        <a class="nav-link dropdown-toggle py-2 text-white text-start text-lg-end" href="#" id="ecommerceUserMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle me-1"></i><span class="fw-medium">{{ ecommerce_usuario_exibicao|default:user.username }}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-lg-end shadow" aria-labelledby="ecommerceUserMenu">
+                            <li><h6 class="dropdown-header text-wrap mb-0">{{ ecommerce_usuario_exibicao|default:user.username }}</h6></li>
+                            {% if ecommerce_cliente_nome %}
+                            <li><span class="dropdown-item-text small text-muted text-wrap"><i class="bi bi-building me-1"></i><strong>Cliente:</strong> {{ ecommerce_cliente_nome }}</span></li>
+                            {% else %}
+                            <li><span class="dropdown-item-text small text-muted text-wrap"><i class="bi bi-info-circle me-1"></i>Nenhum cliente Sankhya vinculado a este usuário.</span></li>
+                            {% endif %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'ecommerce_cart' %}"><i class="bi bi-cart3 me-2"></i>Carrinho <span id="ecommerceCartBadgeMenu" class="badge bg-secondary js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span></a></li>
+                            <li><a class="dropdown-item" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-2"></i>Meus pedidos</a></li>
+                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'ecommerce_notificacoes' %}"><span><i class="bi bi-bell me-2"></i>Notificações</span>{% if ecommerce_notificacoes_nao_lidas %}<span class="badge bg-danger rounded-pill">{{ ecommerce_notificacoes_nao_lidas }}</span>{% endif %}</a></li>
+                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2"></i>Painel interno</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{% url 'logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right me-2"></i>Sair</button>
+                                </form>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="ecommerce-main flex-grow-1">
+        <div class="container-fluid">
+            {% if messages %}
+            <div class="mb-3">
+                {% for message in messages %}
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show py-2 small" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <footer class="ecommerce-footer mt-auto">
+        <div class="container-fluid small text-muted">
+            <div class="row align-items-center">
+                <div class="col-md-6 mb-2 mb-md-0">
+                    <strong class="text-dark">Loja Pannemix</strong>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <a href="{% url 'ecommerce_home' %}" class="text-decoration-none text-muted">Início</a>
+                    <span class="mx-2">·</span>
+                    <a href="{% url 'ecommerce_cart' %}" class="text-decoration-none text-muted">Carrinho</a>
+                    <span class="mx-2">·</span>
+                    <a href="/manifest.json" class="text-decoration-none text-muted">Manifest</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <div class="toast-container position-fixed top-0 end-0 p-3 ecommerce-toast-wrap" aria-live="polite" aria-atomic="true">
+        <div id="ecommerceToast" class="toast align-items-center border-0" role="status">
+            <div class="d-flex">
+                <div class="toast-body"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="ecommerceModalAddCart" tabindex="-1" aria-labelledby="ecommerceModalAddCartLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" action="{% url 'ecommerce_add_cart' %}" id="ecommerceFormAddCart" data-add-cart-url="{% url 'ecommerce_add_cart' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="codigo_produto" value="">
+                    <input type="hidden" name="next" value="">
+                    <div class="modal-header border-0 pb-0">
+                        <h5 class="modal-title" id="ecommerceModalAddCartLabel">Adicionar ao carrinho</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                    </div>
+                    <div class="modal-body pt-2">
+                        <p class="fw-medium text-dark mb-1 ecommerce-modal-product-name"></p>
+                        <p class="small text-muted mb-3">Informe a quantidade (inteiro ou decimal — ex.: <strong>1,5</strong> kg, <strong>0,25</strong> kg). Use vírgula ou ponto.</p>
+                        <label class="form-label" for="ecommerceQtyInput">Quantidade</label>
+                        <input type="text" class="form-control form-control-lg" id="ecommerceQtyInput" name="qty" value="1" required inputmode="decimal" autocomplete="off" placeholder="ex.: 1,5 ou 0,25">
+                    </div>
+                    <div class="modal-footer border-0 pt-0">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-cart-plus me-1"></i>Confirmar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            const modalEl = document.getElementById('ecommerceModalAddCart');
+            if (!modalEl) return;
+            const form = document.getElementById('ecommerceFormAddCart');
+            const nameEl = modalEl.querySelector('.ecommerce-modal-product-name');
+            const inputCodigo = form.querySelector('input[name="codigo_produto"]');
+            const inputNext = form.querySelector('input[name="next"]');
+            const inputQty = document.getElementById('ecommerceQtyInput');
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const addUrl = form.getAttribute('data-add-cart-url') || form.getAttribute('action');
+            const toastEl = document.getElementById('ecommerceToast');
+
+            function getCookie(name) {
+                var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+                return m ? decodeURIComponent(m[2].trim()) : '';
+            }
+
+            function getCsrfToken() {
+                var t = form.querySelector('[name=csrfmiddlewaretoken]');
+                return (t && t.value) ? t.value : getCookie('csrftoken');
+            }
+
+            function setCartLineBadges(n) {
+                var count = parseInt(String(n), 10);
+                if (isNaN(count) || count < 0) count = 0;
+                var s = String(count);
+                var ids = ['ecommerceCartBadgeNav', 'ecommerceCartBadgeMenu'];
+                ids.forEach(function (id) {
+                    var el = document.getElementById(id);
+                    if (el) {
+                        el.textContent = s;
+                        el.classList.toggle('d-none', count < 1);
+                    }
+                });
+                document.querySelectorAll('.js-ecommerce-cart-lines').forEach(function (el) {
+                    if (ids.indexOf(el.id) >= 0) return;
+                    el.textContent = s;
+                    el.classList.toggle('d-none', count < 1);
+                });
+            }
+
+            function showEcommerceToast(message, isError) {
+                if (!toastEl || typeof bootstrap === 'undefined') return;
+                toastEl.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-dark');
+                toastEl.classList.add(isError ? 'text-bg-danger' : 'text-bg-success');
+                toastEl.querySelector('.toast-body').textContent = message;
+                var t = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 4000 });
+                t.show();
+            }
+
+            modalEl.addEventListener('show.bs.modal', function (event) {
+                const btn = event.relatedTarget;
+                if (!btn || !btn.dataset) return;
+                inputCodigo.value = btn.dataset.productCodigo || '';
+                inputNext.value = btn.dataset.next || '/ecommerce/';
+                nameEl.textContent = btn.dataset.productNome || '';
+                inputQty.value = 1;
+            });
+
+            /* Foco após o modal estar visível (transição terminada) — mais confiável que timeout no show */
+            modalEl.addEventListener('shown.bs.modal', function () {
+                if (!inputQty) return;
+                inputQty.focus({ preventScroll: true });
+                if (typeof inputQty.select === 'function') {
+                    inputQty.select();
+                }
+            });
+
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var raw = String(inputQty.value).trim().replace(',', '.');
+                var v = parseFloat(raw);
+                if (isNaN(v) || v < 0.001) {
+                    showEcommerceToast('Informe uma quantidade maior ou igual a 0,001.', true);
+                    inputQty.focus();
+                    return;
+                }
+                if (v > 99999) v = 99999;
+                v = Math.round(v * 10000) / 10000;
+                inputQty.value = String(v);
+
+                var fd = new FormData(form);
+                submitBtn.disabled = true;
+                fetch(addUrl, {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRFToken': getCsrfToken()
+                    },
+                    body: fd,
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                })
+                    .then(function (res) {
+                        return res.text().then(function (text) {
+                            var data = {};
+                            if (text) {
+                                try {
+                                    data = JSON.parse(text);
+                                } catch (e) {
+                                    data = { ok: false, error: 'Resposta inválida do servidor.' };
+                                }
+                            }
+                            return { res: res, data: data };
+                        });
+                    })
+                    .then(function (pair) {
+                        var data = pair.data;
+                        if (!pair.res.ok) {
+                            showEcommerceToast((data && data.error) || ('Erro ' + pair.res.status), true);
+                            return;
+                        }
+                        if (!data || (data.ok !== true && data.ok !== 1)) {
+                            showEcommerceToast((data && data.error) || 'Não foi possível adicionar.', true);
+                            return;
+                        }
+                        var lines = data.lines;
+                        if (typeof lines === 'undefined' || lines === null) {
+                            lines = 0;
+                        }
+                        setCartLineBadges(lines);
+                        try {
+                            bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                        } catch (e) {}
+                        showEcommerceToast(data.message || 'Adicionado ao carrinho.', false);
+                    })
+                    .catch(function () {
+                        showEcommerceToast('Erro de conexão. Tente novamente.', true);
+                    })
+                    .finally(function () {
+                        submitBtn.disabled = false;
+                    });
+            });
+        })();
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

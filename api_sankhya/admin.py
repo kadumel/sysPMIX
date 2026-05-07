@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato
 )
 
 
@@ -78,21 +78,18 @@ class EmpresaAdmin(admin.ModelAdmin):
 
 @admin.register(Cidade)
 class CidadeAdmin(admin.ModelAdmin):
-    list_display = ('codigo_cidade', 'nome', 'uf', 'nome_regiao', 'codigo_municipio_fiscal', 'updated_at')
+    list_display = ('codigo_cidade', 'nome', 'uf', 'codigo_regiao', 'dt_alteracao', 'nome_regiao', 'codigo_municipio_fiscal', 'updated_at')
     list_filter = ('uf', 'codigo_regiao')
     search_fields = ('codigo_cidade', 'nome', 'uf', 'nome_regiao', 'nome_correio', 'codigo_municipio_fiscal')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
     
     fieldsets = (
-        ('Informações Básicas', {
-            'fields': ('codigo_cidade', 'nome', 'uf')
+        ('Legado CRUD (getCidadeLegado)', {
+            'fields': ('codigo_cidade', 'nome', 'uf', 'codigo_regiao', 'dt_alteracao')
         }),
-        ('Região', {
-            'fields': ('codigo_regiao', 'nome_regiao')
-        }),
-        ('Dados Fiscais', {
-            'fields': ('nome_correio', 'codigo_municipio_fiscal')
+        ('API v1 / complemento', {
+            'fields': ('nome_regiao', 'nome_correio', 'codigo_municipio_fiscal')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),
@@ -190,8 +187,8 @@ class VendedorAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('codigo_cliente', 'nome', 'tipo', 'cnpj_cpf', 'email', 'cidade', 'uf', 'updated_at')
-    list_filter = ('tipo', 'uf', 'cidade', 'grupo_autorizacao')
+    list_display = ('codigo_cliente', 'nome', 'tipo', 'cnpj_cpf', 'email', 'cidade', 'codtab', 'updated_at')
+    list_filter = ('tipo', 'cidade', 'grupo_autorizacao', 'codtab')
     search_fields = ('codigo_cliente', 'nome', 'razao', 'cnpj_cpf', 'email', 'telefone_numero', 'cidade', 'bairro')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
@@ -210,7 +207,10 @@ class ClienteAdmin(admin.ModelAdmin):
             'fields': ('limite_credito', 'grupo_autorizacao')
         }),
         ('Endereço', {
-            'fields': ('logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep', 'codigo_ibge')
+            'fields': ('codend', 'numero', 'complemento', 'bairro', 'cidade', 'cep')
+        }),
+        ('Comercial', {
+            'fields': ('codtab',)
         }),
         ('Localização GPS', {
             'fields': ('latitude', 'longitude')
@@ -314,8 +314,18 @@ class ProdutoAdmin(admin.ModelAdmin):
 
 @admin.register(GrupoProduto)
 class GrupoProdutoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau', 'grupo_icms', 'analitico', 'ativo', 'updated_at')
-    list_filter = ('ativo', 'analitico', 'grau', 'grupo_icms')
+    list_display = (
+        'codigo_grupo_produto',
+        'nome',
+        'codigo_grupo_produto_pai',
+        'grau',
+        'grupo_icms',
+        'analitico',
+        'ativo',
+        'mostrar_no_ecommerce',
+        'updated_at',
+    )
+    list_filter = ('ativo', 'analitico', 'mostrar_no_ecommerce', 'grau', 'grupo_icms')
     search_fields = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
@@ -325,7 +335,7 @@ class GrupoProdutoAdmin(admin.ModelAdmin):
             'fields': ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau')
         }),
         ('Configurações', {
-            'fields': ('grupo_icms', 'analitico', 'ativo')
+            'fields': ('grupo_icms', 'analitico', 'ativo', 'mostrar_no_ecommerce')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),
@@ -370,6 +380,34 @@ class PedidoAdmin(admin.ModelAdmin):
         }),
         ('Logística', {
             'fields': ('codigo_ordem_carga', 'codigo_transportadora', 'nome_transportadora', 'codigo_veiculo', 'placa_veiculo', 'codigo_motorista', 'nome_motorista', 'quantidade_volumes', 'peso_bruto')
+        }),
+        ('Auditoria', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(Contato)
+class ContatoAdmin(admin.ModelAdmin):
+    list_display = ('codparc', 'codcontato', 'nomecontato', 'apelido', 'email', 'telefone', 'celular', 'codcid', 'updated_at')
+    list_filter = ('codcid',)
+    search_fields = ('codparc', 'codcontato', 'nomecontato', 'apelido', 'email', 'telefone', 'celular')
+    readonly_fields = ('created_at', 'updated_at')
+    list_per_page = 50
+
+    fieldsets = (
+        ('Parceiro / Contato', {
+            'fields': ('codparc', 'codcontato', 'nomecontato', 'apelido')
+        }),
+        ('Endereço', {
+            'fields': ('codend', 'numend', 'complemento', 'codbai', 'codcid', 'cep')
+        }),
+        ('Contato', {
+            'fields': ('telefone', 'email', 'celular')
+        }),
+        ('Localização', {
+            'fields': ('latitude', 'longitude')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),

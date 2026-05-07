@@ -14,12 +14,25 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 import dj_database_url
-
-load_dotenv()
-
+import re
+import logging
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=False)
+
+
+def _env_first(*keys):
+    for key in keys:
+        value = os.getenv(key)
+        if value is not None:
+            return value
+    return None
+
+# Sankhya API (obrigatório para integração no app api_sankhya)
+SANKHYA_CLIENT_ID = os.getenv('SANKHYA_CLIENT_ID')
+SANKHYA_CLIENT_SECRET = os.getenv('SANKHYA_CLIENT_SECRET')
+SANKHYA_X_TOKEN = os.getenv('SANKHYA_X_TOKEN')
 
 
 # Quick-start development settings - unsuitable for production
@@ -29,9 +42,80 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Sem DEBUG no .env → True (runserver serve /static/ a partir de STATICFILES_DIRS).
+# Em produção defina explicitamente DEBUG=false ou DEBUG=0.
+_debug_env = os.environ.get('DEBUG', 'true').strip().lower()
+DEBUG = _debug_env in ('1', 'true', 'yes', 'on')
 
-ALLOWED_HOSTS = ['*']
+# Vírgula na env; ausente ou vazia → * (dev / Railway sem lista explícita)
+_allowed_hosts = (_env_first('ALLOWED_HOSTS', 'allowed_hosts', 'ALLOW_HOSTS', 'allow_hosts') or '*').strip()
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in re.split(r"[,\s;]+", _allowed_hosts)
+    if h.strip()
+]
+
+# HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
+# Lista em env pode vir separada por vírgula, ponto e vírgula ou espaço; com/sem esquema.
+_csrf_env = (_env_first('CSRF_TRUSTED_ORIGINS', 'csrf_trusted_origins') or '').strip()
+if _csrf_env.startswith('[') and _csrf_env.endswith(']'):
+    _csrf_env = _csrf_env[1:-1].strip()
+_csrf_items = [item.strip().strip('"').strip("'") for item in re.split(r"[,\s;]+", _csrf_env) if item.strip()]
+
+_csrf_from_env = [
+    (
+        item.rstrip('/')
+        if item.startswith(("http://", "https://"))
+        else f"https://{item.rstrip('/')}"
+    )
+    for item in _csrf_items
+]
+
+_csrf_from_hosts = []
+for host in ALLOWED_HOSTS:
+    h = host.lstrip('.')
+    if h in {'*', 'localhost', '127.0.0.1', '[::1]'}:
+        continue
+    # Para host explícito, aceita origem HTTPS correspondente.
+    _csrf_from_hosts.append(f"https://{h}")
+
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(_csrf_from_env + _csrf_from_hosts))
+
+# Encaminhamento TLS via proxy.
+# Em dev local (DEBUG=True), mantenha desligado por padrão para evitar conflito com runserver HTTP.
+_proxy_ssl_env = os.getenv('USE_PROXY_SSL_HEADER')
+if _proxy_ssl_env is None:
+    USE_PROXY_SSL_HEADER = not DEBUG
+else:
+    USE_PROXY_SSL_HEADER = _proxy_ssl_env.strip().lower() in ('1', 'true', 'yes', 'on')
+
+if USE_PROXY_SSL_HEADER:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Diagnóstico temporário para deploy (Railway): mostra origem das configs de host/csrf.
+# Em produção (DEBUG=False), imprime sempre para facilitar troubleshooting do 403 CSRF.
+if (not DEBUG) or (os.getenv('CSRF_DEBUG_STARTUP', '').strip().lower() in ('1', 'true', 'yes', 'on')):
+    _startup_logger = logging.getLogger('django')
+    _startup_logger.warning('[CSRF_DEBUG] DEBUG = %s', DEBUG)
+    _startup_logger.warning('[CSRF_DEBUG] USE_PROXY_SSL_HEADER = %s', USE_PROXY_SSL_HEADER)
+    _startup_logger.warning(
+        '[CSRF_DEBUG] ALLOWED_HOSTS env candidates = %s',
+        {
+            'ALLOWED_HOSTS': os.getenv('ALLOWED_HOSTS'),
+            'allowed_hosts': os.getenv('allowed_hosts'),
+            'ALLOW_HOSTS': os.getenv('ALLOW_HOSTS'),
+            'allow_hosts': os.getenv('allow_hosts'),
+        },
+    )
+    _startup_logger.warning(
+        '[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS env candidates = %s',
+        {
+            'CSRF_TRUSTED_ORIGINS': os.getenv('CSRF_TRUSTED_ORIGINS'),
+            'csrf_trusted_origins': os.getenv('csrf_trusted_origins'),
+        },
+    )
+    _startup_logger.warning('[CSRF_DEBUG] ALLOWED_HOSTS final = %s', ALLOWED_HOSTS)
+    _startup_logger.warning('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS final = %s', CSRF_TRUSTED_ORIGINS)
 
 
 # Application definition
@@ -47,6 +131,9 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'controleBI',
     'api_sankhya',
+    'pwa',
+    'ecommerce',
+    'django_q',
 ]
 
 MIDDLEWARE = [
@@ -56,6 +143,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'ecommerce.middleware.EcommerceLoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -73,6 +161,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'ecommerce.context_processors.ecommerce_nav',
+                'controleBI.context_processors.bi_nav_context',
             ],
         },
     },
@@ -80,50 +170,51 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
-"""
+
 # Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-DATABASES = {
-    'default': {
-        'ENGINE': os.getenv('ENGINE'),
-        'NAME': os.getenv('DATABASE'),
-        'USER': os.getenv('USER_DB'),
-        'PASSWORD': os.getenv('PASSWORD_DB'),
-        'HOST': os.getenv('HOST'),
-        'PORT': os.getenv('PORT'),
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'TrustServerCertificate': 'yes',
-            'unicode_results': True,
-            'extra_params': 'tds_version=7.3'
-        },
-    },
-    'erp': {
-        'ENGINE': os.getenv('ENGINE'),
-        'NAME': os.getenv('DATABASE_ERP'),
-        'USER': os.getenv('USER_ERP'),
-        'PASSWORD': os.getenv('PASSWORD_ERP'),
-        'HOST': os.getenv('HOST_ERP'),
-        'PORT': os.getenv('PORT_ERP'),
-        'OPTIONS': {
-            'driver': 'ODBC Driver 17 for SQL Server',
-            'TrustServerCertificate': 'yes',
-            'unicode_results': True,
-            'extra_params': 'tds_version=7.3'
-        },
+# Se DATABASE_URL existir (Railway/produção), usa PostgreSQL via dj_database_url.
+# Caso contrário, usa SQL Server local (desenvolvimento).
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True,
+        )
     }
-}
-"""
-
-print("DATABASE_URL:", os.environ.get("DATABASE_URL"))
-
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),  # variável padrão do Railway
-        conn_max_age=600,                  # mantém conexões abertas (melhora performance)
-        ssl_require=True                    # obrigatório para produção na Railway
-    )
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('ENGINE'),
+            'NAME': os.getenv('DATABASE'),
+            'USER': os.getenv('USER_DB'),
+            'PASSWORD': os.getenv('PASSWORD_DB'),
+            'HOST': os.getenv('HOST'),
+            'PORT': os.getenv('PORT'),
+            'OPTIONS': {
+                'driver': 'ODBC Driver 17 for SQL Server',
+                'TrustServerCertificate': 'yes',
+                'unicode_results': True,
+                'extra_params': 'tds_version=7.3'
+            },
+        },
+        'erp': {
+            'ENGINE': os.getenv('ENGINE'),
+            'NAME': os.getenv('DATABASE_ERP'),
+            'USER': os.getenv('USER_ERP'),
+            'PASSWORD': os.getenv('PASSWORD_ERP'),
+            'HOST': os.getenv('HOST_ERP'),
+            'PORT': os.getenv('PORT_ERP'),
+            'OPTIONS': {
+                'driver': 'ODBC Driver 17 for SQL Server',
+                'TrustServerCertificate': 'yes',
+                'unicode_results': True,
+                'extra_params': 'tds_version=7.3'
+            },
+        }
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -155,25 +246,85 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Django Q2 — filas em background (integrações Sankhya lentas; não bloqueia o request HTTP).
+# Broker ORM usa o mesmo PostgreSQL (sem Redis). Em produção rode: python manage.py qcluster
+# (Railway: segundo serviço com esse comando). Para testar sem worker: DJANGO_Q_SYNC=1 no .env.
+Q_CLUSTER = {
+    'name': 'sysPMIX',
+    'workers': 2,
+    # Integrações Sankhya podem levar horas; retry deve ser > timeout (evita reexecução duplicada).
+    'timeout': 86400,
+    'retry': 90000,
+    'queue_limit': 100,
+    'bulk': 5,
+    'orm': 'default',
+    'catch_up': False,
+    'sync': os.environ.get('DJANGO_Q_SYNC', '').lower() in ('1', 'true', 'yes'),
+}
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media/')
+#
+# Mídia (uploads / imagens de produto baixadas da integração):
+#   MEDIA_URL              — URL pública (ex.: /media/ ou CDN)
+#   MEDIA_ROOT             — pasta absoluta no disco (opcional; senão BASE_DIR/media ou volume Railway)
+#   MEDIA_PRODUCT_IMAGES_UPLOAD_TO — subpasta relativa a MEDIA_ROOT para imagens de produto
+#   MEDIA_PUBLIC_BASE_URL  — base absoluta do site (ex.: https://app.exemplo.com) para montar URLs completas
+RAILWAY_VOLUME_MOUNT_PATH = os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
+MEDIA_URL = os.getenv('MEDIA_URL')
+if MEDIA_URL and not MEDIA_URL.endswith('/'):
+    MEDIA_URL = MEDIA_URL + '/'
+
+MEDIA_ROOT = (
+    os.getenv('MEDIA_ROOT')
+    or (
+        os.path.join(RAILWAY_VOLUME_MOUNT_PATH, 'media')
+        if RAILWAY_VOLUME_MOUNT_PATH
+        else os.path.join(BASE_DIR, 'media')
+    )
+)
+
+# Caminho relativo dentro de MEDIA_ROOT (ImageField upload_to + scripts de download)
+MEDIA_PRODUCT_IMAGES_UPLOAD_TO = os.getenv('MEDIA_PRODUCT_IMAGES_UPLOAD_TO')
+_MEDIA_PI = MEDIA_PRODUCT_IMAGES_UPLOAD_TO.strip().strip('/')
+MEDIA_PRODUCT_IMAGES_UPLOAD_TO = f'{_MEDIA_PI}/' if _MEDIA_PI else 'ecommerce/produtos/'
+
+# Opcional: ex.: https://seudominio.com — usado para URLs absolutas de mídia em e-mails / APIs
+MEDIA_PUBLIC_BASE_URL = (os.getenv('MEDIA_PUBLIC_BASE_URL') or '').rstrip('/')
 
 STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR, 'static'),
 ]
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-# WhiteNoise: servir arquivos estáticos em produção (Railway, etc.)
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
+# WhiteNoise em produção; em DEBUG usa storage padrão (evita manifest/collectstatic no dev).
+if DEBUG:
+    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+else:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedStaticFilesStorage'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Progressive Web App (django-pwa) — vitrine / loja em /ecommerce/
+PWA_APP_NAME = 'PMIX Shop'
+PWA_APP_DESCRIPTION = 'Loja online responsiva e instalável (PWA).'
+PWA_APP_THEME_COLOR = '#0ea5e9'
+PWA_APP_BACKGROUND_COLOR = '#ffffff'
+PWA_APP_DISPLAY = 'standalone'
+PWA_APP_SCOPE = '/'
+PWA_APP_ORIENTATION = 'portrait-primary'
+PWA_APP_START_URL = '/ecommerce/'
+PWA_APP_FETCH_URL = '/ecommerce/'
+PWA_APP_DEBUG_MODE = DEBUG
+PWA_APP_ICONS = [
+    {'src': '/static/ecommerce/icons/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
+    {'src': '/static/ecommerce/icons/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+]
+PWA_APP_SPLASH_SCREEN = []
 
 # Authentication settings
 LOGIN_URL = 'login'

@@ -1,0 +1,250 @@
+{% extends 'base.html' %}
+
+{% block extra_head %}
+<style>
+    .mapa-rota-card { border-left: 4px solid #0d6efd; }
+    .mapa-dia-titulo { font-size: 0.95rem; letter-spacing: 0.02em; }
+    .mapa-dia-titulo .mapa-dia-chevron {
+        transition: transform 0.2s ease;
+        flex-shrink: 0;
+    }
+    .mapa-dia-titulo.collapsed .mapa-dia-chevron {
+        transform: rotate(-90deg);
+    }
+    .mapa-rota-card-trigger {
+        cursor: pointer;
+        border: none;
+        background: transparent;
+        padding: 0;
+        width: 100%;
+        text-align: left;
+    }
+    .mapa-rota-card-trigger .card {
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+    }
+    .mapa-rota-card-trigger:hover .card {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.12) !important;
+        transform: translateY(-2px);
+    }
+    .mapa-rota-card-trigger:focus-visible {
+        outline: 0;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.35);
+        border-radius: 0.375rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-map me-2"></i>Mapa de Rotas</h4>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <a href="{% url 'ecommerce_mapa_rotas_semana' %}?ref={{ prev_week_ref }}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-chevron-left"></i> Semana anterior
+                </a>
+                <a href="{% url 'ecommerce_mapa_rotas_semana' %}?ref={{ next_week_ref }}" class="btn btn-outline-secondary btn-sm">
+                    Próxima semana <i class="bi bi-chevron-right"></i>
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            {% if filtro_comercial %}
+            <div class="alert alert-info py-2 mb-3">
+                Exibindo apenas rotas a executar das <strong>rotas padrão em que você é o responsável comercial</strong>.
+            </div>
+            {% endif %}
+
+            <form method="get" class="row g-2 align-items-end mb-4">
+                <div class="col-sm-6 col-md-4 col-lg-3">
+                    <label class="form-label mb-0" for="mapa_ref_semana">Semana (escolha um dia)</label>
+                    <input type="date" class="form-control" id="mapa_ref_semana" name="ref" value="{{ ref|date:'Y-m-d' }}">
+                </div>
+                <div class="col-auto d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Ir</button>
+                    <a href="{% url 'ecommerce_mapa_rotas_semana' %}" class="btn btn-outline-secondary">Esta semana</a>
+                </div>
+            </form>
+
+            <p class="text-muted small mb-3">
+                <i class="bi bi-calendar-range me-1"></i>
+                <strong>{{ week_start|date:'d/m/Y' }}</strong> a <strong>{{ week_end|date:'d/m/Y' }}</strong>
+                — {{ total_rotas_semana }} rota{{ total_rotas_semana|pluralize }} neste período
+            </p>
+
+            {% for dia in dias_grid %}
+            <section class="mb-4">
+                <button
+                    type="button"
+                    class="mapa-dia-titulo btn btn-link text-secondary text-decoration-none border-bottom pb-2 mb-0 w-100 text-start d-flex align-items-center justify-content-between gap-2 px-0{% if not forloop.first %} collapsed{% endif %}"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
+                    aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                    aria-controls="mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
+                >
+                    <span>{{ dia.dia_semana }}, {{ dia.data|date:'d/m/Y' }}</span>
+                    <i class="bi bi-chevron-down mapa-dia-chevron" aria-hidden="true"></i>
+                </button>
+                <div class="collapse pt-3{% if forloop.first %} show{% endif %}" id="mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}">
+                {% if dia.rotas %}
+                <div class="row g-3">
+                    {% for rota in dia.rotas %}
+                    <template id="tpl-rota-detalhe-{{ rota.pk }}">
+                        <div class="mapa-rota-detalhe-conteudo">
+                            <dl class="row small mb-0">
+                                <dt class="col-sm-4 text-muted">Rota padrão</dt>
+                                <dd class="col-sm-8">{% if rota.rota_padrao %}{{ rota.rota_padrao.nome }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                                <dt class="col-sm-4 text-muted">Comercial (responsável)</dt>
+                                <dd class="col-sm-8">{% if rota.rota_padrao and rota.rota_padrao.responsavel %}{{ rota.rota_padrao.responsavel.get_full_name|default:rota.rota_padrao.responsavel.username }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                                <dt class="col-sm-4 text-muted">Data</dt>
+                                <dd class="col-sm-8">{{ dia.dia_semana }}, {{ rota.data|date:'d/m/Y' }}</dd>
+                                <dt class="col-sm-4 text-muted">Veículo</dt>
+                                <dd class="col-sm-8">{% if rota.veiculo %}{{ rota.veiculo.placa }} — {{ rota.veiculo.descricao }}{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                                <dt class="col-sm-4 text-muted">Motorista</dt>
+                                <dd class="col-sm-8">{% if rota.motorista %}{{ rota.motorista.nome }} <span class="text-muted">({{ rota.motorista.codigo_erp }})</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                                <dt class="col-sm-4 text-muted">Ajudantes</dt>
+                                <dd class="col-sm-8">
+                                    {% with aj=rota.ajudantes_equipe.all %}
+                                    {% if aj %}
+                                    <ul class="mb-0 ps-3">
+                                        {% for a in aj %}
+                                        <li>{{ a.funcionario.nome }} <span class="text-muted">({{ a.funcionario.codigo_erp }})</span></li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% else %}
+                                    <span class="text-muted">Nenhum</span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </dd>
+                                <dt class="col-sm-4 text-muted">Total de clientes</dt>
+                                <dd class="col-sm-8">{{ rota.total_clientes }}</dd>
+                                <dt class="col-sm-4 text-muted">Registro criado por</dt>
+                                <dd class="col-sm-8">{{ rota.criado_por.get_full_name|default:rota.criado_por.username }}</dd>
+                                <dt class="col-sm-4 text-muted">Observações</dt>
+                                <dd class="col-sm-8">{% if rota.observacao %}<span class="text-break">{{ rota.observacao|linebreaksbr }}</span>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+                            </dl>
+                            <h6 class="mt-3 mb-2">Clientes na rota (ordem)</h6>
+                            {% with crs=rota.clientes_rota.all %}
+                            {% if crs %}
+                            <ol class="small mb-0 ps-3">
+                                {% for rc in crs %}
+                                <li>
+                                    {{ rc.cliente.nome|default:rc.cliente.razao }} — <span class="text-muted">cód. {{ rc.cliente.codigo_cliente }}</span>
+                                </li>
+                                {% endfor %}
+                            </ol>
+                            {% else %}
+                            <p class="small text-muted mb-0">Nenhum cliente nesta rota executada.</p>
+                            {% endif %}
+                            {% endwith %}
+                        </div>
+                    </template>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <button
+                            type="button"
+                            class="mapa-rota-card-trigger"
+                            data-bs-toggle="modal"
+                            data-bs-target="#modalMapaRotaDetalhe"
+                            data-tpl-source="tpl-rota-detalhe-{{ rota.pk }}"
+                            {% if pode_editar_rotas_dia %}
+                            data-montagem-url="{% url 'gestao_rota_dia_builder' %}?data={{ rota.data|date:'Y-m-d' }}{% if rota.rota_padrao_id %}&rota_padrao={{ rota.rota_padrao_id }}{% endif %}"
+                            {% endif %}
+                            aria-label="Ver detalhes da rota{% if rota.rota_padrao %} {{ rota.rota_padrao.nome }}{% endif %}"
+                        >
+                            <div class="card mapa-rota-card h-100 shadow-sm">
+                                <div class="card-body d-flex flex-column">
+                                    <h6 class="card-title mb-1">
+                                        {% if rota.rota_padrao %}
+                                        {{ rota.rota_padrao.nome }}
+                                        {% else %}
+                                        <span class="text-muted">Sem rota padrão</span>
+                                        {% endif %}
+                                    </h6>
+                                    <p class="small text-primary mb-2">
+                                        <i class="bi bi-person-fill me-1"></i>
+                                        <strong>Comercial:</strong>
+                                        {% if rota.rota_padrao and rota.rota_padrao.responsavel %}
+                                        {{ rota.rota_padrao.responsavel.get_full_name|default:rota.rota_padrao.responsavel.username }}
+                                        {% else %}
+                                        <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </p>
+                                    <p class="small text-muted mb-2">{{ dia.dia_semana }} · {{ rota.data|date:'d/m/Y' }}</p>
+                                    <ul class="list-unstyled small mb-0 flex-grow-1">
+                                        <li class="mb-1 text-truncate" title="{% if rota.veiculo %}{{ rota.veiculo.placa }} — {{ rota.veiculo.descricao }}{% endif %}">
+                                            <i class="bi bi-truck text-primary me-1"></i>
+                                            {% if rota.veiculo %}{{ rota.veiculo.placa }}{% else %}<span class="text-muted">Sem veículo</span>{% endif %}
+                                        </li>
+                                        <li class="mb-1 text-truncate" title="{% if rota.motorista %}{{ rota.motorista.nome }}{% endif %}">
+                                            <i class="bi bi-person-badge text-primary me-1"></i>
+                                            {% if rota.motorista %}{{ rota.motorista.nome }}{% else %}<span class="text-muted">Sem motorista</span>{% endif %}
+                                        </li>
+                                        <li class="mb-0">
+                                            <i class="bi bi-people text-primary me-1"></i>
+                                            {% with aj=rota.ajudantes_equipe.all %}
+                                            {% if aj %}{{ aj|length }} ajudante{{ aj|length|pluralize }}{% else %}<span class="text-muted">Sem ajudantes</span>{% endif %}
+                                            {% endwith %}
+                                            · {{ rota.total_clientes }} cliente{{ rota.total_clientes|pluralize }}
+                                        </li>
+                                    </ul>
+                                    <p class="small text-muted mb-0 mt-2"><i class="bi bi-arrows-expand me-1"></i>Clique para ver tudo</p>
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted small mb-0">Nenhuma rota a executar neste dia.</p>
+                {% endif %}
+                </div>
+            </section>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalMapaRotaDetalhe" tabindex="-1" aria-labelledby="modalMapaRotaDetalheLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalMapaRotaDetalheLabel"><i class="bi bi-info-circle me-2"></i>Detalhes da rota a executar</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body" id="modalMapaRotaDetalheBody"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+                <a href="#" class="btn btn-primary d-none" id="modalMapaRotaMontagem"><i class="bi bi-pencil me-1"></i>Abrir montagem</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var modalEl = document.getElementById('modalMapaRotaDetalhe');
+    if (!modalEl || typeof bootstrap === 'undefined') return;
+    modalEl.addEventListener('show.bs.modal', function (ev) {
+        var trigger = ev.relatedTarget;
+        var body = document.getElementById('modalMapaRotaDetalheBody');
+        var montagem = document.getElementById('modalMapaRotaMontagem');
+        if (!trigger || !body) return;
+        var tplId = trigger.getAttribute('data-tpl-source');
+        var tpl = tplId ? document.getElementById(tplId) : null;
+        body.innerHTML = tpl ? tpl.innerHTML : '<p class="text-danger mb-0">Não foi possível carregar os detalhes.</p>';
+        var url = trigger.getAttribute('data-montagem-url');
+        if (montagem) {
+            if (url) {
+                montagem.href = url;
+                montagem.classList.remove('d-none');
+            } else {
+                montagem.classList.add('d-none');
+                montagem.removeAttribute('href');
+            }
+        }
+    });
+})();
+</script>
+{% endblock %}

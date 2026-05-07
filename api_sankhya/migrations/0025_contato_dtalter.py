@@ -1,0 +1,21 @@
+from django.db import migrations, models
+
+
+class Migration(migrations.Migration):
+
+    dependencies = [
+        ("api_sankhya", "0024_fix_cliente_dtalter_column"),
+    ]
+
+    operations = [
+        migrations.AddField(
+            model_name="contato",
+            name="dtalter",
+            field=models.CharField(
+                blank=True,
+                max_length=50,
+                null=True,
+                verbose_name="Data Alteração (DTALTER)",
+            ),
+        ),
+    ]

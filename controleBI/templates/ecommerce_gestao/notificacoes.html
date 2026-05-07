@@ -1,0 +1,215 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-bell me-2"></i>Gestão de notificações</h4>
+            {% if restrito_notificacoes_rota_dia %}
+            <span class="badge text-bg-info">Comercial: somente pedidos de clientes na sua rota do dia (data do pedido = data da rota a executar)</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <form method="get" class="row g-2 mb-4">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Data inicial</label>
+                    <input type="date" class="form-control" name="data_ini" value="{{ filtro_data_ini }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Data final</label>
+                    <input type="date" class="form-control" name="data_fim" value="{{ filtro_data_fim }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Status</label>
+                    <select class="form-select" name="status">
+                        <option value="">Todos</option>
+                        <option value="pendente" {% if filtro_status == 'pendente' %}selected{% endif %}>Pendente</option>
+                        <option value="autorizado" {% if filtro_status == 'autorizado' %}selected{% endif %}>Autorizado</option>
+                        <option value="rejeitado" {% if filtro_status == 'rejeitado' %}selected{% endif %}>Rejeitado</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2">
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+                    <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="btn btn-outline-secondary">Limpar</a>
+                </div>
+            </form>
+
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <div class="border rounded p-3 bg-light">
+                        <div class="small text-muted">Total de pedidos</div>
+                        <div class="fs-4 fw-semibold">{{ total_pedidos }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="border rounded p-3 bg-warning-subtle">
+                        <div class="small text-muted">Pendentes</div>
+                        <div class="fs-4 fw-semibold">{{ pendentes }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="border rounded p-3 bg-success-subtle">
+                        <div class="small text-muted">Autorizados</div>
+                        <div class="fs-4 fw-semibold">{{ autorizados }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="border rounded p-3 bg-danger-subtle">
+                        <div class="small text-muted">Rejeitados</div>
+                        <div class="fs-4 fw-semibold">{{ rejeitados }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <h6 class="mb-2"><i class="bi bi-person-lines-fill me-1"></i>Pendências por comercial</h6>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for item in pendencias_por_comercial %}
+                    <span class="badge text-bg-light border text-dark">
+                        {{ item.nome }}: <strong>{{ item.total }}</strong>
+                    </span>
+                    {% empty %}
+                    <span class="text-muted small">Nenhuma pendência por comercial no filtro atual.</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Pedido</th>
+                            <th>Cliente</th>
+                            <th>Comercial responsável</th>
+                            <th>Usuário</th>
+                            <th>Status</th>
+                            <th>Data</th>
+                            <th style="min-width: 220px;">Observação comercial</th>
+                            <th style="min-width: 140px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pedido in pedidos %}
+                        <tr>
+                            <td>#{{ pedido.id }}</td>
+                            <td>
+                                {% if pedido.cliente %}
+                                {{ pedido.cliente.nome|default:pedido.cliente.razao|default:"-" }}
+                                {% else %}
+                                <span class="text-muted">Cliente não vinculado</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ pedido.comercial_responsavel_nome|default:pedido.comercial_responsavel_username|default:'-' }}</td>
+                            <td>{{ pedido.user.get_full_name|default:pedido.user.username }}</td>
+                            <td>
+                                {% if pedido.status == 'pendente' %}
+                                <span class="badge text-bg-warning">Pendente</span>
+                                {% elif pedido.status == 'autorizado' %}
+                                <span class="badge text-bg-success">Autorizado</span>
+                                {% else %}
+                                <span class="badge text-bg-danger">Rejeitado</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ pedido.criado_em|date:'d/m/Y H:i' }}</td>
+                            <td>{{ pedido.observacao_comercial|default:'-' }}</td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" title="Ver itens" data-bs-toggle="modal" data-bs-target="#itensPedidoModal{{ pedido.id }}">
+                                        <i class="bi bi-card-list"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Análise de indicadores (em desenvolvimento)" disabled>
+                                        <i class="bi bi-graph-up"></i>
+                                    </button>
+                                    {% if pedido.status == 'pendente' %}
+                                    <form method="post" action="{% url 'gestao_notificacao_aprovar' pedido.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-success" title="Aprovar pedido">
+                                            <i class="bi bi-check-circle"></i>
+                                        </button>
+                                    </form>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Rejeitar pedido" data-bs-toggle="modal" data-bs-target="#rejeitarPedidoModal{{ pedido.id }}">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                Nenhuma notificação de pedido encontrada para o seu perfil.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% for pedido in pedidos %}
+<div class="modal fade" id="itensPedidoModal{{ pedido.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Itens do pedido #{{ pedido.id }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Produto</th>
+                                <th>Qtd</th>
+                                <th>Preço unit.</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in pedido.itens.all %}
+                            <tr>
+                                <td>{{ item.codigo_produto }}</td>
+                                <td>{{ item.nome_produto }}</td>
+                                <td>{{ item.quantidade }}</td>
+                                <td>R$ {{ item.preco_unitario }}</td>
+                                <td>R$ {{ item.valor_total }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">Pedido sem itens.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="rejeitarPedidoModal{{ pedido.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'gestao_notificacao_rejeitar' pedido.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Rejeitar pedido #{{ pedido.id }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Mensagem para o cliente</label>
+                    <textarea name="mensagem" class="form-control" rows="4" required placeholder="Explique o motivo da rejeição para o cliente."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-danger"><i class="bi bi-x-circle me-1"></i>Rejeitar pedido</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endfor %}
+{% endblock %}

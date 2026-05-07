@@ -1,7 +1,19 @@
+from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from .models import Funcionario, Veiculo, Pedido
+
+from .models import Funcionario, Veiculo, Pedido, PerfilUsuario
 from .services import FuncionarioService, VeiculoService, PedidoService
+
+
+@receiver(post_save, sender=User)
+def criar_perfil_ao_criar_usuario(sender, instance, created, **kwargs):
+    if created:
+        PerfilUsuario.objects.get_or_create(
+            user=instance,
+            defaults={'perfil': PerfilUsuario.Perfil.COMERCIAL},
+        )
+
 
 @receiver(post_save, sender=Funcionario)
 def enviar_dados_ao_salvar(sender, instance, created, **kwargs):

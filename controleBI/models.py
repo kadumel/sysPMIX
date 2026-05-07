@@ -414,3 +414,72 @@ class EnderecoCliente(models.Model):
         return f"{self.clienteERP.descr_cliente} - {self.end}, {self.num_end}"
 
 
+class PerfilUsuario(models.Model):
+    """Perfil de acesso: define destino pós-login e áreas permitidas."""
+
+    class Perfil(models.TextChoices):
+        CLIENTE = 'cliente', 'Cliente (e-commerce)'
+        COMERCIAL = 'comercial', 'Comercial (painel BI)'
+        GERENTE_COMERCIAL = 'gerente_comercial', 'Gerente comercial (painel BI)'
+        ADMINISTRADOR = 'administrador', 'Administrador do sistema (painel BI)'
+
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='perfil_usuario',
+        verbose_name='Usuário',
+    )
+    perfil = models.CharField(
+        max_length=20,
+        choices=Perfil.choices,
+        default=Perfil.COMERCIAL,
+        verbose_name='Perfil',
+    )
+
+    class Meta:
+        verbose_name = 'Perfil do usuário'
+        verbose_name_plural = 'Perfis de usuário'
+
+    def __str__(self):
+        return f'{self.user.username} — {self.get_perfil_display()}'
+
+
+# Perfis com acesso ao painel BI / loja em nome de cliente (exceto cliente final)
+PERFIS_PAINEL_BI_LOJA = frozenset({
+    PerfilUsuario.Perfil.COMERCIAL,
+    PerfilUsuario.Perfil.GERENTE_COMERCIAL,
+    PerfilUsuario.Perfil.ADMINISTRADOR,
+})
+
+# Gestão de rotas (menu e telas): apenas gerente comercial e administrador
+PERFIS_GESTAO_ROTAS = frozenset({
+    PerfilUsuario.Perfil.GERENTE_COMERCIAL,
+    PerfilUsuario.Perfil.ADMINISTRADOR,
+})
+
+
+class UsuarioClienteSankhya(models.Model):
+    """Liga um usuário Django (perfil cliente / e-commerce) a um registro da tabela sankhya_cliente."""
+
+    cliente = models.ForeignKey(
+        'api_sankhya.Cliente',
+        on_delete=models.CASCADE,
+        related_name='usuarios_sistema',
+        verbose_name='Cliente Sankhya',
+    )
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='vinculo_cliente_sankhya',
+        verbose_name='Usuário',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Usuário de cliente Sankhya'
+        verbose_name_plural = 'Usuários de clientes Sankhya'
+        ordering = ['cliente', 'user__username']
+
+    def __str__(self):
+        return f'{self.user.username} → {self.cliente}'

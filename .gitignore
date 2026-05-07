@@ -38,6 +38,7 @@ media/
 venv/
 env/
 ENV/
+.env2
 
 # IDE
 .idea/
@@ -52,3 +53,6 @@ Thumbs.db
 # Additional changes
 *.sqlite3
 *.pyc
+
+
+.media/

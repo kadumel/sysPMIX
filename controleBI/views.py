@@ -1,13 +1,39 @@
+from urllib.parse import urlencode
+from collections import Counter, defaultdict
+
+from django.template.loader import render_to_string
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
-from .models import Funcionario, Veiculo, Pedido, ItemPedido, Auditoria, Praca, EnderecoCliente
-from .forms import VeiculoForm
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
+from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto
+from ecommerce import catalog as catalog_ecommerce
+from ecommerce.services import filtrar_pedidos_loja_notificacoes_comercial
+from .models import (
+    Funcionario,
+    Veiculo,
+    Pedido,
+    ItemPedido,
+    Auditoria,
+    Praca,
+    EnderecoCliente,
+    PERFIS_GESTAO_ROTAS,
+    PERFIS_PAINEL_BI_LOJA,
+    PerfilUsuario,
+    UsuarioClienteSankhya,
+)
+from .forms import VeiculoForm, CriarUsuarioClienteSankhyaForm, AlterarSenhaUsuarioClienteForm
 from .services import FuncionarioService, PedidoService
-from django.db.models import Count, Sum, Q
-from django.db.models.functions import TruncMonth
-from datetime import datetime, timedelta
+from django.db.models import Count, Prefetch, Sum, Q, Value
+from django.db.models import OuterRef, Subquery
+from django.db.models.functions import Coalesce, TruncMonth
+from datetime import datetime, timedelta, date
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
-from django.contrib.auth.mixins import LoginRequiredMixin
+from .mixins import PerfilBIAccessMixin, PerfilGestaoRotasMixin, PerfilMapaRotasEcommerceMixin
+from .decorators import requer_acesso_bi
+from .perfil_utils import ensure_perfil
 from django.views import View
 from django.contrib import messages
 from django.urls import reverse
@@ -18,10 +44,22 @@ from django.views.decorators.http import require_POST, require_http_methods
 import json
 from django.views.generic import ListView, UpdateView, DeleteView
 from django.db import connection
+from django.utils import timezone
 import time
 import traceback
 from .services import VeiculoService, PedidoService, FuncionarioService, ClienteService
+from api_sankhya.tasks import run_integracao_sankhya
 from django.db import connections
+from ecommerce.models import (
+    NotificacaoLoja,
+    PedidoLoja,
+    RotaDia,
+    RotaDiaAjudante,
+    RotaDiaCliente,
+    RotaPadrao,
+    RotaPadraoAjudante,
+    RotaPadraoCliente,
+)
 
 
 def log_exception(request, origem, error, context=None):
@@ -41,7 +79,7 @@ def log_exception(request, origem, error, context=None):
         obs=f"EXCEÇÃO: {json.dumps(error_details, indent=2)}"
     )
 
-class IndexView(LoginRequiredMixin, View):
+class IndexView(PerfilBIAccessMixin, View):
     def get(self, request):
         if request.user.is_authenticated:
             # Contagem de funcionários por tipo
@@ -110,7 +148,7 @@ class IndexView(LoginRequiredMixin, View):
             return render(request, 'home_globo.html', context)
         return render(request, 'index.html')
 
-class DashboardView(LoginRequiredMixin, View):
+class DashboardView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Contagem de funcionários por tipo
         total_motoristas = Funcionario.objects.filter(tipo='Motorista').count()
@@ -166,7 +204,7 @@ class DashboardView(LoginRequiredMixin, View):
         
         return render(request, 'dashboard.html', context)
 
-class ListFuncionarioView(LoginRequiredMixin, ListView):
+class ListFuncionarioView(PerfilBIAccessMixin, ListView):
     model = Funcionario
     template_name = 'funcionario/listFuncionario.html'
     context_object_name = 'funcionarios'
@@ -216,7 +254,7 @@ class ListFuncionarioView(LoginRequiredMixin, ListView):
         
         return context
 
-class CadastrarFuncionarioView(LoginRequiredMixin, View):
+class CadastrarFuncionarioView(PerfilBIAccessMixin, View):
     def get(self, request):
         return render(request, 'funcionario/addFuncionario.html')
         
@@ -243,7 +281,7 @@ class CadastrarFuncionarioView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao cadastrar funcionário: {str(e)}')
             return render(request, 'funcionario/addFuncionario.html')
 
-class ListVeiculoView(LoginRequiredMixin, ListView):
+class ListVeiculoView(PerfilBIAccessMixin, ListView):
     model = Veiculo
     template_name = 'veiculo/listVeiculo.html'
     context_object_name = 'veiculos'
@@ -295,7 +333,7 @@ class ListVeiculoView(LoginRequiredMixin, ListView):
         
         return context
 
-class CadastrarVeiculoView(LoginRequiredMixin, View):
+class CadastrarVeiculoView(PerfilBIAccessMixin, View):
     def get(self, request):
         return render(request, 'veiculo/addVeiculo.html')
     
@@ -370,7 +408,7 @@ class CadastrarVeiculoView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao cadastrar veículo: {str(e)}')
             return render(request, 'veiculo/addVeiculo.html')
 
-class CadastrarPedidoView(LoginRequiredMixin, View):
+class CadastrarPedidoView(PerfilBIAccessMixin, View):
     template_name = 'pedido/addPedido.html'
     
     def get(self, request):
@@ -422,7 +460,7 @@ class CadastrarPedidoView(LoginRequiredMixin, View):
         
         return redirect('list_pedido')
 
-class ListPedidoView(LoginRequiredMixin, View):
+class ListPedidoView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Inicializar queryset
         pedidos = Pedido.objects.all()
@@ -520,7 +558,7 @@ class ListPedidoView(LoginRequiredMixin, View):
         
         return render(request, 'pedido/listPedido.html', context)
 
-class ViewPedidoView(LoginRequiredMixin, View):
+class ViewPedidoView(PerfilBIAccessMixin, View):
     def get(self, request, pedido_id):
         pedido = Pedido.objects.get(id=pedido_id)
         itens = ItemPedido.objects.filter(pedido=pedido)
@@ -545,6 +583,7 @@ class ViewPedidoView(LoginRequiredMixin, View):
         return render(request, 'pedido/viewPedido.html', context)
 
 @login_required
+@requer_acesso_bi
 def edit_pedido(request, pedido_id):
     pedido = get_object_or_404(Pedido, id=pedido_id)
     itens = ItemPedido.objects.filter(pedido=pedido)
@@ -583,7 +622,7 @@ def edit_pedido(request, pedido_id):
 
     return render(request, 'pedido/addPedido.html', {'pedido': pedido, 'itens': itens})
 
-class DeletePedidoView(LoginRequiredMixin, View):
+class DeletePedidoView(PerfilBIAccessMixin, View):
     def post(self, request, pedido_id):
         try:
             pedido = Pedido.objects.get(id=pedido_id)
@@ -627,6 +666,7 @@ class DeletePedidoView(LoginRequiredMixin, View):
             }, status=500)
 
 @login_required
+@requer_acesso_bi
 def add_pedido(request):
     if request.method == 'POST':
         try:
@@ -675,6 +715,7 @@ def add_pedido(request):
     return render(request, 'pedido/addPedido.html')
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def sync_pedido(request, pk):
     try:
@@ -703,6 +744,7 @@ def sync_pedido(request, pk):
         }, status=500)
 
 @login_required
+@requer_acesso_bi
 def sync_pedido_batch(request):
     if request.method == 'POST':
         try:
@@ -712,8 +754,9 @@ def sync_pedido_batch(request):
             if not pedido_ids:
                 return JsonResponse({'success': False, 'message': 'Nenhum pedido selecionado'})
             
-            # Buscar pedidos não sincronizados
-            pedidos = Pedido.objects.filter(id__in=pedido_ids, sincronizado=False)
+            # Permite reenvio: buscar todos os pedidos selecionados,
+            # independentemente do status de sincronização.
+            pedidos = Pedido.objects.filter(id__in=pedido_ids)
             
             if not pedidos.exists():
                 return JsonResponse({'success': False, 'message': 'Nenhum pedido válido para sincronização'})
@@ -741,7 +784,7 @@ def sync_pedido_batch(request):
     
     return JsonResponse({'success': False, 'message': 'Método não permitido'}, status=405)
 
-class RelatorioPedidoView(LoginRequiredMixin, View):
+class RelatorioPedidoView(PerfilBIAccessMixin, View):
     def get(self, request):
         # Inicializar queryset
         pedidos = Pedido.objects.all()
@@ -811,7 +854,7 @@ class RelatorioPedidoView(LoginRequiredMixin, View):
         
         return render(request, 'pedido/relatorioPedido.html', context)
 
-class VeiculoDetailView(LoginRequiredMixin, View):
+class VeiculoDetailView(PerfilBIAccessMixin, View):
     def get(self, request, pk):
         veiculo = get_object_or_404(Veiculo, pk=pk)
         
@@ -824,7 +867,7 @@ class VeiculoDetailView(LoginRequiredMixin, View):
     def post(self, request, pk):
         return self.get(request, pk)
 
-class VeiculoEditView(LoginRequiredMixin, View):
+class VeiculoEditView(PerfilBIAccessMixin, View):
     def get(self, request, pk):
         veiculo = get_object_or_404(Veiculo, pk=pk)
         return render(request, 'veiculo/veiculo_edit.html', {'veiculo': veiculo})
@@ -898,7 +941,7 @@ class VeiculoEditView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao atualizar veículo: {str(e)}')
             return render(request, 'veiculo/veiculo_edit.html', {'veiculo': veiculo})
 
-class VeiculoDeleteView(LoginRequiredMixin, View):
+class VeiculoDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             veiculo = get_object_or_404(Veiculo, pk=pk)
@@ -941,7 +984,7 @@ class VeiculoDeleteView(LoginRequiredMixin, View):
                 'message': f'Erro ao excluir veículo: {str(e)}'
             }, status=500)
 
-class FuncionarioEditView(LoginRequiredMixin, UpdateView):
+class FuncionarioEditView(PerfilBIAccessMixin, UpdateView):
     model = Funcionario
     template_name = 'funcionario/funcionario_edit.html'
     fields = ['nome', 'cpf', 'codigo_erp', 'tipo', 'status']
@@ -955,7 +998,7 @@ class FuncionarioEditView(LoginRequiredMixin, UpdateView):
         messages.error(self.request, 'Erro ao atualizar funcionário.')
         return super().form_invalid(form)
 
-class FuncionarioDeleteView(LoginRequiredMixin, View):
+class FuncionarioDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             funcionario = get_object_or_404(Funcionario, pk=pk)
@@ -999,6 +1042,7 @@ class FuncionarioDeleteView(LoginRequiredMixin, View):
             }, status=500)
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def import_pedidos(request):
     max_retries = 3
@@ -1010,23 +1054,38 @@ def import_pedidos(request):
             Auditoria.objects.create(
                 origem="Importação de Pedidos",
                 user=request.user,
-                obs=f"Iniciando importação de pedidos via SP_ATUALIZA_PEDIDO. Tentativa {retry_count + 1} de {max_retries}."
+                obs=(
+                    "Iniciando importação de pedidos via integração api_sankhya "
+                    "(clientes -> contatos -> pedidos) + procedures "
+                    "(SP_ATUALIZA_CLIENTE_SANKHYA -> SP_PEDIDOS_SANKHYA). "
+                    f"Tentativa {retry_count + 1} de {max_retries}."
+                )
             )
+
+            resultado_clientes = run_integracao_sankhya("clientes")
+            if resultado_clientes.get("erro"):
+                raise RuntimeError(f"Erro integração clientes: {resultado_clientes.get('erro')}")
+
+            resultado_contatos = run_integracao_sankhya("contatos")
+            if resultado_contatos.get("erro"):
+                raise RuntimeError(f"Erro integração contatos: {resultado_contatos.get('erro')}")
+
+            resultado_pedidos = run_integracao_sankhya("pedidos")
+            if resultado_pedidos.get("erro"):
+                raise RuntimeError(f"Erro integração pedidos: {resultado_pedidos.get('erro')}")
             
             # Fechar todas as conexões existentes
             connection.close()
             
             # Criar nova conexão
             with connection.cursor() as cursor:
-                # Executar a stored procedure
-
-                cursor.execute("exec sp_atualiza_cliente")
-                cursor.execute("EXEC SP_ATUALIZA_PEDIDO")
+                # Executar procedures na ordem definida
+                cursor.execute("EXEC SP_ATUALIZA_CLIENTE_SANKHYA")
+                rowcount_clientes = cursor.rowcount
+                cursor.execute("EXEC SP_PEDIDOS_SANKHYA")
                 
                 # Obter o número de registros afetados
-                rowcount = cursor.rowcount
-
-                print(rowcount)
+                rowcount_pedidos = cursor.rowcount
                 
                 # Fechar a conexão explicitamente
                 cursor.close()
@@ -1036,23 +1095,28 @@ def import_pedidos(request):
                 Auditoria.objects.create(
                     origem="Importação de Pedidos",
                     user=request.user,
-                    obs=f"Importação de pedidos realizada com sucesso via SP_ATUALIZA_PEDIDO. {rowcount} pedido(s) afetado(s)."
+                    obs=(
+                        "Importação de pedidos realizada com sucesso via "
+                        "api_sankhya (clientes -> contatos -> pedidos) + procedures "
+                        "(SP_ATUALIZA_CLIENTE_SANKHYA -> SP_PEDIDOS_SANKHYA). "
+                        f"Clientes Sankhya processados: {resultado_clientes.get('total_processados', 0)}. "
+                        f"Contatos Sankhya processados: {resultado_contatos.get('total_processados', 0)}. "
+                        f"Pedidos Sankhya processados: {resultado_pedidos.get('total_processados', 0)}. "
+                        f"Procedure clientes afetou {rowcount_clientes}. "
+                        f"Procedure pedidos afetou {rowcount_pedidos}."
+                    )
                 )
 
-                msgCliente = ''
-                try:
-                    enviados, msgCliente = ClienteService.enviar_dados()
-                    msgCliente = 'Clientes e endereços enviados e sincronizados com sucesso'
-                except Exception as e:
-                    msgCliente = f"Erro ao enviar clientes: {str(e)}"
-
-               
-                atualizado, msgAtualizacaoNF = atualizar_nf_pedidos()
-                
-                
                 return JsonResponse({
                     'success': True,
-                    'message': f'{rowcount} pedido(s) importado(s) com sucesso! \n {msgCliente} \n {msgAtualizacaoNF}'
+                    'message': (
+                        "Pedidos atualizados com sucesso no fluxo completo. "
+                        f"Clientes Sankhya: {resultado_clientes.get('total_processados', 0)} | "
+                        f"Contatos Sankhya: {resultado_contatos.get('total_processados', 0)} | "
+                        f"SP_ATUALIZA_CLIENTE_SANKHYA: {rowcount_clientes} | "
+                        f"Pedidos Sankhya: {resultado_pedidos.get('total_processados', 0)} | "
+                        f"SP_PEDIDOS_SANKHYA: {rowcount_pedidos}."
+                    )
                 })
                 
         except Exception as e:
@@ -1072,7 +1136,10 @@ def import_pedidos(request):
                 context={
                     'retry_count': retry_count,
                     'max_retries': max_retries,
-                    'operation': 'SP_ATUALIZA_PEDIDO'
+                    'operation': (
+                        'api_sankhya.clientes -> api_sankhya.contatos -> SP_ATUALIZA_CLIENTE_SANKHYA -> '
+                        'api_sankhya.pedidos -> SP_PEDIDOS_SANKHYA'
+                    )
                 }
             )
             
@@ -1087,6 +1154,7 @@ def import_pedidos(request):
                 }, status=500)
 
 @login_required
+@requer_acesso_bi
 @require_POST
 def import_veiculos(request):
     max_retries = 3
@@ -1097,8 +1165,15 @@ def import_veiculos(request):
             Auditoria.objects.create(
                 origem="Importação de Veículos",
                 user=request.user,
-                obs=f"Iniciando importação de veículos via SP_ATUALIZA_VEICULO. Tentativa {retry_count + 1} de {max_retries}."
+                obs=(
+                    "Iniciando importação de veículos via integração api_sankhya "
+                    f"(veículos) + SP_ATUALIZA_VEICULO_SANKHYA. "
+                    f"Tentativa {retry_count + 1} de {max_retries}."
+                )
             )
+            resultado_integracao = run_integracao_sankhya("veiculos")
+            if resultado_integracao.get("erro"):
+                raise RuntimeError(resultado_integracao.get("erro"))
             
             # Fechar todas as conexões existentes
             connection.close()
@@ -1106,7 +1181,7 @@ def import_veiculos(request):
             # Criar nova conexão
             with connection.cursor() as cursor:
                 # Executar a stored procedure
-                cursor.execute("EXEC SP_ATUALIZA_VEICULO")
+                cursor.execute("EXEC SP_ATUALIZA_VEICULO_SANKHYA")
                 
                 # Obter o número de registros afetados
                 rowcount = cursor.rowcount
@@ -1133,7 +1208,13 @@ def import_veiculos(request):
                         Auditoria.objects.create(
                             origem="Importação de Veículos",
                             user=request.user,
-                            obs=f"Importação de veículos realizada com sucesso via SP_ATUALIZA_VEICULO. {rowcount} veículo(s) afetado(s). {total_nao_sincronizados} veículo(s) sincronizado(s) com o webservice."
+                            obs=(
+                                "Importação de veículos realizada com sucesso via "
+                                "api_sankhya (veículos) + SP_ATUALIZA_VEICULO_SANKHYA. "
+                                f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)}. "
+                                f"Procedure afetou {rowcount} veículo(s). "
+                                f"{total_nao_sincronizados} veículo(s) sincronizado(s) com o webservice."
+                            )
                         )
                     except Exception as ws_error:
                         # Registrar erro do webservice na auditoria
@@ -1148,12 +1229,22 @@ def import_veiculos(request):
                     Auditoria.objects.create(
                         origem="Importação de Veículos",
                         user=request.user,
-                        obs=f"Importação de veículos realizada com sucesso via SP_ATUALIZA_VEICULO. {rowcount} veículo(s) afetado(s). Nenhum veículo para sincronizar."
+                        obs=(
+                            "Importação de veículos realizada com sucesso via "
+                            "api_sankhya (veículos) + SP_ATUALIZA_VEICULO_SANKHYA. "
+                            f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)}. "
+                            f"Procedure afetou {rowcount} veículo(s). Nenhum veículo para sincronizar."
+                        )
                     )
                 
                 return JsonResponse({
                     'success': True,
-                    'message': f'{rowcount} veículo(s) importado(s) com sucesso! {total_nao_sincronizados} veículo(s) sincronizado(s) com o webservice.'
+                    'message': (
+                        "Veículos atualizados com sucesso via api_sankhya e procedure. "
+                        f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)} | "
+                        f"Procedure: {rowcount} veículo(s) afetado(s) | "
+                        f"Webservice: {total_nao_sincronizados} veículo(s) sincronizado(s)."
+                    )
                 })
                 
         except Exception as e:
@@ -1173,7 +1264,7 @@ def import_veiculos(request):
                 context={
                     'retry_count': retry_count,
                     'max_retries': max_retries,
-                    'operation': 'SP_ATUALIZA_VEICULO'
+                    'operation': 'api_sankhya.veiculos + SP_ATUALIZA_VEICULO_SANKHYA'
                 }
             )
             
@@ -1240,6 +1331,7 @@ class VeiculoUpdateView(UpdateView):
             raise
 
 @login_required
+@requer_acesso_bi
 def import_funcionarios(request):
     if request.method == 'POST':
         max_retries = 3
@@ -1252,8 +1344,16 @@ def import_funcionarios(request):
                 Auditoria.objects.create(
                     origem='Funcionario',
                     user=request.user,
-                    obs=f"Iniciando importação de funcionários via SP_ATUALIZA_FUNCIONARIO. Tentativa {retry_count + 1} de {max_retries}."
+                    obs=(
+                        "Iniciando importação de funcionários via integração api_sankhya "
+                        f"(funcionários) + SP_ATUALIZA_FUNC_SANKHYA. "
+                        f"Tentativa {retry_count + 1} de {max_retries}."
+                    )
                 )
+
+                resultado_integracao = run_integracao_sankhya("funcionarios")
+                if resultado_integracao.get("erro"):
+                    raise RuntimeError(resultado_integracao.get("erro"))
 
                 # Close any existing connections
 
@@ -1263,10 +1363,10 @@ def import_funcionarios(request):
                 with connection.cursor() as cursor:
                     # Execute the stored procedure
                     try:
-                        cursor.execute("EXEC SP_ATUALIZA_FUNCIONARIO")
+                        cursor.execute("EXEC SP_ATUALIZA_FUNC_SANKHYA")
                         rowcount = cursor.rowcount
                     except Exception as e:
-                        print(f"Erro ao executar SP_ATUALIZA_FUNCIONARIO: {str(e)}")
+                        print(f"Erro ao executar SP_ATUALIZA_FUNC_SANKHYA: {str(e)}")
                         raise
 
                 # Get non-synchronized employees
@@ -1298,18 +1398,34 @@ def import_funcionarios(request):
                     Auditoria.objects.create(
                         origem='Funcionario',
                         user=request.user,
-                        obs=f"Importação de funcionários realizada com sucesso via SP_ATUALIZA_FUNCIONARIO. {rowcount} funcionário(s) afetado(s). {total_nao_sincronizados} funcionário(s) sincronizado(s) com o webservice."
+                        obs=(
+                            "Importação de funcionários realizada com sucesso via "
+                            "api_sankhya (funcionários) + SP_ATUALIZA_FUNC_SANKHYA. "
+                            f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)}. "
+                            f"Procedure afetou {rowcount} funcionário(s). "
+                            f"{total_nao_sincronizados} funcionário(s) sincronizado(s) com o webservice."
+                        )
                     )
                 else:
                     Auditoria.objects.create(
                         origem='Funcionario',
                         user=request.user,
-                        obs=f"Importação de funcionários realizada com sucesso via SP_ATUALIZA_FUNCIONARIO. {rowcount} funcionário(s) afetado(s). Nenhum funcionário para sincronizar."
+                        obs=(
+                            "Importação de funcionários realizada com sucesso via "
+                            "api_sankhya (funcionários) + SP_ATUALIZA_FUNC_SANKHYA. "
+                            f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)}. "
+                            f"Procedure afetou {rowcount} funcionário(s). Nenhum funcionário para sincronizar."
+                        )
                     )
 
                 return JsonResponse({
                     'success': True,
-                    'message': f'Importação realizada com sucesso. {rowcount} funcionário(s) afetado(s). {total_nao_sincronizados} funcionário(s) sincronizado(s).'
+                    'message': (
+                        "Funcionários atualizados com sucesso via api_sankhya e procedure. "
+                        f"Processados Sankhya: {resultado_integracao.get('total_processados', 0)} | "
+                        f"Procedure: {rowcount} funcionário(s) afetado(s) | "
+                        f"Webservice: {total_nao_sincronizados} funcionário(s) sincronizado(s)."
+                    )
                 })
 
             except Exception as e:
@@ -1339,7 +1455,7 @@ def import_funcionarios(request):
         }, status=500)
 
 
-def atualizar_nf_pedidos():
+def atualizar_nf_pedidos(request=None):
     """
     View para atualizar os dados de nota fiscal dos pedidos.
     Atualiza pedidos onde o campo nf é igual ao pedido_erp e a serie is 99
@@ -1349,6 +1465,29 @@ def atualizar_nf_pedidos():
             
         # Criar nova conexão
         with connection.cursor() as cursor:
+            # Evita falha de conversão nvarchar->bigint dentro da procedure.
+            # Mapeia pedidos com pedido_erp não numérico antes de executar.
+            cursor.execute(
+                """
+                SELECT TOP 10 id, pedido_erp
+                FROM controleBI_pedido
+                WHERE pedido_erp IS NOT NULL
+                  AND LTRIM(RTRIM(pedido_erp)) <> ''
+                  AND TRY_CONVERT(BIGINT, pedido_erp) IS NULL
+                ORDER BY id DESC
+                """
+            )
+            invalidos = cursor.fetchall()
+            if invalidos:
+                detalhes = ", ".join(
+                    [f"id={row[0]} pedido_erp='{row[1]}'" for row in invalidos]
+                )
+                return (
+                    False,
+                    "ERROR: Existem pedidos com pedido_erp não numérico, "
+                    f"impedindo a execução de SP_ATUALIZA_NF_PEDIDO. Exemplos: {detalhes}",
+                )
+
             # Executar a stored procedure
             cursor.execute("EXEC SP_ATUALIZA_NF_PEDIDO")
             
@@ -1382,16 +1521,20 @@ def atualizar_nf_pedidos():
             pass
         
           # Registrar sucesso na auditoria
-        Auditoria.objects.create(
-            origem="Atualização de Nota Fiscal do Pedido",
-            user=request.user,
-            obs=f"ERROR: {str(e)}"
-        )
+        auditoria_kwargs = {
+            "origem": "Atualização de Nota Fiscal do Pedido",
+            "obs": f"ERROR: {str(e)}",
+        }
+        if request is not None:
+            auditoria_kwargs["user"] = request.user
+        else:
+            auditoria_kwargs["user_id"] = 1
+        Auditoria.objects.create(**auditoria_kwargs)
         return False, f"ERROR: {str(e)}"
 
 
 # Views para gestão de Praças
-class ListPracaView(LoginRequiredMixin, ListView):
+class ListPracaView(PerfilBIAccessMixin, ListView):
     model = Praca
     template_name = 'praca/listPraca.html'
     context_object_name = 'pracas'
@@ -1422,7 +1565,7 @@ class ListPracaView(LoginRequiredMixin, ListView):
         return context
 
 
-class CadastrarPracaView(LoginRequiredMixin, View):
+class CadastrarPracaView(PerfilBIAccessMixin, View):
     template_name = 'praca/addPraca.html'
 
     def get(self, request):
@@ -1465,7 +1608,7 @@ class CadastrarPracaView(LoginRequiredMixin, View):
             return render(request, self.template_name)
 
 
-class PracaEditView(LoginRequiredMixin, UpdateView):
+class PracaEditView(PerfilBIAccessMixin, UpdateView):
     model = Praca
     template_name = 'praca/praca_edit.html'
     fields = ['praca']
@@ -1495,7 +1638,7 @@ class PracaEditView(LoginRequiredMixin, UpdateView):
         return super().form_invalid(form)
 
 
-class PracaDeleteView(LoginRequiredMixin, View):
+class PracaDeleteView(PerfilBIAccessMixin, View):
     def post(self, request, pk):
         try:
             praca = get_object_or_404(Praca, pk=pk)
@@ -1524,7 +1667,7 @@ class PracaDeleteView(LoginRequiredMixin, View):
         
         return redirect('list_praca')
 
-class GerenciarEnderecosPracaView(LoginRequiredMixin, View):
+class GerenciarEnderecosPracaView(PerfilBIAccessMixin, View):
     template_name = 'praca/gerenciar_enderecos.html'
 
     def get(self, request, pk):
@@ -1625,3 +1768,1321 @@ class GerenciarEnderecosPracaView(LoginRequiredMixin, View):
             messages.error(request, f'Erro ao processar ação: {str(e)}')
         
         return redirect('gerenciar_enderecos_praca', pk=pk)
+
+
+class ListClienteSankhyaGestaoView(PerfilBIAccessMixin, ListView):
+    """Lista clientes da tabela sankhya_cliente para gestão de usuários do sistema."""
+
+    model = ClienteSankhya
+    template_name = 'cliente_sankhya/list_clientes_gestao.html'
+    context_object_name = 'clientes'
+    paginate_by = 20
+
+    def get_queryset(self):
+        qs = ClienteSankhya.objects.annotate(qtd_usuarios=Count('usuarios_sistema'))
+        search = self.request.GET.get('search', '').strip()
+        if search:
+            q = (
+                Q(nome__icontains=search)
+                | Q(razao__icontains=search)
+                | Q(cnpj_cpf__icontains=search)
+            )
+            if search.isdigit():
+                q |= Q(codigo_cliente=int(search))
+            qs = qs.filter(q)
+        return qs.order_by('nome', 'razao', 'codigo_cliente')
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['current_search'] = self.request.GET.get('search', '')
+        return ctx
+
+
+class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
+    """Por cliente: criar usuários (perfil cliente) e alterar senhas."""
+
+    template_name = 'cliente_sankhya/gestao_usuarios_cliente.html'
+
+    def get_cliente(self, pk):
+        return get_object_or_404(ClienteSankhya, pk=pk)
+
+    def get(self, request, pk):
+        cliente = self.get_cliente(pk)
+        vinculos = (
+            UsuarioClienteSankhya.objects.filter(cliente=cliente)
+            .select_related('user')
+            .order_by('user__username')
+        )
+        form = CriarUsuarioClienteSankhyaForm()
+        return render(
+            request,
+            self.template_name,
+            {
+                'cliente': cliente,
+                'vinculos': vinculos,
+                'form_criar': form,
+                'form_senha': AlterarSenhaUsuarioClienteForm(),
+            },
+        )
+
+    def post(self, request, pk):
+        cliente = self.get_cliente(pk)
+        action = request.POST.get('action')
+
+        if action == 'criar_usuario':
+            form = CriarUsuarioClienteSankhyaForm(request.POST)
+            if form.is_valid():
+                try:
+                    validate_password(form.cleaned_data['password'], user=User(username=form.cleaned_data['username']))
+                except DjangoValidationError as e:
+                    for err in e.messages:
+                        form.add_error('password', err)
+            if form.is_valid():
+                try:
+                    with transaction.atomic():
+                        user = User.objects.create_user(
+                            username=form.cleaned_data['username'],
+                            email=form.cleaned_data.get('email') or '',
+                            password=form.cleaned_data['password'],
+                            first_name=form.cleaned_data.get('first_name') or '',
+                        )
+                        PerfilUsuario.objects.filter(user=user).update(perfil=PerfilUsuario.Perfil.CLIENTE)
+                        UsuarioClienteSankhya.objects.create(cliente=cliente, user=user)
+                    messages.success(
+                        request,
+                        f'Usuário "{user.username}" criado e vinculado ao cliente.',
+                    )
+                    return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+                except Exception as exc:
+                    messages.error(request, f'Erro ao criar usuário: {exc}')
+            vinculos = (
+                UsuarioClienteSankhya.objects.filter(cliente=cliente)
+                .select_related('user')
+                .order_by('user__username')
+            )
+            return render(
+                request,
+                self.template_name,
+                {
+                    'cliente': cliente,
+                    'vinculos': vinculos,
+                    'form_criar': form,
+                    'form_senha': AlterarSenhaUsuarioClienteForm(),
+                },
+            )
+
+        if action == 'alterar_senha':
+            raw_uid = request.POST.get('user_id')
+            user = get_object_or_404(User, pk=raw_uid)
+            vinculo = UsuarioClienteSankhya.objects.filter(cliente=cliente, user=user).first()
+            if not vinculo:
+                messages.error(request, 'Usuário não pertence a este cliente.')
+                return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+            form_senha = AlterarSenhaUsuarioClienteForm(request.POST)
+            if form_senha.is_valid():
+                pwd = form_senha.cleaned_data['new_password']
+                try:
+                    validate_password(pwd, user=user)
+                except DjangoValidationError as e:
+                    for err in e.messages:
+                        form_senha.add_error('new_password', err)
+            if form_senha.is_valid():
+                user.set_password(form_senha.cleaned_data['new_password'])
+                user.save()
+                messages.success(request, f'Senha do usuário "{user.username}" atualizada.')
+                return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+            vinculos = (
+                UsuarioClienteSankhya.objects.filter(cliente=cliente)
+                .select_related('user')
+                .order_by('user__username')
+            )
+            return render(
+                request,
+                self.template_name,
+                {
+                    'cliente': cliente,
+                    'vinculos': vinculos,
+                    'form_criar': CriarUsuarioClienteSankhyaForm(),
+                    'form_senha': form_senha,
+                    'senha_user_id': raw_uid,
+                    'abrir_modal_senha': True,
+                },
+            )
+
+        return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+
+
+def _collect_codigos_arvore_grupos(nodes: list[dict]) -> list[int]:
+    out: list[int] = []
+    for n in nodes:
+        out.append(n['grupo'].codigo_grupo_produto)
+        out.extend(_collect_codigos_arvore_grupos(n['filhos']))
+    return out
+
+
+class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
+    """Hierarquia sankhya_grupo_produto: define quais categorias aparecem na loja."""
+
+    template_name = 'ecommerce_gestao/categorias.html'
+
+    def get(self, request):
+        perfil = ensure_perfil(request.user)
+        if not perfil or perfil.perfil != PerfilUsuario.Perfil.ADMINISTRADOR:
+            messages.error(request, 'Apenas administradores podem acessar a gestão de categorias.')
+            return redirect('dashboard')
+        search = catalog_ecommerce.normalizar_busca(request.GET.get('search'))
+        _by_id, by_pai, raizes = catalog_ecommerce.grupos_ativos_map(apenas_visiveis_loja=False)
+        arvore_full = catalog_ecommerce.arvore_grupos_nested(raizes, by_pai)
+        tem_grupos_no_sistema = bool(raizes)
+
+        if search:
+            mids = catalog_ecommerce.matching_grupo_produto_ids_por_texto(
+                list(_by_id.values()), search
+            )
+            vis = catalog_ecommerce.ids_grupos_com_hierarquia_busca(mids, _by_id, by_pai)
+            arvore = catalog_ecommerce.filtrar_arvore_grupos_por_ids(arvore_full, vis) if vis else []
+        else:
+            arvore = arvore_full
+
+        filtro_sem_resultado = bool(search) and not arvore and tem_grupos_no_sistema
+        visible_grupo_ids = _collect_codigos_arvore_grupos(arvore) if search and arvore else []
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'arvore': arvore,
+                'current_search': search,
+                'filtro_sem_resultado': filtro_sem_resultado,
+                'busca_categorias_max': catalog_ecommerce.BUSCA_MAX_LEN,
+                'visible_grupo_ids': visible_grupo_ids,
+            },
+        )
+
+    def post(self, request):
+        perfil = ensure_perfil(request.user)
+        if not perfil or perfil.perfil != PerfilUsuario.Perfil.ADMINISTRADOR:
+            messages.error(request, 'Apenas administradores podem alterar categorias do e-commerce.')
+            return redirect('dashboard')
+        search = catalog_ecommerce.normalizar_busca(request.POST.get('search'))
+        codigos_marcados: list[int] = []
+        for x in request.POST.getlist('mostrar_ecommerce'):
+            try:
+                codigos_marcados.append(int(x))
+            except (TypeError, ValueError):
+                continue
+        visiveis_tela: set[int] = set()
+        for x in request.POST.getlist('visivel'):
+            try:
+                visiveis_tela.add(int(x))
+            except (TypeError, ValueError):
+                continue
+
+        if search and visiveis_tela:
+            marcados_set = set(codigos_marcados) & visiveis_tela
+            with transaction.atomic():
+                GrupoProduto.objects.filter(
+                    ativo=True,
+                    codigo_grupo_produto__in=visiveis_tela,
+                ).update(mostrar_no_ecommerce=False)
+                if marcados_set:
+                    GrupoProduto.objects.filter(
+                        ativo=True,
+                        codigo_grupo_produto__in=marcados_set,
+                    ).update(mostrar_no_ecommerce=True)
+            messages.success(request, 'Categorias visíveis na loja foram atualizadas (apenas itens do filtro).')
+        elif search and not visiveis_tela:
+            messages.warning(
+                request,
+                'Com o filtro atual não há categorias na tela; nenhuma alteração foi salva. Limpe o filtro para editar tudo.',
+            )
+        else:
+            with transaction.atomic():
+                GrupoProduto.objects.filter(ativo=True).update(mostrar_no_ecommerce=False)
+                if codigos_marcados:
+                    GrupoProduto.objects.filter(
+                        ativo=True,
+                        codigo_grupo_produto__in=codigos_marcados,
+                    ).update(mostrar_no_ecommerce=True)
+            messages.success(request, 'Categorias visíveis na loja foram atualizadas.')
+
+        redir = reverse('gestao_categorias_ecommerce')
+        if search:
+            redir = f'{redir}?{urlencode({"search": search})}'
+        return redirect(redir)
+
+
+def _perfil_bi_comercial_ou_admin(user):
+    perfil = ensure_perfil(user)
+    if perfil is None:
+        return False
+    return perfil.perfil in PERFIS_PAINEL_BI_LOJA
+
+
+def _veiculos_ativos_qs():
+    return Veiculo.objects.filter(status_inicial='Ativo').order_by('placa')
+
+
+def _motoristas_ativos_qs():
+    return Funcionario.objects.filter(tipo='Motorista', status='Ativo').order_by('nome')
+
+
+def _ajudantes_ativos_qs():
+    return Funcionario.objects.filter(tipo='Ajudante', status='Ativo').order_by('nome')
+
+
+def _veiculos_disponiveis_rota_padrao(rota_atual=None):
+    """Veículos ativos ainda não vinculados a outra rota padrão (mantém o da rota em edição)."""
+    ocupados_qs = RotaPadrao.objects.exclude(veiculo__isnull=True)
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        ocupados_qs = ocupados_qs.exclude(pk=rota_atual.pk)
+    ocupados = ocupados_qs.values_list('veiculo_id', flat=True)
+    livres = Veiculo.objects.filter(status_inicial='Ativo').exclude(id__in=ocupados)
+    if rota_atual and rota_atual.veiculo_id:
+        extra = Veiculo.objects.filter(pk=rota_atual.veiculo_id, status_inicial='Ativo')
+        return (livres | extra).distinct().order_by('placa')
+    return livres.order_by('placa')
+
+
+def _motoristas_disponiveis_rota_padrao(rota_atual=None):
+    ocupados_qs = RotaPadrao.objects.exclude(motorista__isnull=True)
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        ocupados_qs = ocupados_qs.exclude(pk=rota_atual.pk)
+    ocupados = ocupados_qs.values_list('motorista_id', flat=True)
+    livres = Funcionario.objects.filter(tipo='Motorista', status='Ativo').exclude(id__in=ocupados)
+    if rota_atual and rota_atual.motorista_id:
+        extra = Funcionario.objects.filter(
+            pk=rota_atual.motorista_id, tipo='Motorista', status='Ativo'
+        )
+        return (livres | extra).distinct().order_by('nome')
+    return livres.order_by('nome')
+
+
+def _ajudantes_disponiveis_rota_padrao(rota_atual=None):
+    """Ajudantes ativos não alocados em outra rota padrão (exceto na rota em edição)."""
+    ocupados_qs = RotaPadraoAjudante.objects.all()
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        ocupados_qs = ocupados_qs.exclude(rota_id=rota_atual.pk)
+    ocupados = ocupados_qs.values_list('funcionario_id', flat=True)
+    return (
+        Funcionario.objects.filter(tipo='Ajudante', status='Ativo')
+        .exclude(id__in=ocupados)
+        .order_by('nome')
+    )
+
+
+def _veiculo_livre_outras_rotas_padrao(veiculo_id, rota_atual) -> bool:
+    if not veiculo_id:
+        return True
+    q = RotaPadrao.objects.exclude(veiculo__isnull=True).filter(veiculo_id=veiculo_id)
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        q = q.exclude(pk=rota_atual.pk)
+    return not q.exists()
+
+
+def _motorista_livre_outras_rotas_padrao(motorista_id, rota_atual) -> bool:
+    if not motorista_id:
+        return True
+    q = RotaPadrao.objects.exclude(motorista__isnull=True).filter(motorista_id=motorista_id)
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        q = q.exclude(pk=rota_atual.pk)
+    return not q.exists()
+
+
+def _ajudante_livre_outras_rotas_padrao(funcionario_id, rota_atual) -> bool:
+    q = RotaPadraoAjudante.objects.filter(funcionario_id=funcionario_id)
+    if rota_atual and getattr(rota_atual, 'pk', None):
+        q = q.exclude(rota_id=rota_atual.pk)
+    return not q.exists()
+
+
+def _nome_rota_dia_executada(rota_dia: RotaDia) -> str:
+    if rota_dia.rota_padrao:
+        return rota_dia.rota_padrao.nome
+    return f'Rota #{rota_dia.pk}'
+
+
+def _copiar_equipe_padrao_para_rota_dia(rota_dia, rota_padrao):
+    rota_dia.veiculo_id = rota_padrao.veiculo_id
+    rota_dia.motorista_id = rota_padrao.motorista_id
+    rota_dia.save(update_fields=['veiculo', 'motorista', 'atualizado_em'])
+    RotaDiaAjudante.objects.filter(rota_dia=rota_dia).delete()
+    linhas = list(rota_padrao.ajudantes_equipe.order_by('ordem', 'id'))
+    if linhas:
+        RotaDiaAjudante.objects.bulk_create(
+            [
+                RotaDiaAjudante(rota_dia=rota_dia, funcionario_id=row.funcionario_id, ordem=idx)
+                for idx, row in enumerate(linhas)
+            ]
+        )
+
+
+def _ensure_equipe_from_padrao_if_empty(rota_dia, rota_padrao):
+    if rota_dia.veiculo_id or rota_dia.motorista_id or rota_dia.ajudantes_equipe.exists():
+        return
+    if not (rota_padrao.veiculo_id or rota_padrao.motorista_id or rota_padrao.ajudantes_equipe.exists()):
+        return
+    _copiar_equipe_padrao_para_rota_dia(rota_dia, rota_padrao)
+
+
+class GestaoRotasEcommerceView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/rotas.html'
+
+    def get(self, request):
+        rotas = (
+            RotaPadrao.objects.select_related('responsavel', 'veiculo', 'motorista')
+            .prefetch_related('clientes_rota')
+            .annotate(total_ajudantes=Count('ajudantes_equipe'))
+            .order_by('nome')
+        )
+        return render(request, self.template_name, {'rotas': rotas})
+
+
+class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
+    template_name = 'ecommerce_gestao/notificacoes.html'
+
+    @staticmethod
+    def pedidos_visiveis_para_usuario(user):
+        responsavel_nome_sq = Subquery(
+            RotaDiaCliente.objects.filter(
+                cliente_id=OuterRef('cliente_id'),
+                rota_dia__data=OuterRef('criado_em__date'),
+                rota_dia__rota_padrao__isnull=False,
+            )
+            .order_by('rota_dia_id', 'id')
+            .values('rota_dia__rota_padrao__responsavel__first_name')[:1]
+        )
+        responsavel_username_sq = Subquery(
+            RotaDiaCliente.objects.filter(
+                cliente_id=OuterRef('cliente_id'),
+                rota_dia__data=OuterRef('criado_em__date'),
+                rota_dia__rota_padrao__isnull=False,
+            )
+            .order_by('rota_dia_id', 'id')
+            .values('rota_dia__rota_padrao__responsavel__username')[:1]
+        )
+        pedidos = (
+            PedidoLoja.objects.select_related('cliente', 'user', 'aprovado_por')
+            .prefetch_related('itens')
+            .annotate(
+                comercial_responsavel_nome=responsavel_nome_sq,
+                comercial_responsavel_username=responsavel_username_sq,
+            )
+            .order_by('-criado_em')
+        )
+        perfil = ensure_perfil(user)
+        restrito_notificacoes_rota_dia = False
+        if perfil and perfil.perfil == PerfilUsuario.Perfil.COMERCIAL:
+            restrito_notificacoes_rota_dia = True
+            pedidos = filtrar_pedidos_loja_notificacoes_comercial(pedidos, user)
+        return pedidos, restrito_notificacoes_rota_dia
+
+    def get(self, request):
+        pedidos, restrito_notificacoes_rota_dia = self.pedidos_visiveis_para_usuario(
+            request.user
+        )
+        hoje_iso = date.today().isoformat()
+        status = (request.GET.get('status', PedidoLoja.Status.PENDENTE) or '').strip()
+        data_ini = (request.GET.get('data_ini', hoje_iso) or '').strip()
+        data_fim = (request.GET.get('data_fim', hoje_iso) or '').strip()
+
+        if status in {
+            PedidoLoja.Status.PENDENTE,
+            PedidoLoja.Status.AUTORIZADO,
+            PedidoLoja.Status.REJEITADO,
+        }:
+            pedidos = pedidos.filter(status=status)
+        else:
+            status = ''
+
+        if data_ini:
+            try:
+                pedidos = pedidos.filter(criado_em__date__gte=date.fromisoformat(data_ini))
+            except ValueError:
+                data_ini = ''
+        if data_fim:
+            try:
+                pedidos = pedidos.filter(criado_em__date__lte=date.fromisoformat(data_fim))
+            except ValueError:
+                data_fim = ''
+
+        contador = Counter()
+        for pedido in pedidos.filter(status=PedidoLoja.Status.PENDENTE):
+            nome = (
+                pedido.comercial_responsavel_nome
+                or pedido.comercial_responsavel_username
+                or 'Sem responsável'
+            )
+            contador[nome] += 1
+        pendencias_por_comercial = [
+            {'nome': nome, 'total': total}
+            for nome, total in sorted(contador.items(), key=lambda x: (-x[1], x[0]))
+        ]
+
+        context = {
+            'pedidos': pedidos,
+            'total_pedidos': pedidos.count(),
+            'pendentes': pedidos.filter(status=PedidoLoja.Status.PENDENTE).count(),
+            'autorizados': pedidos.filter(status=PedidoLoja.Status.AUTORIZADO).count(),
+            'rejeitados': pedidos.filter(status=PedidoLoja.Status.REJEITADO).count(),
+            'restrito_notificacoes_rota_dia': restrito_notificacoes_rota_dia,
+            'filtro_status': status,
+            'filtro_data_ini': data_ini,
+            'filtro_data_fim': data_fim,
+            'pendencias_por_comercial': pendencias_por_comercial,
+        }
+        return render(request, self.template_name, context)
+
+
+@login_required
+@requer_acesso_bi
+def notificacoes_pendentes_count_api(request):
+    pedidos, _ = GestaoNotificacoesEcommerceView.pedidos_visiveis_para_usuario(request.user)
+    total = pedidos.filter(status=PedidoLoja.Status.PENDENTE).count()
+    return JsonResponse({'pendentes': total})
+
+
+@login_required
+@requer_acesso_bi
+@require_POST
+def gestao_notificacao_aprovar(request, pk: int):
+    perfil = ensure_perfil(request.user)
+    if not perfil or perfil.perfil not in PERFIS_PAINEL_BI_LOJA:
+        messages.error(request, 'Sem permissão para aprovar pedido.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    pedidos_qs, _ = GestaoNotificacoesEcommerceView.pedidos_visiveis_para_usuario(request.user)
+    pedido = get_object_or_404(pedidos_qs, pk=pk)
+    if pedido.status != PedidoLoja.Status.PENDENTE:
+        messages.warning(request, 'Este pedido já foi analisado.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    pedido.status = PedidoLoja.Status.AUTORIZADO
+    pedido.aprovado_por = request.user
+    pedido.aprovado_em = timezone.now()
+    pedido.save(update_fields=['status', 'aprovado_por', 'aprovado_em', 'atualizado_em'])
+
+    NotificacaoLoja.objects.create(
+        user=pedido.user,
+        pedido=pedido,
+        titulo=f'Pedido #{pedido.pk} aprovado',
+        mensagem='Seu pedido foi aprovado pelo comercial e seguirá para integração no Sankhya.',
+    )
+    messages.success(request, f'Pedido #{pedido.pk} aprovado com sucesso.')
+    return redirect('gestao_notificacoes_ecommerce')
+
+
+@login_required
+@requer_acesso_bi
+@require_POST
+def gestao_notificacao_rejeitar(request, pk: int):
+    perfil = ensure_perfil(request.user)
+    if not perfil or perfil.perfil not in PERFIS_PAINEL_BI_LOJA:
+        messages.error(request, 'Sem permissão para rejeitar pedido.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    pedidos_qs, _ = GestaoNotificacoesEcommerceView.pedidos_visiveis_para_usuario(request.user)
+    pedido = get_object_or_404(pedidos_qs, pk=pk)
+    if pedido.status != PedidoLoja.Status.PENDENTE:
+        messages.warning(request, 'Este pedido já foi analisado.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    mensagem = (request.POST.get('mensagem') or '').strip()
+    if not mensagem:
+        messages.error(request, 'Informe a mensagem de rejeição para o cliente.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    pedido.status = PedidoLoja.Status.REJEITADO
+    pedido.observacao_comercial = mensagem
+    pedido.aprovado_por = request.user
+    pedido.aprovado_em = timezone.now()
+    pedido.save(
+        update_fields=[
+            'status',
+            'observacao_comercial',
+            'aprovado_por',
+            'aprovado_em',
+            'atualizado_em',
+        ]
+    )
+    NotificacaoLoja.objects.create(
+        user=pedido.user,
+        pedido=pedido,
+        titulo=f'Pedido #{pedido.pk} rejeitado',
+        mensagem=mensagem,
+    )
+    messages.success(request, f'Pedido #{pedido.pk} rejeitado e cliente notificado.')
+    return redirect('gestao_notificacoes_ecommerce')
+
+
+class EcommerceClientesSelectorView(PerfilBIAccessMixin, View):
+    """Lista clientes para o modal da loja com paginação (evita truncar em 200)."""
+
+    template_name = 'ecommerce_gestao/partials/loja_clientes_selector_list.html'
+    page_size = 150
+
+    def get(self, request):
+        q = (request.GET.get('q') or '').strip()
+        try:
+            offset = max(0, int(request.GET.get('offset', 0) or 0))
+        except (TypeError, ValueError):
+            offset = 0
+        selected_raw = request.session.get('ecommerce_cliente_context_id')
+        try:
+            selected_id = int(selected_raw)
+        except (TypeError, ValueError):
+            selected_id = None
+
+        qs = ClienteSankhya.objects.all()
+        if q:
+            lookup = (
+                Q(nome__icontains=q)
+                | Q(razao__icontains=q)
+                | Q(cnpj_cpf__icontains=q)
+            )
+            if q.isdigit():
+                lookup |= Q(codigo_cliente=int(q))
+            qs = qs.filter(lookup)
+        qs = qs.order_by('nome', 'razao', 'codigo_cliente')
+
+        limit = self.page_size + 1
+        batch = list(qs[offset : offset + limit])
+        has_more = len(batch) > self.page_size
+        batch = batch[: self.page_size]
+        total_carregados = offset + len(batch)
+
+        ctx = {
+            'clientes': batch,
+            'selected_id': selected_id,
+            'filtro': q,
+            'has_more': has_more,
+            'next_offset': offset + len(batch),
+            'total_carregados': total_carregados,
+        }
+
+        if request.GET.get('format') == 'json':
+            rows_html = render_to_string(
+                'ecommerce_gestao/partials/loja_clientes_selector_rows.html',
+                ctx,
+                request=request,
+            )
+            footer_html = ''
+            if has_more:
+                footer_html = render_to_string(
+                    'ecommerce_gestao/partials/loja_clientes_selector_footer_row.html',
+                    ctx,
+                    request=request,
+                )
+            return JsonResponse(
+                {
+                    'rows_html': rows_html,
+                    'footer_html': footer_html,
+                    'has_more': has_more,
+                    'next_offset': offset + len(batch),
+                    'total_carregados': total_carregados,
+                }
+            )
+
+        return render(request, self.template_name, ctx)
+
+
+class EcommerceSelecionarClienteView(PerfilBIAccessMixin, View):
+    def post(self, request):
+        perfil = ensure_perfil(request.user)
+        if not perfil or perfil.perfil not in PERFIS_PAINEL_BI_LOJA:
+            messages.error(request, 'Perfil sem permissão para selecionar cliente da loja.')
+            return redirect('dashboard')
+
+        cliente_id = request.POST.get('cliente_id')
+        next_url = request.POST.get('next') or reverse('ecommerce_home')
+
+        if not cliente_id:
+            request.session.pop('ecommerce_cliente_context_id', None)
+            messages.info(request, 'Seleção de cliente limpa.')
+            return redirect(next_url)
+
+        try:
+            cliente_id = int(cliente_id)
+        except (TypeError, ValueError):
+            messages.error(request, 'Cliente inválido.')
+            return redirect(next_url)
+
+        cliente = ClienteSankhya.objects.filter(id=cliente_id).first()
+        if not cliente:
+            messages.error(request, 'Cliente não encontrado.')
+            return redirect(next_url)
+
+        request.session['ecommerce_cliente_context_id'] = cliente.id
+        messages.success(
+            request,
+            f'Loja aberta para o cliente: {cliente.nome or cliente.razao or cliente.codigo_cliente}.',
+        )
+        return redirect(next_url)
+
+
+class RotasDiaListView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/rotas_dia_list.html'
+
+    def get(self, request):
+        data_ini = request.GET.get('data_ini')
+        data_fim = request.GET.get('data_fim')
+        rota_padrao_id = request.GET.get('rota_padrao')
+        # .order_by() limpa Meta.ordering (ordem, id); senão o SQL Server falha no GROUP BY da subquery.
+        _sub_total_clientes = (
+            RotaDiaCliente.objects.filter(rota_dia=OuterRef('pk'))
+            .values('rota_dia')
+            .annotate(n=Count('pk'))
+            .values('n')
+            .order_by()[:1]
+        )
+        _sub_total_ajudantes = (
+            RotaDiaAjudante.objects.filter(rota_dia=OuterRef('pk'))
+            .values('rota_dia')
+            .annotate(n=Count('pk'))
+            .values('n')
+            .order_by()[:1]
+        )
+        qs = (
+            RotaDia.objects.select_related('rota_padrao', 'criado_por', 'veiculo', 'motorista')
+            .annotate(
+                total_clientes=Coalesce(Subquery(_sub_total_clientes), Value(0)),
+                total_ajudantes=Coalesce(Subquery(_sub_total_ajudantes), Value(0)),
+            )
+            .order_by('-data', 'rota_padrao__nome', '-id')
+        )
+        if data_ini:
+            try:
+                qs = qs.filter(data__gte=date.fromisoformat(data_ini))
+            except ValueError:
+                data_ini = ''
+        if data_fim:
+            try:
+                qs = qs.filter(data__lte=date.fromisoformat(data_fim))
+            except ValueError:
+                data_fim = ''
+        if rota_padrao_id:
+            try:
+                qs = qs.filter(rota_padrao_id=int(rota_padrao_id))
+            except (TypeError, ValueError):
+                rota_padrao_id = ''
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'rotas_dia': qs,
+                'data_ini': data_ini or '',
+                'data_fim': data_fim or '',
+                'rota_padrao_id': str(rota_padrao_id or ''),
+                'rotas_padrao': RotaPadrao.objects.filter(ativa=True).order_by('nome'),
+            },
+        )
+
+
+DIAS_SEMANA_PT = (
+    'Segunda-feira',
+    'Terça-feira',
+    'Quarta-feira',
+    'Quinta-feira',
+    'Sexta-feira',
+    'Sábado',
+    'Domingo',
+)
+
+
+def _week_range_containing(d: date) -> tuple[date, date]:
+    start = d - timedelta(days=d.weekday())
+    end = start + timedelta(days=6)
+    return start, end
+
+
+class MapaRotasSemanaView(PerfilMapaRotasEcommerceMixin, View):
+    """Rotas a executar da semana (comercial: só rotas padrão em que é responsável)."""
+
+    template_name = 'ecommerce_gestao/mapa_rotas_semana.html'
+
+    def get(self, request):
+        ref_raw = request.GET.get('ref')
+        try:
+            ref = date.fromisoformat(ref_raw) if ref_raw else date.today()
+        except ValueError:
+            ref = date.today()
+        week_start, week_end = _week_range_containing(ref)
+
+        perfil = ensure_perfil(request.user)
+        qs = (
+            RotaDia.objects.filter(data__gte=week_start, data__lte=week_end)
+            .select_related('rota_padrao', 'rota_padrao__responsavel', 'veiculo', 'motorista', 'criado_por')
+            .prefetch_related(
+                'ajudantes_equipe__funcionario',
+                Prefetch(
+                    'clientes_rota',
+                    queryset=RotaDiaCliente.objects.select_related('cliente').order_by('ordem', 'id'),
+                ),
+            )
+            .annotate(total_clientes=Count('clientes_rota'))
+            .order_by('data', 'rota_padrao__nome', 'id')
+        )
+        if perfil and perfil.perfil == PerfilUsuario.Perfil.COMERCIAL:
+            qs = qs.filter(rota_padrao__responsavel=request.user)
+
+        rotas_list = list(qs)
+        rotas_por_dia = defaultdict(list)
+        for rd in rotas_list:
+            rotas_por_dia[rd.data].append(rd)
+
+        dias_grid = []
+        for i in range(7):
+            d = week_start + timedelta(days=i)
+            dias_grid.append(
+                {
+                    'data': d,
+                    'dia_semana': DIAS_SEMANA_PT[d.weekday()],
+                    'rotas': rotas_por_dia.get(d, []),
+                }
+            )
+
+        prev_week_ref = (week_start - timedelta(days=7)).isoformat()
+        next_week_ref = (week_start + timedelta(days=7)).isoformat()
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'week_start': week_start,
+                'week_end': week_end,
+                'ref': ref,
+                'dias_grid': dias_grid,
+                'prev_week_ref': prev_week_ref,
+                'next_week_ref': next_week_ref,
+                'total_rotas_semana': len(rotas_list),
+                'filtro_comercial': bool(perfil and perfil.perfil == PerfilUsuario.Perfil.COMERCIAL),
+                'pode_editar_rotas_dia': bool(perfil and perfil.perfil in PERFIS_GESTAO_ROTAS),
+            },
+        )
+
+
+class RotaPadraoFormView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/rota_form.html'
+
+    def get(self, request, pk=None):
+        rota = None
+        if pk:
+            rota = get_object_or_404(
+                RotaPadrao.objects.select_related('responsavel', 'veiculo', 'motorista').prefetch_related(
+                    'clientes_rota__cliente',
+                    'ajudantes_equipe',
+                ),
+                pk=pk,
+            )
+
+        responsaveis = (
+            User.objects.filter(perfil_usuario__perfil__in=PERFIS_PAINEL_BI_LOJA)
+            .order_by('first_name', 'username')
+            .distinct()
+        )
+        clientes = ClienteSankhya.objects.order_by('nome', 'razao', 'codigo_cliente')
+        selecionados = set()
+        if rota:
+            selecionados = set(
+                rota.clientes_rota.values_list('cliente_id', flat=True)
+            )
+        clientes = (
+            ClienteSankhya.objects.filter(
+                Q(rotas_padrao__isnull=True) | Q(id__in=selecionados)
+            )
+            .distinct()
+            .order_by('nome', 'razao', 'codigo_cliente')
+        )
+        ajudantes_selecionados = []
+        if rota:
+            ajudantes_selecionados = list(
+                rota.ajudantes_equipe.order_by('ordem', 'id').values_list('funcionario_id', flat=True)
+            )
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'rota': rota,
+                'responsaveis': responsaveis,
+                'clientes': clientes,
+                'selecionados': selecionados,
+                'veiculos': _veiculos_disponiveis_rota_padrao(rota),
+                'motoristas': _motoristas_disponiveis_rota_padrao(rota),
+                'ajudantes': _ajudantes_disponiveis_rota_padrao(rota),
+                'ajudantes_selecionados': ajudantes_selecionados,
+            },
+        )
+
+    def post(self, request, pk=None):
+        rota = None
+        if pk:
+            rota = get_object_or_404(RotaPadrao, pk=pk)
+
+        nome = (request.POST.get('nome') or '').strip()
+        descricao = (request.POST.get('descricao') or '').strip()
+        ativa = request.POST.get('ativa') == 'on'
+        responsavel_id = request.POST.get('responsavel')
+        cliente_ids = []
+        for cid in request.POST.getlist('clientes'):
+            try:
+                cliente_ids.append(int(cid))
+            except (TypeError, ValueError):
+                continue
+
+        veiculo_id = (request.POST.get('veiculo') or '').strip()
+        motorista_id = (request.POST.get('motorista') or '').strip()
+        ajudante_ids = []
+        for aid in request.POST.getlist('ajudantes'):
+            try:
+                ajudante_ids.append(int(aid))
+            except (TypeError, ValueError):
+                continue
+
+        if not nome:
+            messages.error(request, 'Informe o nome da rota.')
+            return self.get(request, pk=pk)
+
+        responsavel = User.objects.filter(pk=responsavel_id).first()
+        if not responsavel or not _perfil_bi_comercial_ou_admin(responsavel):
+            messages.error(request, 'Selecione um responsável comercial válido.')
+            return self.get(request, pk=pk)
+
+        veiculo = None
+        if veiculo_id:
+            veiculo = Veiculo.objects.filter(pk=veiculo_id, status_inicial='Ativo').first()
+            if not veiculo:
+                messages.error(request, 'Selecione um veículo ativo válido.')
+                return self.get(request, pk=pk)
+
+        motorista = None
+        if motorista_id:
+            motorista = Funcionario.objects.filter(
+                pk=motorista_id, tipo='Motorista', status='Ativo'
+            ).first()
+            if not motorista:
+                messages.error(request, 'Selecione um motorista ativo válido.')
+                return self.get(request, pk=pk)
+
+        ajudantes_validos = list(
+            Funcionario.objects.filter(
+                id__in=ajudante_ids, tipo='Ajudante', status='Ativo'
+            ).values_list('id', flat=True)
+        )
+        ajudantes_ordenados = list(
+            dict.fromkeys([fid for fid in ajudante_ids if fid in ajudantes_validos])
+        )
+
+        if veiculo and not _veiculo_livre_outras_rotas_padrao(veiculo.pk, rota):
+            messages.error(request, 'Este veículo já está vinculado a outra rota padrão.')
+            return self.get(request, pk=pk)
+        if motorista and not _motorista_livre_outras_rotas_padrao(motorista.pk, rota):
+            messages.error(request, 'Este motorista já está vinculado a outra rota padrão.')
+            return self.get(request, pk=pk)
+        for fid in ajudantes_ordenados:
+            if not _ajudante_livre_outras_rotas_padrao(fid, rota):
+                messages.error(request, 'Um dos ajudantes selecionados já está em outra rota padrão.')
+                return self.get(request, pk=pk)
+
+        with transaction.atomic():
+            if rota is None:
+                rota = RotaPadrao.objects.create(
+                    nome=nome,
+                    descricao=descricao,
+                    ativa=ativa,
+                    responsavel=responsavel,
+                    veiculo=veiculo,
+                    motorista=motorista,
+                )
+            else:
+                rota.nome = nome
+                rota.descricao = descricao
+                rota.ativa = ativa
+                rota.responsavel = responsavel
+                rota.veiculo = veiculo
+                rota.motorista = motorista
+                rota.save()
+
+            RotaPadraoAjudante.objects.filter(rota=rota).delete()
+            if ajudantes_ordenados:
+                RotaPadraoAjudante.objects.bulk_create(
+                    [
+                        RotaPadraoAjudante(rota=rota, funcionario_id=fid, ordem=idx)
+                        for idx, fid in enumerate(ajudantes_ordenados)
+                    ]
+                )
+
+            RotaPadraoCliente.objects.filter(rota=rota).delete()
+            if cliente_ids:
+                clientes_validos = list(
+                    ClienteSankhya.objects.filter(id__in=cliente_ids).values_list('id', flat=True)
+                )
+                RotaPadraoCliente.objects.bulk_create(
+                    [
+                        RotaPadraoCliente(rota=rota, cliente_id=cid, ordem=idx)
+                        for idx, cid in enumerate(cliente_ids)
+                        if cid in clientes_validos
+                    ]
+                )
+
+        messages.success(
+            request,
+            'Rota padrão salva com sucesso.',
+        )
+        return redirect('gestao_rotas_ecommerce')
+
+
+class RotaDiaBuilderView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/rota_dia_builder.html'
+
+    def _load_or_create_rota_dia(self, data_rota: date, rota_padrao, request):
+        rota_dia = RotaDia.objects.filter(data=data_rota, rota_padrao=rota_padrao).first()
+        if rota_dia:
+            return rota_dia, False
+        rota_dia = RotaDia.objects.create(
+            data=data_rota,
+            rota_padrao=rota_padrao,
+            criado_por=request.user,
+        )
+        return rota_dia, True
+
+    def _seed_from_rota_padrao(self, rota_dia, rota_padrao):
+        if rota_dia.clientes_rota.exists():
+            return
+        clientes = list(
+            rota_padrao.clientes_rota.order_by('ordem', 'id').values_list('cliente_id', flat=True)
+        )
+        if not clientes:
+            return
+        RotaDiaCliente.objects.bulk_create(
+            [RotaDiaCliente(rota_dia=rota_dia, cliente_id=cid, ordem=idx) for idx, cid in enumerate(clientes)]
+        )
+
+    def get(self, request):
+        data_raw = request.GET.get('data')
+        try:
+            data_rota = date.fromisoformat(data_raw) if data_raw else date.today()
+        except ValueError:
+            data_rota = date.today()
+        aplicar_padrao = request.GET.get('aplicar_padrao') == '1'
+
+        rotas_padrao = (
+            RotaPadrao.objects.filter(ativa=True)
+            .select_related('responsavel')
+            .order_by('nome')
+        )
+        rota_padrao_id = request.GET.get('rota_padrao') or ''
+        rota_padrao = None
+        if rota_padrao_id:
+            rota_padrao = rotas_padrao.filter(pk=rota_padrao_id).first()
+
+        rota_dia = None
+        clientes_rota = []
+        clientes_disponiveis = ClienteSankhya.objects.none()
+        if rota_padrao:
+            rota_dia, _created = self._load_or_create_rota_dia(data_rota, rota_padrao, request)
+            rota_dia.rota_padrao = rota_padrao
+            rota_dia.save(update_fields=['rota_padrao', 'atualizado_em'])
+            if aplicar_padrao:
+                clientes_padrao = list(
+                    rota_padrao.clientes_rota.order_by('ordem', 'id').values_list('cliente_id', flat=True)
+                )
+                with transaction.atomic():
+                    RotaDiaCliente.objects.filter(rota_dia=rota_dia).delete()
+                    if clientes_padrao:
+                        RotaDiaCliente.objects.bulk_create(
+                            [
+                                RotaDiaCliente(rota_dia=rota_dia, cliente_id=cid, ordem=idx)
+                                for idx, cid in enumerate(clientes_padrao)
+                            ]
+                        )
+                    _copiar_equipe_padrao_para_rota_dia(rota_dia, rota_padrao)
+            else:
+                self._seed_from_rota_padrao(rota_dia, rota_padrao)
+                _ensure_equipe_from_padrao_if_empty(rota_dia, rota_padrao)
+            clientes_rota = list(
+                rota_dia.clientes_rota.select_related('cliente').order_by('ordem', 'id')
+            )
+            ids_na_rota = {item.cliente_id for item in clientes_rota}
+            clientes_disponiveis = ClienteSankhya.objects.exclude(id__in=ids_na_rota).order_by(
+                'nome',
+                'razao',
+                'codigo_cliente',
+            )
+
+        ajudantes_selecionados = []
+        ajudantes_na_rota = []
+        veiculos_disponiveis = Veiculo.objects.none()
+        motoristas_disponiveis = Funcionario.objects.none()
+        ajudantes_disponiveis = Funcionario.objects.none()
+        if rota_dia:
+            rota_dia = (
+                RotaDia.objects.select_related('veiculo', 'motorista', 'rota_padrao')
+                .prefetch_related(
+                    'ajudantes_equipe__funcionario',
+                )
+                .get(pk=rota_dia.pk)
+            )
+            ajudantes_selecionados = list(
+                rota_dia.ajudantes_equipe.order_by('ordem', 'id').values_list('funcionario_id', flat=True)
+            )
+            ajudantes_na_rota = list(
+                rota_dia.ajudantes_equipe.select_related('funcionario').order_by('ordem', 'id')
+            )
+            v_ativos = _veiculos_ativos_qs()
+            m_ativos = _motoristas_ativos_qs()
+            a_ativos = _ajudantes_ativos_qs()
+            if rota_dia.veiculo_id:
+                veiculos_disponiveis = v_ativos.exclude(pk=rota_dia.veiculo_id)
+            else:
+                veiculos_disponiveis = v_ativos
+            if rota_dia.motorista_id:
+                motoristas_disponiveis = m_ativos.exclude(pk=rota_dia.motorista_id)
+            else:
+                motoristas_disponiveis = m_ativos
+            if ajudantes_selecionados:
+                ajudantes_disponiveis = a_ativos.exclude(id__in=ajudantes_selecionados)
+            else:
+                ajudantes_disponiveis = a_ativos
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'rota_dia': rota_dia,
+                'data_rota': data_rota,
+                'rotas_padrao': rotas_padrao,
+                'rota_padrao_id_selecionada': str(rota_padrao_id or ''),
+                'clientes_rota': clientes_rota,
+                'clientes_disponiveis': clientes_disponiveis,
+                'rota_selecionada': bool(rota_padrao),
+                'veiculos_disponiveis': veiculos_disponiveis,
+                'motoristas_disponiveis': motoristas_disponiveis,
+                'ajudantes_disponiveis': ajudantes_disponiveis,
+                'ajudantes_na_rota': ajudantes_na_rota,
+                'ajudantes_selecionados': ajudantes_selecionados,
+            },
+        )
+
+    def post(self, request):
+        data_raw = request.POST.get('data')
+        try:
+            data_rota = date.fromisoformat(data_raw) if data_raw else date.today()
+        except ValueError:
+            messages.error(request, 'Data inválida para rota do dia.')
+            return redirect('gestao_rotas_ecommerce')
+
+        rota_padrao_id = request.POST.get('rota_padrao')
+        rota_padrao = RotaPadrao.objects.filter(pk=rota_padrao_id, ativa=True).first() if rota_padrao_id else None
+        only_check = request.POST.get('only_check') == '1'
+        if not rota_padrao:
+            if only_check:
+                return JsonResponse({'ok': False, 'error': 'Selecione uma rota padrão.'}, status=400)
+            messages.error(request, 'Selecione uma rota padrão para montar a rota executada.')
+            query = urlencode({'data': data_rota.isoformat()})
+            return redirect(f"{reverse('gestao_rota_dia_builder')}?{query}")
+
+        rota_dia, _created = self._load_or_create_rota_dia(data_rota, rota_padrao, request)
+        observacao_post = (request.POST.get('observacao') or '').strip()
+
+        cliente_ids = []
+        for cid in request.POST.getlist('clientes_rota'):
+            try:
+                cliente_ids.append(int(cid))
+            except (TypeError, ValueError):
+                continue
+
+        valid_ids = set(ClienteSankhya.objects.filter(id__in=cliente_ids).values_list('id', flat=True))
+        cliente_ids_validos = [cid for cid in cliente_ids if cid in valid_ids]
+
+        veiculo_raw = (request.POST.get('veiculo') or '').strip()
+        motorista_raw = (request.POST.get('motorista') or '').strip()
+        ajudante_ids_post = []
+        for aid in request.POST.getlist('ajudantes'):
+            try:
+                ajudante_ids_post.append(int(aid))
+            except (TypeError, ValueError):
+                continue
+
+        veiculo_eq = None
+        if veiculo_raw:
+            veiculo_eq = Veiculo.objects.filter(pk=veiculo_raw, status_inicial='Ativo').first()
+            if not veiculo_eq:
+                msg = 'Selecione um veículo ativo válido.'
+                if only_check:
+                    return JsonResponse({'ok': False, 'error': msg}, status=400)
+                messages.error(request, msg)
+                query = urlencode({'data': data_rota.isoformat(), 'rota_padrao': str(rota_padrao.id)})
+                return redirect(f"{reverse('gestao_rota_dia_builder')}?{query}")
+
+        motorista_eq = None
+        if motorista_raw:
+            motorista_eq = Funcionario.objects.filter(
+                pk=motorista_raw, tipo='Motorista', status='Ativo'
+            ).first()
+            if not motorista_eq:
+                msg = 'Selecione um motorista ativo válido.'
+                if only_check:
+                    return JsonResponse({'ok': False, 'error': msg}, status=400)
+                messages.error(request, msg)
+                query = urlencode({'data': data_rota.isoformat(), 'rota_padrao': str(rota_padrao.id)})
+                return redirect(f"{reverse('gestao_rota_dia_builder')}?{query}")
+
+        ajudantes_validos_set = set(
+            Funcionario.objects.filter(
+                id__in=ajudante_ids_post, tipo='Ajudante', status='Ativo'
+            ).values_list('id', flat=True)
+        )
+        ajudantes_ordenados = list(
+            dict.fromkeys([fid for fid in ajudante_ids_post if fid in ajudantes_validos_set])
+        )
+
+        conflitos_qs = (
+            RotaDiaCliente.objects.select_related('rota_dia__rota_padrao', 'cliente')
+            .filter(
+                rota_dia__data=data_rota,
+                cliente_id__in=cliente_ids_validos,
+            )
+            .exclude(rota_dia=rota_dia)
+        )
+        conflitos = []
+        for item in conflitos_qs:
+            nome_rota = (
+                item.rota_dia.rota_padrao.nome
+                if item.rota_dia.rota_padrao
+                else f'Rota #{item.rota_dia_id}'
+            )
+            conflitos.append(
+                {
+                    'cliente_id': item.cliente_id,
+                    'cliente': item.cliente.nome or item.cliente.razao or f'Cliente {item.cliente.codigo_cliente}',
+                    'codigo_cliente': item.cliente.codigo_cliente,
+                    'rota_id': item.rota_dia_id,
+                    'rota': nome_rota,
+                }
+            )
+
+        conflito_veiculo = None
+        if veiculo_eq:
+            outro_v = (
+                RotaDia.objects.filter(data=data_rota, veiculo_id=veiculo_eq.pk)
+                .exclude(pk=rota_dia.pk)
+                .select_related('rota_padrao')
+                .first()
+            )
+            if outro_v:
+                conflito_veiculo = {
+                    'veiculo': f'{veiculo_eq.placa} — {veiculo_eq.descricao}',
+                    'rota': _nome_rota_dia_executada(outro_v),
+                    'rota_id': outro_v.pk,
+                }
+
+        conflito_motorista = None
+        if motorista_eq:
+            outro_m = (
+                RotaDia.objects.filter(data=data_rota, motorista_id=motorista_eq.pk)
+                .exclude(pk=rota_dia.pk)
+                .select_related('rota_padrao')
+                .first()
+            )
+            if outro_m:
+                conflito_motorista = {
+                    'motorista': f'{motorista_eq.nome} ({motorista_eq.codigo_erp})',
+                    'rota': _nome_rota_dia_executada(outro_m),
+                    'rota_id': outro_m.pk,
+                }
+
+        conflitos_ajudantes_equipe = []
+        if ajudantes_ordenados:
+            vistos = set()
+            for fid in ajudantes_ordenados:
+                for row in (
+                    RotaDiaAjudante.objects.filter(
+                        funcionario_id=fid,
+                        rota_dia__data=data_rota,
+                    )
+                    .exclude(rota_dia=rota_dia)
+                    .select_related('rota_dia__rota_padrao', 'funcionario')
+                ):
+                    chave = (row.funcionario_id, row.rota_dia_id)
+                    if chave in vistos:
+                        continue
+                    vistos.add(chave)
+                    f = row.funcionario
+                    conflitos_ajudantes_equipe.append(
+                        {
+                            'funcionario_id': fid,
+                            'nome': f'{f.nome} ({f.codigo_erp})',
+                            'rota': _nome_rota_dia_executada(row.rota_dia),
+                            'rota_id': row.rota_dia_id,
+                        }
+                    )
+
+        tem_conflito = bool(
+            conflitos
+            or conflito_veiculo
+            or conflito_motorista
+            or conflitos_ajudantes_equipe
+        )
+
+        if tem_conflito:
+            payload_conflitos = {
+                'ok': False,
+                'conflitos': conflitos,
+                'conflito_veiculo': conflito_veiculo,
+                'conflito_motorista': conflito_motorista,
+                'conflitos_ajudantes': conflitos_ajudantes_equipe,
+            }
+            if only_check:
+                return JsonResponse(payload_conflitos, status=409)
+            messages.error(
+                request,
+                'Não é possível salvar: há conflito com outra rota executada nesta data. '
+                'Ajuste clientes, veículo, motorista ou ajudantes nas outras rotas e tente novamente.',
+            )
+            query = urlencode({'data': data_rota.isoformat(), 'rota_padrao': str(rota_padrao.id)})
+            return redirect(f"{reverse('gestao_rota_dia_builder')}?{query}")
+
+        if only_check:
+            return JsonResponse({'ok': True, 'conflitos': []})
+
+        with transaction.atomic():
+            rota_dia.rota_padrao = rota_padrao
+            rota_dia.observacao = observacao_post
+            rota_dia.veiculo = veiculo_eq
+            rota_dia.motorista = motorista_eq
+            rota_dia.save(
+                update_fields=[
+                    'rota_padrao',
+                    'observacao',
+                    'veiculo',
+                    'motorista',
+                    'atualizado_em',
+                ]
+            )
+            RotaDiaCliente.objects.filter(rota_dia=rota_dia).delete()
+            RotaDiaCliente.objects.bulk_create(
+                [
+                    RotaDiaCliente(rota_dia=rota_dia, cliente_id=cid, ordem=idx)
+                    for idx, cid in enumerate(cliente_ids_validos)
+                ]
+            )
+            RotaDiaAjudante.objects.filter(rota_dia=rota_dia).delete()
+            if ajudantes_ordenados:
+                RotaDiaAjudante.objects.bulk_create(
+                    [
+                        RotaDiaAjudante(rota_dia=rota_dia, funcionario_id=fid, ordem=idx)
+                        for idx, fid in enumerate(ajudantes_ordenados)
+                    ]
+                )
+
+        messages.success(request, 'Rota do dia salva com sucesso.')
+        query = urlencode(
+            {
+                'data_ini': data_rota.isoformat(),
+                'data_fim': data_rota.isoformat(),
+                'rota_padrao': str(rota_padrao.id),
+            }
+        )
+        return redirect(f"{reverse('gestao_rotas_dia_list')}?{query}")

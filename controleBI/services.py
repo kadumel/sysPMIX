@@ -283,6 +283,7 @@ class PedidoService:
 
             # print(soap_envelope)
             
+            print(soap_envelope)
             response = requests.post(
                 BASE_URL,
                 data=soap_envelope.encode('utf-8'),
@@ -291,6 +292,7 @@ class PedidoService:
             )
             
             
+            print(response.text)
             # Verificar resposta
             if response.status_code == 200:
                 # Verificar se a resposta contém erro

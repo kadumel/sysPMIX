@@ -1,0 +1,359 @@
+{% extends "base.html" %}
+
+{% block title %}Gestão de Integrações Sankhya{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+    <div>
+        <h1 class="h4 mb-1">Gestão de Integrações Sankhya</h1>
+        <p class="text-muted mb-0">Controle de atualização por tabela e execução completa.</p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <span id="status-todas" class="small text-muted" style="min-height:1.5rem;"></span>
+        <form id="form-atualizar-todas" method="post" action="{% url 'api_sankhya_atualizar_todas_integracoes' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary" id="btn-atualizar-todas">
+                <i class="bi bi-arrow-repeat me-1"></i>Atualizar Todas
+            </button>
+        </form>
+    </div>
+</div>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tabela</th>
+                        <th>Total de Registros</th>
+                        <th>Última Atualização</th>
+                        <th style="min-width: 140px;">Processamento</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in integracoes %}
+                    <tr data-chave="{{ item.chave }}">
+                        <td>
+                            <div class="fw-semibold">{{ item.nome }}</div>
+                            {% if item.observacao %}
+                                <div class="small text-muted">{{ item.observacao }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ item.total_registros }}</td>
+                        <td>
+                            {% if item.ultima_atualizacao %}
+                                {{ item.ultima_atualizacao|date:"d/m/Y H:i:s" }}
+                            {% else %}
+                                <span class="text-muted">Sem atualização</span>
+                            {% endif %}
+                        </td>
+                        <td class="integracao-status text-nowrap" data-chave="{{ item.chave }}">
+                            <span class="text-muted small status-idle">—</span>
+                        </td>
+                        <td class="text-end">
+                            {% if item.permite_execucao %}
+                                <form method="post" action="{% url 'api_sankhya_atualizar_integracao' item.chave %}" class="d-inline form-integracao" data-chave="{{ item.chave }}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-primary btn-sm btn-atualizar-row">
+                                        Atualizar
+                                    </button>
+                                </form>
+                            {% else %}
+                                <button type="button" class="btn btn-outline-secondary btn-sm" disabled>Indisponível</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const STORAGE_KEY = 'sankhya_integracao_pending';
+  const POLL_MS = 10000;
+  const loadingGif = 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Loading_icon.gif';
+
+  function taskStatusUrl(taskId) {
+    return '{% url "api_sankhya_integracao_task_status" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" %}'.replace(
+      'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      encodeURIComponent(taskId)
+    );
+  }
+
+  function getCookie(name) {
+    let v = null;
+    if (document.cookie && document.cookie !== '') {
+      document.cookie.split(';').forEach(function (c) {
+        c = c.trim();
+        if (c.startsWith(name + '=')) v = decodeURIComponent(c.substring(name.length + 1));
+      });
+    }
+    return v;
+  }
+
+  function csrfToken() {
+    return getCookie('csrftoken');
+  }
+
+  function readPending() {
+    try {
+      return JSON.parse(sessionStorage.getItem(STORAGE_KEY) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function writePending(list) {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  function addPending(taskId, chave) {
+    const list = readPending().filter(function (x) { return x.chave !== chave; });
+    list.push({ taskId: taskId, chave: chave, t: Date.now() });
+    writePending(list);
+  }
+
+  function removePending(chave) {
+    writePending(readPending().filter(function (x) { return x.chave !== chave; }));
+  }
+
+  function setCellProcessing(chave) {
+    const cell = document.querySelector('.integracao-status[data-chave="' + chave + '"]');
+    if (!cell) return null;
+    cell.innerHTML =
+      '<span class="d-inline-flex align-items-center gap-2">' +
+      '<img src="' + loadingGif + '" width="22" height="22" alt="" class="flex-shrink-0">' +
+      '<span class="small text-primary">Processando…</span></span>';
+    return cell;
+  }
+
+  function setCellDone(chave, ok, detail) {
+    const cell = document.querySelector('.integracao-status[data-chave="' + chave + '"]');
+    if (!cell) return;
+    const icon = ok
+      ? '<i class="bi bi-check-circle-fill text-success"></i>'
+      : '<i class="bi bi-x-circle-fill text-danger"></i>';
+    const msg = detail ? '<span class="small text-muted ms-1">' + detail + '</span>' : '';
+    cell.innerHTML = '<span class="d-inline-flex align-items-center gap-1">' + icon + msg + '</span>';
+  }
+
+  function setTodasProcessing() {
+    const el = document.getElementById('status-todas');
+    if (!el) return;
+    el.innerHTML =
+      '<span class="d-inline-flex align-items-center gap-2">' +
+      '<img src="' + loadingGif + '" width="22" height="22" alt="">' +
+      '<span class="small text-primary">Processando todas…</span></span>';
+  }
+
+  function setTodasDone(ok) {
+    const el = document.getElementById('status-todas');
+    if (!el) return;
+    el.innerHTML = ok
+      ? '<span class="text-success small"><i class="bi bi-check-circle-fill me-1"></i>Concluído</span>'
+      : '<span class="text-danger small"><i class="bi bi-x-circle-fill me-1"></i>Concluído com falha</span>';
+  }
+
+  const intervals = {};
+
+  function pollTask(taskId, chave, onDone) {
+    const url = taskStatusUrl(taskId);
+    function tick() {
+      fetch(url, {
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json' },
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.status === 'pending') return;
+          if (intervals[taskId]) {
+            clearInterval(intervals[taskId]);
+            delete intervals[taskId];
+          }
+          removePending(chave);
+          if (typeof onDone === 'function') onDone(data);
+        })
+        .catch(function () {});
+    }
+    tick();
+    intervals[taskId] = setInterval(tick, POLL_MS);
+  }
+
+  function handleJsonResponse(data, chave, cell) {
+    if (data.completed && data.sync) {
+      if (data.success) {
+        setCellDone(chave, true, '');
+        if (chave === '__todas__') {
+          setTodasDone(true);
+          document.getElementById('btn-atualizar-todas').disabled = false;
+        }
+        setTimeout(function () { location.reload(); }, 800);
+      } else {
+        var errMsg = data.error
+          ? String(data.error)
+          : (data.erros && data.erros.join ? data.erros.join('; ') : String(data.erros || ''));
+        errMsg = errMsg.slice(0, 120);
+        setCellDone(chave, false, errMsg);
+        if (chave === '__todas__') {
+          setTodasDone(false);
+          document.getElementById('btn-atualizar-todas').disabled = false;
+        }
+      }
+      return;
+    }
+    if (data.task_id) {
+      addPending(data.task_id, chave);
+      if (chave === '__todas__') {
+        setTodasProcessing();
+        document.getElementById('btn-atualizar-todas').disabled = true;
+      } else if (cell) {
+        setCellProcessing(chave);
+      }
+      pollTask(data.task_id, chave, function (d) {
+        const ok = d.success === true;
+        var detail = '';
+        if (d.result && typeof d.result === 'object') {
+          var r = d.result;
+          if (r.total_processados != null) detail = 'Proc.: ' + r.total_processados;
+        }
+        setCellDone(chave, ok, detail);
+        if (chave === '__todas__') {
+          setTodasDone(ok);
+          document.getElementById('btn-atualizar-todas').disabled = false;
+        }
+        setTimeout(function () { location.reload(); }, ok ? 1200 : 2500);
+      });
+    }
+  }
+
+  function submitIntegracao(form) {
+    const chave = form.getAttribute('data-chave');
+    const cell = document.querySelector('.integracao-status[data-chave="' + chave + '"]');
+    const btn = form.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    setCellProcessing(chave);
+
+    const fd = new FormData(form);
+    fetch(form.action, {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-CSRFToken': csrfToken() || '',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          return { ok: r.ok, data: j, status: r.status };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok && res.data && res.data.error) {
+          btn.disabled = false;
+          setCellDone(chave, false, String(res.data.error).slice(0, 100));
+          return;
+        }
+        handleJsonResponse(res.data, chave, cell);
+        if (!res.data || !res.data.task_id) {
+          btn.disabled = false;
+        }
+      })
+      .catch(function () {
+        btn.disabled = false;
+        setCellDone(chave, false, 'Falha na requisição');
+      });
+  }
+
+  function submitTodas(form) {
+    const btn = document.getElementById('btn-atualizar-todas');
+    btn.disabled = true;
+    setTodasProcessing();
+    const fd = new FormData(form);
+    fetch(form.action, {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+      headers: {
+        Accept: 'application/json',
+        'X-CSRFToken': csrfToken() || '',
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+    })
+      .then(function (r) {
+        return r.json().then(function (j) {
+          return { ok: r.ok, data: j };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok && res.data && res.data.erros) {
+          setTodasDone(false);
+          document.getElementById('status-todas').innerHTML =
+            '<span class="text-warning small">' +
+            (res.data.erros.slice(0, 3).join(' · ') || 'Erro') +
+            '</span>';
+          btn.disabled = false;
+          return;
+        }
+        handleJsonResponse(res.data, '__todas__', null);
+      })
+      .catch(function () {
+        btn.disabled = false;
+        document.getElementById('status-todas').innerHTML =
+          '<span class="text-danger small">Erro ao enviar</span>';
+      });
+  }
+
+  document.querySelectorAll('form.form-integracao').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitIntegracao(form);
+    });
+  });
+
+  var formTodas = document.getElementById('form-atualizar-todas');
+  if (formTodas) {
+    formTodas.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitTodas(formTodas);
+    });
+  }
+
+  readPending().forEach(function (p) {
+    if (!p.taskId || !p.chave) return;
+    if (p.chave === '__todas__') {
+      document.getElementById('btn-atualizar-todas').disabled = true;
+      setTodasProcessing();
+    } else {
+      setCellProcessing(p.chave);
+    }
+    pollTask(p.taskId, p.chave, function (d) {
+      const ok = d.success === true;
+      setCellDone(p.chave, ok, '');
+      if (p.chave === '__todas__') {
+        setTodasDone(ok);
+        document.getElementById('btn-atualizar-todas').disabled = false;
+      }
+      setTimeout(function () { location.reload(); }, ok ? 1200 : 2500);
+    });
+  });
+})();
+</script>
+{% endblock %}
