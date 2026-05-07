@@ -387,8 +387,8 @@ class Auditoria(models.Model):
 
 class EnderecoCliente(models.Model):
     clienteERP = models.ForeignKey(ClienteERP, on_delete=models.CASCADE, related_name='enderecos')
-    cod_end_erp = models.CharField(max_length=20, null=True, blank=True, unique=True)
-    cod_praca_erp = models.CharField(max_length=20, null=True, blank=True, unique=True)
+    cod_end_erp = models.CharField(max_length=20, null=True, blank=True)
+    cod_praca_erp = models.CharField(max_length=20, null=True, blank=True)
     descr_praca_erp = models.CharField(max_length=100, null=True, blank=True)
     uf = models.CharField(max_length=2, null=True, blank=True)
     cidade = models.CharField(max_length=100, null=True, blank=True)
@@ -409,6 +409,12 @@ class EnderecoCliente(models.Model):
         verbose_name = 'Endereço do Cliente'
         verbose_name_plural = 'Endereços dos Clientes'
         ordering = ['clienteERP', '-sn_padrao']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['cod_end_erp', 'cod_praca_erp'],
+                name='uniq_enderecocliente_cod_end_praca_erp',
+            )
+        ]
 
     def __str__(self):
         return f"{self.clienteERP.descr_cliente} - {self.end}, {self.num_end}"
