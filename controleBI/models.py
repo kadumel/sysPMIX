@@ -41,7 +41,7 @@ class Praca(models.Model):
 class ClienteERP(models.Model):
     campo_alt = models.CharField(max_length=10, default='NEW_59')
     seq_id = models.CharField(max_length=10, null=True, blank=True, unique=True)
-    codigo_cliente = models.CharField(max_length=10, null=True, blank=True)
+    codigo_cliente = models.CharField(max_length=10, null=True, blank=True, unique=True)
     filial_padrao = models.CharField(max_length=10, null=True, blank=True)
     descr_cliente = models.CharField(max_length=100, null=True, blank=True)
     razao_cliente = models.CharField(max_length=100, null=True, blank=True)
@@ -387,8 +387,8 @@ class Auditoria(models.Model):
 
 class EnderecoCliente(models.Model):
     clienteERP = models.ForeignKey(ClienteERP, on_delete=models.CASCADE, related_name='enderecos')
-    cod_end_erp = models.CharField(max_length=20, null=True, blank=True)
-    cod_praca_erp = models.CharField(max_length=20, null=True, blank=True)
+    cod_end_erp = models.CharField(max_length=20, null=True, blank=True, unique=True)
+    cod_praca_erp = models.CharField(max_length=20, null=True, blank=True, unique=True)
     descr_praca_erp = models.CharField(max_length=100, null=True, blank=True)
     uf = models.CharField(max_length=2, null=True, blank=True)
     cidade = models.CharField(max_length=100, null=True, blank=True)
