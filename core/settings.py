@@ -49,10 +49,16 @@ ALLOWED_HOSTS = [
 # HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
 # Lista em env pode vir separada por vírgula, ponto e vírgula ou espaço; com/sem esquema.
 _csrf_env = (os.getenv('CSRF_TRUSTED_ORIGINS') or '').strip()
+if _csrf_env.startswith('[') and _csrf_env.endswith(']'):
+    _csrf_env = _csrf_env[1:-1].strip()
 _csrf_items = [item.strip().strip('"').strip("'") for item in re.split(r"[,\s;]+", _csrf_env) if item.strip()]
 
 _csrf_from_env = [
-    item if item.startswith(("http://", "https://")) else f"https://{item}"
+    (
+        item.rstrip('/')
+        if item.startswith(("http://", "https://"))
+        else f"https://{item.rstrip('/')}"
+    )
     for item in _csrf_items
 ]
 
