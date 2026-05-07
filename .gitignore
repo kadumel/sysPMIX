@@ -38,6 +38,7 @@ media/
 venv/
 env/
 ENV/
+.env2
 
 # IDE
 .idea/
