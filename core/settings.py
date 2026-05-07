@@ -14,6 +14,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 import dj_database_url
+import re
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,9 +43,13 @@ _allowed_hosts = (os.environ.get('ALLOWED_HOSTS') or '*').strip()
 ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(',') if h.strip()]
 
 # HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
-# Lista separada por vírgula. Env ausente ou vazia → padrão (evita None.split).
+# Lista em env pode vir separada por vírgula, ponto e vírgula ou espaço; com/sem esquema.
 _csrf_env = (os.getenv('CSRF_TRUSTED_ORIGINS') or '').strip()
-CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_env.split(',') if o.strip()]
+_csrf_items = [item.strip().strip('"').strip("'") for item in re.split(r"[,\s;]+", _csrf_env) if item.strip()]
+CSRF_TRUSTED_ORIGINS = [
+    item if item.startswith(("http://", "https://")) else f"https://{item}"
+    for item in _csrf_items
+]
 
 # Encaminhamento TLS via proxy.
 # Em dev local (DEBUG=True), mantenha desligado por padrão para evitar conflito com runserver HTTP.
