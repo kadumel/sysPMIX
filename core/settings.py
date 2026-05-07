@@ -15,10 +15,19 @@ from dotenv import load_dotenv
 import os
 import dj_database_url
 import re
+import logging
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env", override=False)
+
+
+def _env_first(*keys):
+    for key in keys:
+        value = os.getenv(key)
+        if value is not None:
+            return value
+    return None
 
 # Sankhya API (obrigatório para integração no app api_sankhya)
 SANKHYA_CLIENT_ID = os.getenv('SANKHYA_CLIENT_ID')
@@ -39,7 +48,7 @@ _debug_env = os.environ.get('DEBUG', 'true').strip().lower()
 DEBUG = _debug_env in ('1', 'true', 'yes', 'on')
 
 # Vírgula na env; ausente ou vazia → * (dev / Railway sem lista explícita)
-_allowed_hosts = (os.environ.get('ALLOWED_HOSTS') or '*').strip()
+_allowed_hosts = (_env_first('ALLOWED_HOSTS', 'allowed_hosts', 'ALLOW_HOSTS', 'allow_hosts') or '*').strip()
 ALLOWED_HOSTS = [
     h.strip()
     for h in re.split(r"[,\s;]+", _allowed_hosts)
@@ -48,7 +57,7 @@ ALLOWED_HOSTS = [
 
 # HTTPS / proxy (Railway, etc.): POST com cookie exige origem confiável (Django 4+)
 # Lista em env pode vir separada por vírgula, ponto e vírgula ou espaço; com/sem esquema.
-_csrf_env = (os.getenv('CSRF_TRUSTED_ORIGINS') or '').strip()
+_csrf_env = (_env_first('CSRF_TRUSTED_ORIGINS', 'csrf_trusted_origins') or '').strip()
 if _csrf_env.startswith('[') and _csrf_env.endswith(']'):
     _csrf_env = _csrf_env[1:-1].strip()
 _csrf_items = [item.strip().strip('"').strip("'") for item in re.split(r"[,\s;]+", _csrf_env) if item.strip()]
@@ -86,12 +95,27 @@ if USE_PROXY_SSL_HEADER:
 # Diagnóstico temporário para deploy (Railway): mostra origem das configs de host/csrf.
 # Em produção (DEBUG=False), imprime sempre para facilitar troubleshooting do 403 CSRF.
 if (not DEBUG) or (os.getenv('CSRF_DEBUG_STARTUP', '').strip().lower() in ('1', 'true', 'yes', 'on')):
-    print('[CSRF_DEBUG] DEBUG =', DEBUG)
-    print('[CSRF_DEBUG] USE_PROXY_SSL_HEADER =', USE_PROXY_SSL_HEADER)
-    print('[CSRF_DEBUG] ALLOWED_HOSTS env =', os.getenv('ALLOWED_HOSTS'))
-    print('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS env =', os.getenv('CSRF_TRUSTED_ORIGINS'))
-    print('[CSRF_DEBUG] ALLOWED_HOSTS final =', ALLOWED_HOSTS)
-    print('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS final =', CSRF_TRUSTED_ORIGINS)
+    _startup_logger = logging.getLogger('django')
+    _startup_logger.warning('[CSRF_DEBUG] DEBUG = %s', DEBUG)
+    _startup_logger.warning('[CSRF_DEBUG] USE_PROXY_SSL_HEADER = %s', USE_PROXY_SSL_HEADER)
+    _startup_logger.warning(
+        '[CSRF_DEBUG] ALLOWED_HOSTS env candidates = %s',
+        {
+            'ALLOWED_HOSTS': os.getenv('ALLOWED_HOSTS'),
+            'allowed_hosts': os.getenv('allowed_hosts'),
+            'ALLOW_HOSTS': os.getenv('ALLOW_HOSTS'),
+            'allow_hosts': os.getenv('allow_hosts'),
+        },
+    )
+    _startup_logger.warning(
+        '[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS env candidates = %s',
+        {
+            'CSRF_TRUSTED_ORIGINS': os.getenv('CSRF_TRUSTED_ORIGINS'),
+            'csrf_trusted_origins': os.getenv('csrf_trusted_origins'),
+        },
+    )
+    _startup_logger.warning('[CSRF_DEBUG] ALLOWED_HOSTS final = %s', ALLOWED_HOSTS)
+    _startup_logger.warning('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS final = %s', CSRF_TRUSTED_ORIGINS)
 
 
 # Application definition
