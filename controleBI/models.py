@@ -40,7 +40,7 @@ class Praca(models.Model):
    
 class ClienteERP(models.Model):
     campo_alt = models.CharField(max_length=10, default='NEW_59')
-    seq_id = models.CharField(max_length=10, null=True, blank=True)
+    seq_id = models.CharField(max_length=10, null=True, blank=True, unique=True)
     codigo_cliente = models.CharField(max_length=10, null=True, blank=True)
     filial_padrao = models.CharField(max_length=10, null=True, blank=True)
     descr_cliente = models.CharField(max_length=100, null=True, blank=True)
@@ -91,7 +91,7 @@ class Funcionario(models.Model):
     seq_id = models.CharField(max_length=10, null=True, blank=True)
     codigo_erp = models.CharField(max_length=20, unique=True)
     nome = models.CharField(max_length=100)
-    cpf = models.CharField(max_length=14)
+    cpf = models.CharField(max_length=14, unique=True)
     tipo = models.CharField(max_length=20, choices=[('Motorista', 'Motorista'), ('Ajudante', 'Ajudante')])
     status = models.CharField(max_length=20, default='Ativo', choices=[('Ativo', 'Ativo'), ('Inativo', 'Inativo')])
     sincronizado = models.BooleanField(default=False)
