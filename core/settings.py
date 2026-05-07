@@ -83,6 +83,16 @@ else:
 if USE_PROXY_SSL_HEADER:
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# Diagnóstico temporário para deploy (Railway): mostra origem das configs de host/csrf.
+# Ative com CSRF_DEBUG_STARTUP=1 e remova após estabilizar o ambiente.
+if os.getenv('CSRF_DEBUG_STARTUP', '').strip().lower() in ('1', 'true', 'yes', 'on'):
+    print('[CSRF_DEBUG] DEBUG =', DEBUG)
+    print('[CSRF_DEBUG] USE_PROXY_SSL_HEADER =', USE_PROXY_SSL_HEADER)
+    print('[CSRF_DEBUG] ALLOWED_HOSTS env =', os.getenv('ALLOWED_HOSTS'))
+    print('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS env =', os.getenv('CSRF_TRUSTED_ORIGINS'))
+    print('[CSRF_DEBUG] ALLOWED_HOSTS final =', ALLOWED_HOSTS)
+    print('[CSRF_DEBUG] CSRF_TRUSTED_ORIGINS final =', CSRF_TRUSTED_ORIGINS)
+
 
 # Application definition
 
