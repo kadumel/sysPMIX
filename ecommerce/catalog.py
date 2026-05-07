@@ -3,9 +3,12 @@ Catálogo a partir das tabelas Sankhya: sankhya_produto e sankhya_grupo_produto.
 """
 from __future__ import annotations
 
+from decimal import Decimal
+
 from django.db.models import Prefetch, Q, QuerySet
 
-from api_sankhya.models import GrupoProduto, Produto
+from api_sankhya.models import Cliente, GrupoProduto, Preco, Produto
+from controleBI.models import PERFIS_PAINEL_BI_LOJA, PerfilUsuario, UsuarioClienteSankhya
 from ecommerce.models import ProdutoImagem
 
 PAGE_SIZE = 24
@@ -235,3 +238,69 @@ def aplicar_busca_produtos(qs: QuerySet[Produto], termo: str) -> QuerySet[Produt
         except (TypeError, ValueError):
             pass
     return qs.filter(filtro)
+
+
+def get_cliente_codtab(user) -> int | None:
+    request = user if hasattr(user, 'user') else None
+    cliente = get_cliente_context(request) if request is not None else None
+    if cliente is None:
+        if not getattr(user, 'is_authenticated', False):
+            return None
+        vinculo = getattr(user, 'vinculo_cliente_sankhya', None)
+        cliente = getattr(vinculo, 'cliente', None)
+    if cliente is None:
+        return None
+    codtab = getattr(cliente, 'codtab', None)
+    if codtab in (None, 0):
+        return None
+    return codtab
+
+
+def get_cliente_context(request):
+    """Cliente ativo do e-commerce para a requisição atual.
+
+    - Perfil cliente: cliente vinculado ao usuário.
+    - Perfil comercial/gerente/admin: cliente escolhido em sessão (qualquer cliente cadastrado).
+    """
+    if request is None or not getattr(request, 'user', None):
+        return None
+    user = request.user
+    if not user.is_authenticated:
+        return None
+
+    perfil = getattr(getattr(user, 'perfil_usuario', None), 'perfil', None)
+    if perfil == PerfilUsuario.Perfil.CLIENTE:
+        vinculo = (
+            UsuarioClienteSankhya.objects.select_related('cliente')
+            .filter(user=user)
+            .first()
+        )
+        return vinculo.cliente if vinculo and vinculo.cliente else None
+
+    if perfil not in PERFIS_PAINEL_BI_LOJA:
+        return None
+
+    raw_cliente_id = request.session.get('ecommerce_cliente_context_id')
+    try:
+        cliente_id = int(raw_cliente_id)
+    except (TypeError, ValueError):
+        return None
+
+    return Cliente.objects.filter(id=cliente_id).first()
+
+
+def map_precos_por_codtab(codigos_produto: list[int], codtab: int | None) -> dict[int, Decimal]:
+    if not codtab or not codigos_produto:
+        return {}
+    precos = (
+        Preco.objects.filter(codigo_tabela=codtab, codigo_produto__in=codigos_produto)
+        .order_by('codigo_produto', 'codigo_local_estoque')
+        .values('codigo_produto', 'valor')
+    )
+    out: dict[int, Decimal] = {}
+    for row in precos:
+        codigo = int(row['codigo_produto'])
+        # Mantém o primeiro preço por produto (menor local_estoque).
+        if codigo not in out:
+            out[codigo] = row['valor']
+    return out

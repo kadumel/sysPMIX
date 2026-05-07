@@ -1,0 +1,17 @@
+<tr>
+    <td>
+        <div class="fw-semibold">{{ cliente.nome|default:cliente.razao|default:"-" }}</div>
+        <div class="small text-muted">{{ cliente.cnpj_cpf|default:"-" }}</div>
+    </td>
+    <td>{{ cliente.codigo_cliente }}</td>
+    <td class="text-end">
+        <form method="post" action="{% url 'gestao_ecommerce_cliente_selecionar' %}" class="d-inline">
+            {% csrf_token %}
+            <input type="hidden" name="cliente_id" value="{{ cliente.id }}">
+            <input type="hidden" name="next" value="{% url 'ecommerce_home' %}">
+            <button type="submit" class="btn btn-sm {% if selected_id == cliente.id %}btn-success{% else %}btn-outline-primary{% endif %}">
+                {% if selected_id == cliente.id %}Selecionado{% else %}Entrar na loja{% endif %}
+            </button>
+        </form>
+    </td>
+</tr>

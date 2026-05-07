@@ -4,12 +4,14 @@ from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
+from decimal import Decimal
 
 from api_sankhya.models import Produto
-from controleBI.models import UsuarioClienteSankhya
+from controleBI.models import PERFIS_PAINEL_BI_LOJA, UsuarioClienteSankhya
 
 from . import catalog
 from .cart_session import (
+    adjust_product_quantity,
     add_product,
     cart_line_count,
     cart_total_units,
@@ -48,6 +50,12 @@ def index(request):
     qs = catalog.prefetch_imagens_produto_loja(qs)
     paginator = Paginator(qs, catalog.PAGE_SIZE)
     page = paginator.get_page(request.GET.get('page'))
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    precos_por_produto = catalog.map_precos_por_codtab(
+        [p.codigo_produto for p in page.object_list], codtab_cliente
+    )
+    for produto in page.object_list:
+        produto.preco_ecommerce = precos_por_produto.get(produto.codigo_produto)
 
     ancestrais = catalog.ancestrais(grupo_atual, by_id) if grupo_atual else []
 
@@ -61,6 +69,7 @@ def index(request):
         'grupo_ancestrais': ancestrais,
         'produtos': page,
         'paginator': paginator,
+        'codtab_cliente': codtab_cliente,
     }
     return render(request, 'ecommerce/index.html', context)
 
@@ -79,6 +88,12 @@ def partial_destaque(request):
     chunk = list(qs[start : start + limit])
     has_more = len(chunk) > catalog.PAGE_SIZE
     chunk = chunk[: catalog.PAGE_SIZE]
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    precos_por_produto = catalog.map_precos_por_codtab(
+        [p.codigo_produto for p in chunk], codtab_cliente
+    )
+    for produto in chunk:
+        produto.preco_ecommerce = precos_por_produto.get(produto.codigo_produto)
     return render(
         request,
         'ecommerce/partials/destaque.html',
@@ -93,7 +108,10 @@ def cart_view(request):
     raw = get_cart(request)
     codigos = [int(i['codigo_produto']) for i in raw if i.get('codigo_produto') is not None]
     produtos = {p.codigo_produto: p for p in catalog.prefetch_imagens_produto_loja(Produto.objects.filter(codigo_produto__in=codigos))} if codigos else {}
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    precos_por_produto = catalog.map_precos_por_codtab(codigos, codtab_cliente)
     linhas = []
+    total_geral = Decimal('0')
     for item in raw:
         cid = item.get('codigo_produto')
         if cid is None:
@@ -101,18 +119,26 @@ def cart_view(request):
         cid = int(cid)
         p = produtos.get(cid)
         q = float(item.get('qty') or 0)
+        qty_decimal = Decimal(str(q))
+        preco_unitario = precos_por_produto.get(cid)
+        subtotal = None
+        if preco_unitario is not None:
+            subtotal = preco_unitario * qty_decimal
+            total_geral += subtotal
         linhas.append(
             {
                 'codigo_produto': cid,
                 'nome': (p.nome if p else None) or item.get('nome') or f'Produto {cid}',
                 'qty': q,
                 'qty_label': format_qty_display(q),
+                'preco_unitario': preco_unitario,
+                'subtotal': subtotal,
             }
         )
     return render(
         request,
         'ecommerce/cart.html',
-        {'linhas': linhas},
+        {'linhas': linhas, 'total_geral': total_geral, 'codtab_cliente': codtab_cliente},
     )
 
 
@@ -189,6 +215,27 @@ def clear_cart_view(request):
     return redirect('/ecommerce/carrinho/')
 
 
+@require_POST
+def adjust_cart_quantity(request):
+    codigo = request.POST.get('codigo_produto')
+    acao = (request.POST.get('acao') or '').strip().lower()
+    next_url = _safe_ecommerce_next(request.POST.get('next'), default='/ecommerce/carrinho/')
+    if not codigo or acao not in {'inc', 'dec'}:
+        messages.warning(request, 'Ajuste de quantidade inválido.')
+        return redirect(next_url)
+    try:
+        codigo_int = int(codigo)
+    except (TypeError, ValueError):
+        messages.warning(request, 'Produto inválido para ajuste.')
+        return redirect(next_url)
+
+    delta = 1 if acao == 'inc' else -1
+    ok = adjust_product_quantity(request, codigo_int, delta=delta)
+    if not ok and acao == 'dec':
+        messages.info(request, 'Item removido do carrinho.')
+    return redirect(next_url)
+
+
 def _safe_ecommerce_redirect_path(url: str | None, default: str = '/ecommerce/notificacoes/') -> str:
     if url and isinstance(url, str) and url.startswith('/') and not url.startswith('//'):
         if url.startswith('/ecommerce'):
@@ -198,11 +245,16 @@ def _safe_ecommerce_redirect_path(url: str | None, default: str = '/ecommerce/no
 
 @login_required
 def pedidos_list(request):
-    pedidos = (
-        PedidoLoja.objects.filter(user=request.user)
-        .select_related('cliente')
-        .prefetch_related('itens')
-    )
+    perfil = getattr(getattr(request.user, 'perfil_usuario', None), 'perfil', None)
+    cliente_ctx = catalog.get_cliente_context(request)
+    pedidos = PedidoLoja.objects.select_related('cliente').prefetch_related('itens')
+    if perfil in PERFIS_PAINEL_BI_LOJA:
+        if cliente_ctx:
+            pedidos = pedidos.filter(cliente=cliente_ctx)
+        else:
+            pedidos = PedidoLoja.objects.none()
+    else:
+        pedidos = pedidos.filter(user=request.user)
     return render(request, 'ecommerce/pedidos_list.html', {'pedidos': pedidos})
 
 
@@ -220,6 +272,8 @@ def pedido_detail(request, pk: int):
                 'codigo_produto': it.codigo_produto,
                 'nome': it.nome_produto,
                 'qty_label': format_qty_display(it.quantidade),
+                'preco_unitario': it.preco_unitario,
+                'subtotal': it.valor_total,
             }
         )
     return render(
@@ -227,6 +281,41 @@ def pedido_detail(request, pk: int):
         'ecommerce/pedido_detail.html',
         {'pedido': pedido, 'itens': itens},
     )
+
+
+@login_required
+@require_POST
+def pedido_reenviar_carrinho(request, pk: int):
+    pedido = get_object_or_404(
+        PedidoLoja.objects.prefetch_related('itens'),
+        pk=pk,
+        user=request.user,
+    )
+    if pedido.status != PedidoLoja.Status.REJEITADO:
+        messages.warning(
+            request,
+            'Somente pedidos rejeitados podem ser enviados novamente ao carrinho.',
+        )
+        return redirect('ecommerce_pedido_detail', pk=pedido.pk)
+
+    clear_cart(request)
+    itens = list(pedido.itens.all())
+    if not itens:
+        messages.warning(request, 'Este pedido não possui itens para reenviar.')
+        return redirect('ecommerce_pedido_detail', pk=pedido.pk)
+
+    for item in itens:
+        add_product(
+            request,
+            codigo_produto=item.codigo_produto,
+            nome=item.nome_produto,
+            qty=float(item.quantidade),
+        )
+    messages.success(
+        request,
+        'Itens do pedido rejeitado enviados ao carrinho. Ajuste conforme a mensagem do comercial e finalize novamente.',
+    )
+    return redirect('ecommerce_cart')
 
 
 @login_required
@@ -260,18 +349,21 @@ def notificacoes_marcar_todas_lidas(request):
 @login_required
 @require_POST
 def checkout_finalizar(request):
-    v = (
-        UsuarioClienteSankhya.objects.select_related('cliente')
-        .filter(user=request.user)
-        .first()
-    )
-    if not v or not v.cliente:
+    cliente_ctx = catalog.get_cliente_context(request)
+    if not cliente_ctx:
+        v = (
+            UsuarioClienteSankhya.objects.select_related('cliente')
+            .filter(user=request.user)
+            .first()
+        )
+        cliente_ctx = v.cliente if v and v.cliente else None
+    if not cliente_ctx:
         messages.error(
             request,
             'É necessário ter um cliente Sankhya vinculado ao seu usuário para finalizar o pedido.',
         )
         return redirect('ecommerce_cart')
-    pedido, err = finalizar_pedido_loja(request, request.user, v.cliente)
+    pedido, err = finalizar_pedido_loja(request, request.user, cliente_ctx)
     if err:
         messages.error(request, err)
         return redirect('ecommerce_cart')

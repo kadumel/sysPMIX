@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-list-check me-2"></i>Rotas a executar</h4>
+            <div class="d-flex gap-2">
+                <a href="{% url 'gestao_rota_dia_builder' %}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i>Nova rota do dia
+                </a>
+                <a href="{% url 'gestao_rotas_ecommerce' %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left me-1"></i>Voltar
+                </a>
+            </div>
+        </div>
+        <div class="card-body">
+            {# form vazio no DOM: campos usam form="..." para o submit GET não englobar o link Limpar #}
+            <form method="get" id="formFiltroRotasDia" class="d-none" aria-hidden="true"></form>
+            <div class="row g-2 mb-3 align-items-end">
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="filtro_rotas_dia_data_ini">Data inicial</label>
+                    <input
+                        form="formFiltroRotasDia"
+                        id="filtro_rotas_dia_data_ini"
+                        type="date"
+                        name="data_ini"
+                        value="{{ data_ini }}"
+                        class="form-control"
+                    >
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="filtro_rotas_dia_data_fim">Data final</label>
+                    <input
+                        form="formFiltroRotasDia"
+                        id="filtro_rotas_dia_data_fim"
+                        type="date"
+                        name="data_fim"
+                        value="{{ data_fim }}"
+                        class="form-control"
+                    >
+                </div>
+                <div class="col-sm-6 col-md-3">
+                    <label class="form-label" for="filtro_rotas_dia_rota_padrao">Rota padrão</label>
+                    <select form="formFiltroRotasDia" id="filtro_rotas_dia_rota_padrao" name="rota_padrao" class="form-select">
+                        <option value="">Todas</option>
+                        {% for rota in rotas_padrao %}
+                        <option value="{{ rota.id }}" {% if rota_padrao_id == rota.id|stringformat:'s' %}selected{% endif %}>
+                            {{ rota.nome }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end gap-2 flex-wrap">
+                    <button type="submit" form="formFiltroRotasDia" class="btn btn-outline-primary">
+                        <i class="bi bi-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{% url 'gestao_rotas_dia_list' %}" class="btn btn-outline-secondary">Limpar filtros</a>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Data</th>
+                            <th>Rota padrão</th>
+                            <th>Veículo</th>
+                            <th>Motorista</th>
+                            <th class="text-center">Ajudantes</th>
+                            <th>Criado por</th>
+                            <th class="text-center">Clientes</th>
+                            <th style="width: 180px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rota in rotas_dia %}
+                        <tr>
+                            <td>{{ rota.data|date:'d/m/Y' }}</td>
+                            <td>{% if rota.rota_padrao %}{{ rota.rota_padrao.nome }}{% else %}<span class="text-muted">Sem rota padrão</span>{% endif %}</td>
+                            <td>{% if rota.veiculo %}{{ rota.veiculo.placa }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td>{% if rota.motorista %}{{ rota.motorista.nome }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                            <td class="text-center">{{ rota.total_ajudantes }}</td>
+                            <td>{{ rota.criado_por.get_full_name|default:rota.criado_por.username }}</td>
+                            <td class="text-center">{{ rota.total_clientes }}</td>
+                            <td>
+                                <a
+                                    href="{% url 'gestao_rota_dia_builder' %}?data={{ rota.data|date:'Y-m-d' }}{% if rota.rota_padrao_id %}&rota_padrao={{ rota.rota_padrao_id }}{% endif %}"
+                                    class="btn btn-sm btn-outline-primary"
+                                >
+                                    <i class="bi bi-pencil me-1"></i>Abrir
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">Nenhuma rota a executar cadastrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

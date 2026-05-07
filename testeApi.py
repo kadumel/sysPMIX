@@ -1,10 +1,45 @@
 import os
 import sys
 import django
+import importlib
+import importlib.util
 
 # Configura o Django para poder usar os modelos
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'core.settings')
+
+def _get_import_target(app_entry):
+    if importlib.util.find_spec(app_entry) is not None:
+        return app_entry
+    if "." in app_entry:
+        parent = app_entry.rsplit(".", 1)[0]
+        if importlib.util.find_spec(parent) is not None:
+            return parent
+    return None
+
+
+def _filter_missing_apps(settings_module):
+    installed_apps = getattr(settings_module, "INSTALLED_APPS", [])
+    available_apps = []
+    missing_apps = []
+
+    for app in installed_apps:
+        if _get_import_target(app):
+            available_apps.append(app)
+        else:
+            missing_apps.append(app)
+
+    if missing_apps:
+        print(
+            "Aviso: removendo apps nao instalados para executar o script:",
+            ", ".join(missing_apps),
+        )
+        settings_module.INSTALLED_APPS = available_apps
+
+
+settings_module = importlib.import_module(os.environ["DJANGO_SETTINGS_MODULE"])
+_filter_missing_apps(settings_module)
+
 django.setup()
 
 import requests, json
@@ -293,6 +328,7 @@ def getPedidosJson():
                     codigo_nota=codigo_nota,
                     defaults=pedido_defaults
                 )
+                print(pedido_defaults)
                 total_pedidos += 1
                 if created:
                     print(f"  ✓ Pedido inserido: nota {codigo_nota}")
@@ -1846,7 +1882,7 @@ def getCidadeLegado(campos=None, salvar_banco=True):
     - salvar_banco=True: dict com cidades, total_registros, total_inseridos, total_atualizados.
     """
     if campos is None:
-        campos = ["CODCID", "NOMECID", "UnidadeFederativa_UF", "CODREG", "DTALTER"]
+        campos = ["CODCID", "NOMECID", "CODREG", "DTALTER"]
 
     url = "https://api.sankhya.com.br/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.loadRecords&outputType=json"
     headers = getToken()
@@ -1893,6 +1929,8 @@ def getCidadeLegado(campos=None, salvar_banco=True):
                 "dataSet": data_set,
             },
         }
+
+        print(json.dumps(request_body, indent=4))
 
         try:
             resp = requests.post(url, headers=headers, json=request_body)
@@ -1965,6 +2003,78 @@ def getCidadeLegado(campos=None, salvar_banco=True):
         f"{total_atualizados} atualizadas (total linhas API: {len(resultado)})."
     )
     return out
+
+
+def getTabelasPrecoLegado(*campos):
+    """
+    Consulta as tabelas de preço no serviço legado (entidade TGFTAB)
+    e imprime os registros no console.
+    """
+    if len(campos) == 1 and isinstance(campos[0], (list, tuple)):
+        campos = list(campos[0])
+    elif len(campos) > 0:
+        campos = list(campos)
+    else:
+        campos = [
+            "CODTAB",
+            "NOMETAB",
+            "TIPTAB",
+            "CODMOEDA",
+            "DTALTER",
+        ]
+
+    url = "https://api.sankhya.com.br/gateway/v1/mge/service.sbr?serviceName=CRUDServiceProvider.loadRecords&outputType=json"
+    headers = getToken()
+    headers['Content-Type'] = 'application/json'
+
+    offset_page = 0
+    has_more = True
+    resultado = []
+
+    while has_more:
+        request_body = {
+            "serviceName": "CRUDServiceProvider.loadRecords",
+            "requestBody": {
+                "dataSet": {
+                    "rootEntity": "TGFTAB",
+                    "includePresentationFields": "S",
+                    "offsetPage": str(offset_page),
+
+                }
+            }
+        }
+
+        try:
+            resp = requests.post(url, headers=headers, json=request_body)
+            resp.raise_for_status()
+            data = resp.json()
+            print(data)
+        except Exception as e:
+            print(f"Erro ao consultar TGFTAB (página {offset_page}): {e}")
+            break
+
+        st = data.get('status')
+        if st is not None and str(st) not in ('1', 'true', 'True'):
+            msg = data.get('statusMessage') or data.get('error') or data
+            print(f"API Sankhya retornou status {st} para TGFTAB (página {offset_page}): {msg}")
+            break
+
+        records, entities_data = _crud_entities_to_records(data)
+        has_more_val = entities_data.get('hasMoreResult', 'false')
+        has_more = has_more_val in (True, 'true', 'True', 'S', 's', '1')
+
+        print(f"TGFTAB — página {offset_page}: {len(records)} registros (hasMoreResult={has_more_val})")
+
+        for rec in records:
+            resultado.append(rec)
+            print(rec)
+
+        if not has_more:
+            break
+        offset_page += 1
+
+    print(f"Consulta TGFTAB finalizada. Total de registros: {len(resultado)}")
+    return resultado
 
 
 def getContatos():
@@ -2338,4 +2448,14 @@ def getFuncionarios():
     }
 
 
-print(getClientes())
+
+#getTabelasPrecoLegado(["NUTAB", "CODTAB", "DTVIGOR", "DTALTER", "PERCENTUAL", "CODTABORIG", "JAPE_ID", "UTILIZADECCUSTO"])
+
+#getCidadeLegado()
+
+
+print(getToken())
+
+
+
+

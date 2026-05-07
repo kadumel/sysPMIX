@@ -236,14 +236,14 @@ class Cliente(models.Model):
     # Campos do endereço
     latitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Latitude")
     longitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Longitude")
-    logradouro = models.CharField(max_length=200, null=True, blank=True, verbose_name="Logradouro")
+    codend = models.IntegerField(null=True, blank=True, verbose_name="Código do Endereço")
     numero = models.CharField(max_length=20, null=True, blank=True, verbose_name="Número")
     complemento = models.CharField(max_length=100, null=True, blank=True, verbose_name="Complemento")
     bairro = models.CharField(max_length=100, null=True, blank=True, verbose_name="Bairro")
     cidade = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cidade")
-    codigo_ibge = models.BigIntegerField(null=True, blank=True, verbose_name="Código IBGE")
-    uf = models.CharField(max_length=2, null=True, blank=True, verbose_name="UF")
     cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP")
+    codtab = models.IntegerField(null=True, blank=True, verbose_name="Código da Tabela de Preço")
+    dtalter = models.CharField(max_length=50, null=True, blank=True, verbose_name="Data Alteração (DTALTER)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
     
@@ -257,8 +257,9 @@ class Cliente(models.Model):
             models.Index(fields=['cnpj_cpf']),
             models.Index(fields=['nome']),
             models.Index(fields=['tipo']),
-            models.Index(fields=['uf']),
             models.Index(fields=['cidade']),
+            models.Index(fields=['codtab']),
+            models.Index(fields=['codend']),
         ]
     
     def __str__(self):
@@ -596,6 +597,7 @@ class Contato(models.Model):
     telefone = models.CharField(max_length=20, null=True, blank=True, verbose_name="Telefone")
     email = models.EmailField(max_length=100, null=True, blank=True, verbose_name="E-mail")
     celular = models.CharField(max_length=20, null=True, blank=True, verbose_name="Celular")
+    dtalter = models.CharField(max_length=50, null=True, blank=True, verbose_name="Data Alteração (DTALTER)")
     latitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Latitude")
     longitude = models.CharField(max_length=50, null=True, blank=True, verbose_name="Longitude")
     created_at = models.DateTimeField(auto_now_add=True)

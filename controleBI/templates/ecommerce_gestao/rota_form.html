@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h4 class="card-title mb-0">
+                <i class="bi bi-sign-turn-right me-2"></i>
+                {% if rota %}Editar rota padrão{% else %}Nova rota padrão{% endif %}
+            </h4>
+            <a href="{% url 'gestao_rotas_ecommerce' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Voltar
+            </a>
+        </div>
+        <div class="card-body">
+            <form method="post">
+                {% csrf_token %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Nome da rota</label>
+                        <input type="text" name="nome" class="form-control" required value="{% if rota %}{{ rota.nome }}{% endif %}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Responsável comercial</label>
+                        <select name="responsavel" class="form-select" required>
+                            <option value="">Selecione</option>
+                            {% for user in responsaveis %}
+                            <option value="{{ user.id }}" {% if rota and rota.responsavel_id == user.id %}selected{% endif %}>
+                                {{ user.get_full_name|default:user.username }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <p class="text-muted small mb-2">
+                            Veículo, motorista e ajudantes: só aparecem opções ainda não usadas em outra rota padrão (na edição, mantém os desta rota).
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Veículo</label>
+                        <select name="veiculo" class="form-select">
+                            <option value="">Nenhum</option>
+                            {% for v in veiculos %}
+                            <option value="{{ v.id }}" {% if rota and rota.veiculo_id == v.id %}selected{% endif %}>
+                                {{ v.placa }} — {{ v.descricao }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Motorista</label>
+                        <select name="motorista" class="form-select">
+                            <option value="">Nenhum</option>
+                            {% for m in motoristas %}
+                            <option value="{{ m.id }}" {% if rota and rota.motorista_id == m.id %}selected{% endif %}>
+                                {{ m.nome }} ({{ m.codigo_erp }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Ajudantes</label>
+                        <select name="ajudantes" class="form-select" size="5" multiple>
+                            {% for a in ajudantes %}
+                            <option value="{{ a.id }}" {% if a.id in ajudantes_selecionados %}selected{% endif %}>
+                                {{ a.nome }} ({{ a.codigo_erp }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Ctrl/Cmd para vários ajudantes.</div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Descrição</label>
+                        <textarea name="descricao" class="form-control" rows="2">{% if rota %}{{ rota.descricao }}{% endif %}</textarea>
+                    </div>
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="ativa" id="id_ativa" {% if not rota or rota.ativa %}checked{% endif %}>
+                            <label class="form-check-label" for="id_ativa">Rota ativa</label>
+                        </div>
+                    </div>
+                </div>
+
+                <hr class="my-4">
+                <h6 class="mb-2">Clientes da rota padrão</h6>
+                <p class="text-muted small mb-2">A ordem exibida aqui será usada como base para gerar a rota do dia.</p>
+                <p class="text-muted small mb-3">São listados apenas clientes que ainda não estejam em outra rota padrão.</p>
+                <div class="mb-2">
+                    <input type="text" id="filtroClientesRota" class="form-control" placeholder="Filtrar cliente por nome, razão ou código...">
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" value="1" id="filtroSomenteSelecionados">
+                    <label class="form-check-label" for="filtroSomenteSelecionados">
+                        Mostrar somente clientes selecionados
+                    </label>
+                </div>
+                <select name="clientes" id="clientesRotaSelect" class="form-select" size="14" multiple>
+                    {% for cliente in clientes %}
+                    <option value="{{ cliente.id }}" {% if cliente.id in selecionados %}selected{% endif %}>
+                        {{ cliente.nome|default:cliente.razao|default:'Cliente sem nome' }} - {{ cliente.codigo_cliente }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-text">Use Ctrl/Cmd para selecionar múltiplos clientes.</div>
+
+                <div class="mt-4 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>Salvar rota
+                    </button>
+                    <a href="{% url 'gestao_rotas_ecommerce' %}" class="btn btn-outline-secondary">Cancelar</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const input = document.getElementById('filtroClientesRota');
+        const select = document.getElementById('clientesRotaSelect');
+        const somenteSelecionados = document.getElementById('filtroSomenteSelecionados');
+        if (!input || !select || !somenteSelecionados) return;
+
+        const options = Array.from(select.options).map(function (option) {
+            return { value: option.value, label: option.textContent, selected: option.selected };
+        });
+
+        function renderFilteredOptions(term, onlySelected) {
+            const normalized = (term || '').trim().toLowerCase();
+            const selectedValues = new Set(
+                Array.from(select.selectedOptions).map(function (o) { return o.value; })
+            );
+
+            select.innerHTML = '';
+            options.forEach(function (entry) {
+                const match = !normalized || entry.label.toLowerCase().indexOf(normalized) !== -1;
+                const isSelected = selectedValues.has(entry.value) || entry.selected;
+                if (onlySelected && !isSelected) return;
+                if (!match) return;
+                const option = document.createElement('option');
+                option.value = entry.value;
+                option.textContent = entry.label;
+                option.selected = isSelected;
+                select.appendChild(option);
+            });
+        }
+
+        input.addEventListener('input', function () {
+            renderFilteredOptions(input.value, somenteSelecionados.checked);
+        });
+        somenteSelecionados.addEventListener('change', function () {
+            renderFilteredOptions(input.value, somenteSelecionados.checked);
+        });
+    })();
+</script>
+{% endblock %}

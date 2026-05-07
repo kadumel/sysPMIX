@@ -15,11 +15,9 @@ from dotenv import load_dotenv
 import os
 import dj_database_url
 
-load_dotenv()
-
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env", override=True)
 
 # Sankhya API (obrigatório para integração no app api_sankhya)
 SANKHYA_CLIENT_ID = os.getenv('SANKHYA_CLIENT_ID')
@@ -48,8 +46,16 @@ ALLOWED_HOSTS = [h.strip() for h in _allowed_hosts.split(',') if h.strip()]
 _csrf_env = (os.getenv('CSRF_TRUSTED_ORIGINS') or '').strip()
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_env.split(',') if o.strip()]
 
-# Encaminhamento TLS pelo proxy (evita redirects/URLs errados em alguns deploys)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Encaminhamento TLS via proxy.
+# Em dev local (DEBUG=True), mantenha desligado por padrão para evitar conflito com runserver HTTP.
+_proxy_ssl_env = os.getenv('USE_PROXY_SSL_HEADER')
+if _proxy_ssl_env is None:
+    USE_PROXY_SSL_HEADER = not DEBUG
+else:
+    USE_PROXY_SSL_HEADER = _proxy_ssl_env.strip().lower() in ('1', 'true', 'yes', 'on')
+
+if USE_PROXY_SSL_HEADER:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Application definition
@@ -96,6 +102,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'ecommerce.context_processors.ecommerce_nav',
+                'controleBI.context_processors.bi_nav_context',
             ],
         },
     },

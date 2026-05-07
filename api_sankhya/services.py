@@ -55,6 +55,15 @@ def _get_token_headers() -> dict[str, str]:
     return {"accept": "application/json", "Authorization": f"Bearer {body['access_token']}"}
 
 
+def _request_with_token_retry(method: str, url: str, headers: dict[str, str], **kwargs):
+    resp = requests.request(method, url, headers=headers, **kwargs)
+    if resp.status_code not in (401, 403):
+        return resp, headers
+    refreshed_headers = {**headers, **_get_token_headers()}
+    resp = requests.request(method, url, headers=refreshed_headers, **kwargs)
+    return resp, refreshed_headers
+
+
 def _as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -132,7 +141,7 @@ def _sync_paginated(
     has_more = True
     result = SyncResult()
     while has_more:
-        resp = requests.get(url, headers=headers, params={"page": page}, timeout=120)
+        resp, headers = _request_with_token_retry("GET", url, headers, params={"page": page}, timeout=120)
         resp.raise_for_status()
         data = resp.json()
         pagination = data.get("pagination", {})
@@ -245,23 +254,97 @@ def sync_vendedores() -> dict[str, int]:
 
 
 def sync_clientes() -> dict[str, int]:
-    def process(v: dict[str, Any]):
-        codigo = _to_int(v.get("codigoCliente"))
-        if not codigo:
-            return False, False
-        defaults = {
-            "tipo": _to_str(v.get("tipo"), 10),
-            "cnpj_cpf": _to_str(v.get("cnpjCpf"), 20),
-            "nome": _to_str(v.get("nome"), 200),
-            "razao": _to_str(v.get("razao"), 200),
-            "email": _to_str(v.get("email"), 100),
-            "cidade": _to_str(v.get("cidade"), 100),
-            "uf": _to_str(v.get("uf"), 2),
-        }
-        obj, created = Cliente.objects.update_or_create(codigo_cliente=codigo, defaults=defaults)
-        return created, bool(obj)
+    headers = _get_token_headers()
+    headers["Content-Type"] = "application/json"
+    page = 0
+    has_more = True
+    result = SyncResult()
+    url = getattr(settings, "SANKHYA_URL_GENERIC", None) or (
+        "https://api.sankhya.com.br/gateway/v1/mge/service.sbr"
+        "?serviceName=CRUDServiceProvider.loadRecords&outputType=json"
+    )
 
-    return _sync_paginated(url="https://api.sankhya.com.br/v1/parceiros/clientes", list_key="clientes", process_item=process).as_dict()
+    while has_more:
+        body = {
+            "serviceName": "CRUDServiceProvider.loadRecords",
+            "requestBody": {
+                "dataSet": {
+                    "rootEntity": "Parceiro",
+                    "includePresentationFields": "S",
+                    "offsetPage": str(page),
+                    "entity": {
+                        "fieldset": {
+                            "list": (
+                                "CODPARC,TIPPESSOA,CGC_CPF,IDENTINSCESTAD,NOMEPARC,RAZAOSOCIAL,EMAIL,"
+                                "TELEFONE,LIMCREDMENSAL,GRUPOAUTOR,LATITUDE,LONGITUDE,CODEND,NUMEND,"
+                                "COMPLEMENTO,CODBAI,CODCID,CEP,CODTAB"
+                            )
+                        }
+                    },
+                }
+            },
+        }
+        resp, headers = _request_with_token_retry("POST", url, headers, json=body, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        entities = (data.get("responseBody") or data).get("entities") or {}
+        has_more = str(entities.get("hasMoreResult", "false")).lower() in {"1", "true", "s"}
+        rows = entities.get("entity") or []
+        if isinstance(rows, dict):
+            rows = [rows]
+
+        for row in rows:
+            try:
+                codigo = _to_int((row.get("f0") or {}).get("$") if isinstance(row.get("f0"), dict) else row.get("f0"))
+                if codigo is None:
+                    continue
+
+                telefone_raw = (row.get("f7") or {}).get("$") if isinstance(row.get("f7"), dict) else row.get("f7")
+                telefone = _to_str(telefone_raw, 20)
+                ddd = None
+                numero = None
+                if telefone:
+                    digits = "".join(ch for ch in telefone if ch.isdigit())
+                    if len(digits) >= 10:
+                        ddd = digits[:2]
+                        numero = digits[2:20]
+                    else:
+                        numero = telefone
+
+                defaults = {
+                    "tipo": _to_str((row.get("f1") or {}).get("$") if isinstance(row.get("f1"), dict) else row.get("f1"), 10),
+                    "cnpj_cpf": _to_str((row.get("f2") or {}).get("$") if isinstance(row.get("f2"), dict) else row.get("f2"), 20),
+                    "ie_rg": _to_str((row.get("f3") or {}).get("$") if isinstance(row.get("f3"), dict) else row.get("f3"), 20),
+                    "nome": _to_str((row.get("f4") or {}).get("$") if isinstance(row.get("f4"), dict) else row.get("f4"), 200),
+                    "razao": _to_str((row.get("f5") or {}).get("$") if isinstance(row.get("f5"), dict) else row.get("f5"), 200),
+                    "email": _to_str((row.get("f6") or {}).get("$") if isinstance(row.get("f6"), dict) else row.get("f6"), 100),
+                    "telefone_ddd": _to_str(ddd, 5),
+                    "telefone_numero": _to_str(numero, 20),
+                    "limite_credito": _to_decimal((row.get("f8") or {}).get("$") if isinstance(row.get("f8"), dict) else row.get("f8")),
+                    "grupo_autorizacao": _to_str((row.get("f9") or {}).get("$") if isinstance(row.get("f9"), dict) else row.get("f9"), 10),
+                    "latitude": _to_str((row.get("f10") or {}).get("$") if isinstance(row.get("f10"), dict) else row.get("f10"), 50),
+                    "longitude": _to_str((row.get("f11") or {}).get("$") if isinstance(row.get("f11"), dict) else row.get("f11"), 50),
+                    "codend": _to_int((row.get("f12") or {}).get("$") if isinstance(row.get("f12"), dict) else row.get("f12")),
+                    "numero": _to_str((row.get("f13") or {}).get("$") if isinstance(row.get("f13"), dict) else row.get("f13"), 20),
+                    "complemento": _to_str((row.get("f14") or {}).get("$") if isinstance(row.get("f14"), dict) else row.get("f14"), 100),
+                    "bairro": _to_str((row.get("f15") or {}).get("$") if isinstance(row.get("f15"), dict) else row.get("f15"), 100),
+                    "cidade": _to_str((row.get("f16") or {}).get("$") if isinstance(row.get("f16"), dict) else row.get("f16"), 100),
+                    "cep": _to_str((row.get("f17") or {}).get("$") if isinstance(row.get("f17"), dict) else row.get("f17"), 10),
+                    "codtab": _to_int((row.get("f18") or {}).get("$") if isinstance(row.get("f18"), dict) else row.get("f18")),
+                }
+                defaults = {k: v for k, v in defaults.items() if v is not None}
+
+                obj, created = Cliente.objects.update_or_create(codigo_cliente=codigo, defaults=defaults)
+                result.total_processados += 1
+                if created:
+                    result.total_inseridos += 1
+                else:
+                    result.total_atualizados += 1
+                _ = obj
+            except Exception:
+                result.total_erros += 1
+        page += 1
+    return result.as_dict()
 
 
 def sync_motoristas() -> dict[str, int]:
@@ -278,25 +361,66 @@ def sync_motoristas() -> dict[str, int]:
 
 
 def sync_precos() -> dict[str, int]:
-    def process(v: dict[str, Any]):
-        produto = _to_int(v.get("codigoProduto"))
-        tabela = _to_int(v.get("codigoTabela"))
-        if produto is None or tabela is None:
-            return False, False
-        defaults = {
-            "valor": _to_decimal(v.get("valor")) or Decimal("0"),
-            "controle": _to_str(v.get("controle"), 50),
-            "unidade": _to_str(v.get("unidade"), 10),
-        }
-        obj, created = Preco.objects.update_or_create(
-            codigo_produto=produto,
-            codigo_local_estoque=_to_int(v.get("codigoLocalEstoque")) or 0,
-            codigo_tabela=tabela,
-            defaults=defaults,
-        )
-        return created, bool(obj)
+    headers = _get_token_headers()
+    result = SyncResult()
+    base_url = (getattr(settings, "SANKHYA_URL_PRECOS", None) or "https://api.sankhya.com.br/v1/precos").strip()
 
-    return _sync_paginated(url="https://api.sankhya.com.br/v1/precos", list_key="precos", process_item=process).as_dict()
+    codtabs = (
+        Cliente.objects.exclude(codtab__isnull=True)
+        .exclude(codtab=0)
+        .order_by()
+        .values_list("codtab", flat=True)
+        .distinct()
+    )
+    codtabs = list(codtabs)
+
+    for codtab in codtabs:
+        try:
+            if "{codigo_tabela}" in base_url:
+                url = base_url.format(codigo_tabela=codtab).rstrip("/")
+            else:
+                clean_base = base_url.rstrip("/")
+                url = clean_base if clean_base.endswith(f"/tabela/{codtab}") else f"{clean_base}/tabela/{codtab}"
+            pagina = 1
+            tem_mais = True
+            while tem_mais:
+                resp, headers = _request_with_token_retry("GET", url, headers, params={"pagina": pagina}, timeout=120)
+                if resp.status_code == 404:
+                    resp, headers = _request_with_token_retry("GET", url, headers, params={"page": pagina}, timeout=120)
+                resp.raise_for_status()
+                data = resp.json()
+                for v in data.get("produtos", []):
+                    produto = _to_int(v.get("codigoProduto"))
+                    tabela = _to_int(codtab)
+                    if produto is None or tabela is None:
+                        continue
+                    defaults = {
+                        "valor": _to_decimal(v.get("valor")) or Decimal("0"),
+                        "controle": _to_str(v.get("controle"), 50),
+                        "unidade": _to_str(v.get("unidade"), 10),
+                    }
+                    _, created = Preco.objects.update_or_create(
+                        codigo_produto=produto,
+                        codigo_local_estoque=_to_int(v.get("codigoLocalEstoque")) or 0,
+                        codigo_tabela=tabela,
+                        defaults=defaults,
+                    )
+                    result.total_processados += 1
+                    if created:
+                        result.total_inseridos += 1
+                    else:
+                        result.total_atualizados += 1
+
+                tem_mais_raw = data.get("temMaisRegistros", False)
+                if isinstance(tem_mais_raw, str):
+                    tem_mais = tem_mais_raw.strip().lower() == "true"
+                else:
+                    tem_mais = bool(tem_mais_raw)
+                pagina += 1
+        except Exception:
+            result.total_erros += 1
+
+    return result.as_dict()
 
 
 def sync_produtos() -> dict[str, int]:
@@ -343,7 +467,9 @@ def sync_pedidos() -> dict[str, int]:
     has_more = True
     result = SyncResult()
     while has_more:
-        resp = requests.get("https://api.sankhya.com.br/v1/vendas/pedidos", headers=headers, params={"page": page}, timeout=120)
+        resp, headers = _request_with_token_retry(
+            "GET", "https://api.sankhya.com.br/v1/vendas/pedidos", headers, params={"page": page}, timeout=120
+        )
         resp.raise_for_status()
         data = resp.json()
         pagination = data.get("pagination") or {}
@@ -407,7 +533,7 @@ def sync_contatos() -> dict[str, int]:
                 }
             },
         }
-        resp = requests.post(url, headers=headers, json=body, timeout=120)
+        resp, headers = _request_with_token_retry("POST", url, headers, json=body, timeout=120)
         resp.raise_for_status()
         data = resp.json()
         entities = (data.get("responseBody") or data).get("entities") or {}
@@ -446,7 +572,9 @@ def sync_funcionarios() -> dict[str, int]:
     page = 0
     has_more = True
     while has_more:
-        resp = requests.get("https://api.sankhya.com.br/v1/pessoal/funcionarios", headers=headers, params={"page": page}, timeout=120)
+        resp, headers = _request_with_token_retry(
+            "GET", "https://api.sankhya.com.br/v1/pessoal/funcionarios", headers, params={"page": page}, timeout=120
+        )
         resp.raise_for_status()
         data = resp.json()
         bloco = data[0] if isinstance(data, list) and data else data
@@ -458,9 +586,10 @@ def sync_funcionarios() -> dict[str, int]:
             if codigo_empresa is None or codigo_funcionario is None:
                 continue
             try:
-                dresp = requests.get(
+                dresp, headers = _request_with_token_retry(
+                    "GET",
                     f"https://api.sankhya.com.br/v1/pessoal/funcionarios/{codigo_funcionario}/empresa/{codigo_empresa}",
-                    headers=headers,
+                    headers,
                     timeout=120,
                 )
                 dresp.raise_for_status()

@@ -26,6 +26,11 @@
             <div class="flex-grow-1"></div>
             {% endif %}
             <p class="small text-muted mb-2">Cód. {{ p.codigo_produto }}</p>
+            {% if p.preco_ecommerce is not None %}
+            <p class="fw-semibold mb-2">R$ {{ p.preco_ecommerce|floatformat:2 }}</p>
+            {% elif request.user.is_authenticated %}
+            <p class="small text-muted mb-2">Preço indisponível para sua tabela.</p>
+            {% endif %}
             <button
                 type="button"
                 class="btn btn-primary btn-sm w-100 mt-auto"

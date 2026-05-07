@@ -1,0 +1,28 @@
+<div class="mb-2 small text-muted">
+    {% if filtro %}Filtro: <strong>{{ filtro }}</strong> · {% endif %}
+    <span id="loja-selector-meta">{{ total_carregados }}</span> cliente(s) carregado(s){% if has_more %} · há mais abaixo{% endif %}
+    {% if not filtro %} · <span class="text-body-secondary">Dica: use a busca para achar clientes em bases grandes.</span>{% endif %}
+</div>
+<div class="table-responsive" style="max-height: 420px;">
+    <table class="table table-sm align-middle mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>Cliente</th>
+                <th>Código</th>
+                <th class="text-end">Ação</th>
+            </tr>
+        </thead>
+        <tbody id="loja-selector-tbody">
+            {% for cliente in clientes %}
+            {% include 'ecommerce_gestao/partials/loja_clientes_selector_row.html' %}
+            {% empty %}
+            <tr>
+                <td colspan="3" class="text-center text-muted py-4">Nenhum cliente encontrado.</td>
+            </tr>
+            {% endfor %}
+            {% if has_more %}
+            {% include 'ecommerce_gestao/partials/loja_clientes_selector_footer_row.html' %}
+            {% endif %}
+        </tbody>
+    </table>
+</div>

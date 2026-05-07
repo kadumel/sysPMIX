@@ -3,12 +3,13 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 
-from api_sankhya.models import Produto
+from api_sankhya.models import Preco, Produto
 
 from . import catalog
 from .cart_session import clear_cart, get_cart
-from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja
+from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente
 
 
 def integrar_pedido_no_sistema_externo(pedido: PedidoLoja) -> str | None:
@@ -39,6 +40,9 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
         return None, 'O carrinho está vazio.'
 
     codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
+    codtab = getattr(cliente_api, 'codtab', None)
+    if codtab in (None, 0):
+        return None, 'Cliente sem tabela de preço (CODTAB) configurada.'
     linhas_validas: list[dict] = []
     for item in cart:
         cid = item.get('codigo_produto')
@@ -59,8 +63,26 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
             qty = Decimal('0')
         if qty <= 0:
             continue
+        preco = (
+            Preco.objects.filter(codigo_produto=p.codigo_produto, codigo_tabela=codtab)
+            .order_by('codigo_local_estoque')
+            .first()
+        )
+        if not preco:
+            return (
+                None,
+                f'Produto "{nome}" sem preço na tabela {codtab}. Atualize os preços antes de finalizar.',
+            )
+        valor_unitario = preco.valor or Decimal('0')
+        valor_total = (valor_unitario * qty).quantize(Decimal('0.01'))
         linhas_validas.append(
-            {'codigo_produto': p.codigo_produto, 'nome': nome, 'qty': qty}
+            {
+                'codigo_produto': p.codigo_produto,
+                'nome': nome,
+                'qty': qty,
+                'valor_unitario': valor_unitario,
+                'valor_total': valor_total,
+            }
         )
 
     if not linhas_validas:
@@ -71,14 +93,21 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
             user=user,
             cliente=cliente_api,
             status=PedidoLoja.Status.PENDENTE,
+            codtab=codtab,
         )
+        total_pedido = Decimal('0')
         for row in linhas_validas:
             ItemPedidoLoja.objects.create(
                 pedido=pedido,
                 codigo_produto=row['codigo_produto'],
                 nome_produto=row['nome'][:300],
                 quantidade=row['qty'],
+                preco_unitario=row['valor_unitario'],
+                valor_total=row['valor_total'],
             )
+            total_pedido += row['valor_total']
+        pedido.valor_total = total_pedido
+        pedido.save(update_fields=['valor_total'])
         clear_cart(request)
 
     criar_notificacao(
@@ -88,3 +117,17 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
         pedido=pedido,
     )
     return pedido, None
+
+
+def filtrar_pedidos_loja_notificacoes_comercial(pedidos_qs, user):
+    """Restringe pedidos ao comercial: cliente na rota do dia na data do pedido, com ele como responsável da rota padrão."""
+    return pedidos_qs.filter(cliente_id__isnull=False).filter(
+        Exists(
+            RotaDiaCliente.objects.filter(
+                cliente_id=OuterRef('cliente_id'),
+                rota_dia__data=OuterRef('criado_em__date'),
+                rota_dia__rota_padrao__responsavel=user,
+                rota_dia__rota_padrao__ativa=True,
+            )
+        )
+    )

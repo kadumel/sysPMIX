@@ -106,8 +106,7 @@
                             <td>
                                 <div class="form-check">
                                     <input class="form-check-input pedido-checkbox" type="checkbox" 
-                                           value="{{ pedido.id }}" 
-                                           {% if pedido.sincronizado %}disabled{% endif %}>
+                                           value="{{ pedido.id }}">
                                 </div>
                             </td>
                             <td>{{ pedido.pedido_erp }}</td>
@@ -406,8 +405,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     // Atualizar status
                     statusCell.innerHTML = '<span class="badge bg-success">Sim</span>';
                     
-                    // Desabilitar e desmarcar checkbox
-                    checkbox.disabled = true;
+                    // Manter checkbox habilitado para permitir reenvio
                     checkbox.checked = false;
                 });
                 

@@ -106,6 +106,30 @@ def remove_product(request, codigo_produto):
     request.session.modified = True
 
 
+def adjust_product_quantity(request, codigo_produto, delta: float):
+    """
+    Ajusta quantidade de um item existente no carrinho.
+    Se o resultado ficar abaixo do mínimo, remove o item.
+    """
+    cart = get_cart(request)
+    codigo_produto = int(codigo_produto)
+    d = Decimal(str(delta)).quantize(QTY_STEP, rounding=ROUND_HALF_UP)
+    for item in cart:
+        if int(item.get('codigo_produto')) != codigo_produto:
+            continue
+        atual = _qty_decimal(item.get('qty'))
+        novo = (atual + d).quantize(QTY_STEP, rounding=ROUND_HALF_UP)
+        if novo < MIN_QTY:
+            remove_product(request, codigo_produto)
+            return False
+        if novo > MAX_QTY:
+            novo = MAX_QTY
+        item['qty'] = float(novo)
+        request.session.modified = True
+        return True
+    return False
+
+
 def clear_cart(request):
     request.session[SESSION_KEY] = []
     request.session.modified = True

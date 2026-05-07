@@ -420,6 +420,7 @@ class PerfilUsuario(models.Model):
     class Perfil(models.TextChoices):
         CLIENTE = 'cliente', 'Cliente (e-commerce)'
         COMERCIAL = 'comercial', 'Comercial (painel BI)'
+        GERENTE_COMERCIAL = 'gerente_comercial', 'Gerente comercial (painel BI)'
         ADMINISTRADOR = 'administrador', 'Administrador do sistema (painel BI)'
 
     user = models.OneToOneField(
@@ -441,6 +442,20 @@ class PerfilUsuario(models.Model):
 
     def __str__(self):
         return f'{self.user.username} — {self.get_perfil_display()}'
+
+
+# Perfis com acesso ao painel BI / loja em nome de cliente (exceto cliente final)
+PERFIS_PAINEL_BI_LOJA = frozenset({
+    PerfilUsuario.Perfil.COMERCIAL,
+    PerfilUsuario.Perfil.GERENTE_COMERCIAL,
+    PerfilUsuario.Perfil.ADMINISTRADOR,
+})
+
+# Gestão de rotas (menu e telas): apenas gerente comercial e administrador
+PERFIS_GESTAO_ROTAS = frozenset({
+    PerfilUsuario.Perfil.GERENTE_COMERCIAL,
+    PerfilUsuario.Perfil.ADMINISTRADOR,
+})
 
 
 class UsuarioClienteSankhya(models.Model):

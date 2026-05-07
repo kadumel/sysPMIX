@@ -7,6 +7,12 @@ from .models import (
     NotificacaoLoja,
     PedidoLoja,
     ProdutoImagem,
+    RotaDia,
+    RotaDiaAjudante,
+    RotaDiaCliente,
+    RotaPadrao,
+    RotaPadraoAjudante,
+    RotaPadraoCliente,
 )
 from .services import criar_notificacao, integrar_pedido_no_sistema_externo
 
@@ -14,7 +20,7 @@ from .services import criar_notificacao, integrar_pedido_no_sistema_externo
 class ItemPedidoLojaInline(admin.TabularInline):
     model = ItemPedidoLoja
     extra = 0
-    readonly_fields = ('codigo_produto', 'nome_produto', 'quantidade')
+    readonly_fields = ('codigo_produto', 'nome_produto', 'quantidade', 'preco_unitario', 'valor_total')
     can_delete = False
 
 
@@ -24,6 +30,8 @@ class PedidoLojaAdmin(admin.ModelAdmin):
         'id',
         'user',
         'cliente',
+        'codtab',
+        'valor_total',
         'status',
         'codigo_pedido_externo',
         'criado_em',
@@ -37,6 +45,8 @@ class PedidoLojaAdmin(admin.ModelAdmin):
     readonly_fields = (
         'aprovado_por',
         'aprovado_em',
+        'codtab',
+        'valor_total',
         'criado_em',
         'atualizado_em',
     )
@@ -44,7 +54,7 @@ class PedidoLojaAdmin(admin.ModelAdmin):
     actions = ('acao_autorizar_integrar', 'acao_rejeitar')
 
     fieldsets = (
-        (None, {'fields': ('user', 'cliente', 'status')}),
+        (None, {'fields': ('user', 'cliente', 'status', 'codtab', 'valor_total')}),
         ('Comercial', {'fields': ('observacao_comercial',)}),
         ('Integração', {'fields': ('codigo_pedido_externo',)}),
         (
@@ -178,3 +188,49 @@ class ProdutoImagemAdmin(admin.ModelAdmin):
     list_filter = ('ativo', 'criado_em')
     search_fields = ('produto__codigo_produto', 'produto__nome', 'nome_imagem')
     readonly_fields = ('nome_imagem', 'criado_em', 'atualizado_em')
+
+
+class RotaPadraoClienteInline(admin.TabularInline):
+    model = RotaPadraoCliente
+    extra = 0
+    autocomplete_fields = ('cliente',)
+    ordering = ('ordem', 'id')
+
+
+class RotaPadraoAjudanteInline(admin.TabularInline):
+    model = RotaPadraoAjudante
+    extra = 0
+    autocomplete_fields = ('funcionario',)
+    ordering = ('ordem', 'id')
+
+
+@admin.register(RotaPadrao)
+class RotaPadraoAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nome', 'responsavel', 'veiculo', 'motorista', 'ativa', 'criado_em')
+    list_filter = ('ativa', 'criado_em')
+    search_fields = ('nome', 'responsavel__username', 'responsavel__first_name', 'responsavel__last_name')
+    autocomplete_fields = ('responsavel', 'veiculo', 'motorista')
+    inlines = [RotaPadraoAjudanteInline, RotaPadraoClienteInline]
+
+
+class RotaDiaClienteInline(admin.TabularInline):
+    model = RotaDiaCliente
+    extra = 0
+    autocomplete_fields = ('cliente',)
+    ordering = ('ordem', 'id')
+
+
+class RotaDiaAjudanteInline(admin.TabularInline):
+    model = RotaDiaAjudante
+    extra = 0
+    autocomplete_fields = ('funcionario',)
+    ordering = ('ordem', 'id')
+
+
+@admin.register(RotaDia)
+class RotaDiaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'data', 'rota_padrao', 'veiculo', 'motorista', 'criado_por', 'criado_em')
+    list_filter = ('data', 'criado_em')
+    search_fields = ('data', 'criado_por__username', 'rota_padrao__nome')
+    autocomplete_fields = ('rota_padrao', 'criado_por', 'veiculo', 'motorista')
+    inlines = [RotaDiaAjudanteInline, RotaDiaClienteInline]

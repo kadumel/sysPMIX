@@ -8,6 +8,17 @@ from .views import (
     ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView,
     ListClienteSankhyaGestaoView, GestaoUsuariosClienteSankhyaView,
     GestaoCategoriasEcommerceView,
+    GestaoRotasEcommerceView,
+    GestaoNotificacoesEcommerceView,
+    EcommerceClientesSelectorView,
+    EcommerceSelecionarClienteView,
+    gestao_notificacao_aprovar,
+    gestao_notificacao_rejeitar,
+    notificacoes_pendentes_count_api,
+    RotasDiaListView,
+    MapaRotasSemanaView,
+    RotaPadraoFormView,
+    RotaDiaBuilderView,
 )
 from django.views.generic import TemplateView
 from . import views
@@ -60,6 +71,66 @@ urlpatterns = [
         'categorias-ecommerce/',
         GestaoCategoriasEcommerceView.as_view(),
         name='gestao_categorias_ecommerce',
+    ),
+    path(
+        'rotas-ecommerce/',
+        GestaoRotasEcommerceView.as_view(),
+        name='gestao_rotas_ecommerce',
+    ),
+    path(
+        'rotas-ecommerce/nova/',
+        RotaPadraoFormView.as_view(),
+        name='gestao_rota_padrao_nova',
+    ),
+    path(
+        'rotas-ecommerce/<int:pk>/editar/',
+        RotaPadraoFormView.as_view(),
+        name='gestao_rota_padrao_editar',
+    ),
+    path(
+        'rotas-ecommerce/rota-dia/',
+        RotaDiaBuilderView.as_view(),
+        name='gestao_rota_dia_builder',
+    ),
+    path(
+        'rotas-ecommerce/rotas-dia/',
+        RotasDiaListView.as_view(),
+        name='gestao_rotas_dia_list',
+    ),
+    path(
+        'rotas-ecommerce/mapa-rotas/',
+        MapaRotasSemanaView.as_view(),
+        name='ecommerce_mapa_rotas_semana',
+    ),
+    path(
+        'notificacoes-ecommerce/',
+        GestaoNotificacoesEcommerceView.as_view(),
+        name='gestao_notificacoes_ecommerce',
+    ),
+    path(
+        'notificacoes-ecommerce/<int:pk>/aprovar/',
+        gestao_notificacao_aprovar,
+        name='gestao_notificacao_aprovar',
+    ),
+    path(
+        'notificacoes-ecommerce/<int:pk>/rejeitar/',
+        gestao_notificacao_rejeitar,
+        name='gestao_notificacao_rejeitar',
+    ),
+    path(
+        'notificacoes-ecommerce/pendentes-count/',
+        notificacoes_pendentes_count_api,
+        name='gestao_notificacoes_pendentes_count_api',
+    ),
+    path(
+        'ecommerce/clientes-selector/',
+        EcommerceClientesSelectorView.as_view(),
+        name='gestao_ecommerce_clientes_selector',
+    ),
+    path(
+        'ecommerce/selecionar-cliente/',
+        EcommerceSelecionarClienteView.as_view(),
+        name='gestao_ecommerce_cliente_selecionar',
     ),
     
     path('teste/', TemplateView.as_view(template_name='teste/base.html'), name='login'),

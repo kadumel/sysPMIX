@@ -25,6 +25,17 @@ class PedidoLoja(models.Model):
         related_name='pedidos_loja',
         verbose_name='Cliente Sankhya',
     )
+    codtab = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Código da tabela de preço',
+    )
+    valor_total = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='Valor total',
+    )
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
@@ -74,6 +85,18 @@ class ItemPedidoLoja(models.Model):
     codigo_produto = models.IntegerField(verbose_name='Código produto')
     nome_produto = models.CharField(max_length=300, verbose_name='Nome (snapshot)')
     quantidade = models.DecimalField(max_digits=15, decimal_places=4, verbose_name='Quantidade')
+    preco_unitario = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='Preço unitário',
+    )
+    valor_total = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=0,
+        verbose_name='Valor total do item',
+    )
 
     class Meta:
         verbose_name = 'Item do pedido (loja)'
@@ -168,3 +191,198 @@ class ProdutoImagem(models.Model):
         if self.imagem and not self.nome_imagem:
             self.nome_imagem = os.path.basename(self.imagem.name)
         super().save(*args, **kwargs)
+
+
+class RotaPadrao(models.Model):
+    nome = models.CharField(max_length=120, verbose_name='Nome')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    responsavel = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='rotas_padrao_responsavel',
+        verbose_name='Responsável comercial',
+    )
+    veiculo = models.ForeignKey(
+        'controleBI.Veiculo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rotas_padrao',
+        verbose_name='Veículo',
+    )
+    motorista = models.ForeignKey(
+        'controleBI.Funcionario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rotas_padrao_motorista',
+        limit_choices_to={'tipo': 'Motorista'},
+        verbose_name='Motorista',
+    )
+    ativa = models.BooleanField(default=True, db_index=True, verbose_name='Ativa')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Rota padrão'
+        verbose_name_plural = 'Rotas padrão'
+        ordering = ['nome', 'id']
+
+    def __str__(self):
+        return self.nome
+
+
+class RotaPadraoAjudante(models.Model):
+    rota = models.ForeignKey(
+        RotaPadrao,
+        on_delete=models.CASCADE,
+        related_name='ajudantes_equipe',
+        verbose_name='Rota padrão',
+    )
+    funcionario = models.ForeignKey(
+        'controleBI.Funcionario',
+        on_delete=models.CASCADE,
+        related_name='rotas_padrao_ajudante',
+        limit_choices_to={'tipo': 'Ajudante'},
+        verbose_name='Ajudante',
+    )
+    ordem = models.PositiveIntegerField(default=0, db_index=True, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Ajudante da rota padrão'
+        verbose_name_plural = 'Ajudantes da rota padrão'
+        ordering = ['ordem', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['rota', 'funcionario'], name='uniq_rota_padrao_ajudante'),
+        ]
+
+    def __str__(self):
+        return f'{self.rota} — {self.funcionario}'
+
+
+class RotaPadraoCliente(models.Model):
+    rota = models.ForeignKey(
+        RotaPadrao,
+        on_delete=models.CASCADE,
+        related_name='clientes_rota',
+        verbose_name='Rota padrão',
+    )
+    cliente = models.ForeignKey(
+        'api_sankhya.Cliente',
+        on_delete=models.CASCADE,
+        related_name='rotas_padrao',
+        verbose_name='Cliente',
+    )
+    ordem = models.PositiveIntegerField(default=0, db_index=True, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Cliente da rota padrão'
+        verbose_name_plural = 'Clientes da rota padrão'
+        ordering = ['ordem', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['rota', 'cliente'], name='uniq_rota_padrao_cliente'),
+        ]
+
+    def __str__(self):
+        return f'{self.rota} - {self.cliente}'
+
+
+class RotaDia(models.Model):
+    data = models.DateField(db_index=True, verbose_name='Data')
+    rota_padrao = models.ForeignKey(
+        RotaPadrao,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='execucoes',
+        verbose_name='Rota padrão base',
+    )
+    veiculo = models.ForeignKey(
+        'controleBI.Veiculo',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rotas_dia',
+        verbose_name='Veículo',
+    )
+    motorista = models.ForeignKey(
+        'controleBI.Funcionario',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='rotas_dia_motorista',
+        limit_choices_to={'tipo': 'Motorista'},
+        verbose_name='Motorista',
+    )
+    criado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name='rotas_dia_criadas',
+        verbose_name='Criado por',
+    )
+    observacao = models.TextField(blank=True, verbose_name='Observações')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Rota do dia'
+        verbose_name_plural = 'Rotas do dia'
+        ordering = ['-data']
+
+    def __str__(self):
+        return f'Rota do dia {self.data:%d/%m/%Y}'
+
+
+class RotaDiaAjudante(models.Model):
+    rota_dia = models.ForeignKey(
+        RotaDia,
+        on_delete=models.CASCADE,
+        related_name='ajudantes_equipe',
+        verbose_name='Rota do dia',
+    )
+    funcionario = models.ForeignKey(
+        'controleBI.Funcionario',
+        on_delete=models.CASCADE,
+        related_name='rotas_dia_ajudante',
+        limit_choices_to={'tipo': 'Ajudante'},
+        verbose_name='Ajudante',
+    )
+    ordem = models.PositiveIntegerField(default=0, db_index=True, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Ajudante da rota do dia'
+        verbose_name_plural = 'Ajudantes da rota do dia'
+        ordering = ['ordem', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['rota_dia', 'funcionario'], name='uniq_rota_dia_ajudante'),
+        ]
+
+    def __str__(self):
+        return f'{self.rota_dia} — {self.funcionario}'
+
+
+class RotaDiaCliente(models.Model):
+    rota_dia = models.ForeignKey(
+        RotaDia,
+        on_delete=models.CASCADE,
+        related_name='clientes_rota',
+        verbose_name='Rota do dia',
+    )
+    cliente = models.ForeignKey(
+        'api_sankhya.Cliente',
+        on_delete=models.CASCADE,
+        related_name='rotas_dia',
+        verbose_name='Cliente',
+    )
+    ordem = models.PositiveIntegerField(default=0, db_index=True, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Cliente da rota do dia'
+        verbose_name_plural = 'Clientes da rota do dia'
+        ordering = ['ordem', 'id']
+        constraints = [
+            models.UniqueConstraint(fields=['rota_dia', 'cliente'], name='uniq_rota_dia_cliente'),
+        ]
+
+    def __str__(self):
+        return f'{self.rota_dia} - {self.cliente}'

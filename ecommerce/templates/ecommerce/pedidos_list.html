@@ -34,7 +34,19 @@
                             {% endif %}
                         </td>
                         <td class="small">{% if p.codigo_pedido_externo %}{{ p.codigo_pedido_externo }}{% else %}—{% endif %}</td>
-                        <td class="text-end"><a href="{% url 'ecommerce_pedido_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Detalhes</a></td>
+                        <td class="text-end">
+                            <div class="d-inline-flex gap-2">
+                                <a href="{% url 'ecommerce_pedido_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Detalhes</a>
+                                {% if p.status == 'rejeitado' %}
+                                <form method="post" action="{% url 'ecommerce_pedido_reenviar_carrinho' p.pk %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-warning">
+                                        <i class="bi bi-cart-plus me-1"></i>Reenviar ao carrinho
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

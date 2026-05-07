@@ -187,8 +187,8 @@ class VendedorAdmin(admin.ModelAdmin):
 
 @admin.register(Cliente)
 class ClienteAdmin(admin.ModelAdmin):
-    list_display = ('codigo_cliente', 'nome', 'tipo', 'cnpj_cpf', 'email', 'cidade', 'uf', 'updated_at')
-    list_filter = ('tipo', 'uf', 'cidade', 'grupo_autorizacao')
+    list_display = ('codigo_cliente', 'nome', 'tipo', 'cnpj_cpf', 'email', 'cidade', 'codtab', 'updated_at')
+    list_filter = ('tipo', 'cidade', 'grupo_autorizacao', 'codtab')
     search_fields = ('codigo_cliente', 'nome', 'razao', 'cnpj_cpf', 'email', 'telefone_numero', 'cidade', 'bairro')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
@@ -207,7 +207,10 @@ class ClienteAdmin(admin.ModelAdmin):
             'fields': ('limite_credito', 'grupo_autorizacao')
         }),
         ('Endereço', {
-            'fields': ('logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'cep', 'codigo_ibge')
+            'fields': ('codend', 'numero', 'complemento', 'bairro', 'cidade', 'cep')
+        }),
+        ('Comercial', {
+            'fields': ('codtab',)
         }),
         ('Localização GPS', {
             'fields': ('latitude', 'longitude')
