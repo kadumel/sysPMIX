@@ -79,6 +79,24 @@ def log_exception(request, origem, error, context=None):
         obs=f"EXCEÇÃO: {json.dumps(error_details, indent=2)}"
     )
 
+
+def execute_db_routine(cursor, routine_name):
+    """
+    Executa procedure/função de forma compatível entre SQL Server e PostgreSQL.
+    """
+    vendor = connection.vendor
+    if vendor == "postgresql":
+        # Preferir CALL para procedures.
+        try:
+            cursor.execute(f"CALL {routine_name}()")
+            return
+        except Exception:
+            # Fallback para ambientes onde a rotina foi criada como function.
+            cursor.execute(f"SELECT {routine_name}()")
+            return
+    # SQL Server
+    cursor.execute(f"EXEC {routine_name}")
+
 class IndexView(PerfilBIAccessMixin, View):
     def get(self, request):
         if request.user.is_authenticated:
@@ -1080,9 +1098,9 @@ def import_pedidos(request):
             # Criar nova conexão
             with connection.cursor() as cursor:
                 # Executar procedures na ordem definida
-                cursor.execute("EXEC SP_ATUALIZA_CLIENTE_SANKHYA")
+                execute_db_routine(cursor, "SP_ATUALIZA_CLIENTE_SANKHYA")
                 rowcount_clientes = cursor.rowcount
-                cursor.execute("EXEC SP_PEDIDOS_SANKHYA")
+                execute_db_routine(cursor, "SP_PEDIDOS_SANKHYA")
                 
                 # Obter o número de registros afetados
                 rowcount_pedidos = cursor.rowcount
@@ -1181,7 +1199,7 @@ def import_veiculos(request):
             # Criar nova conexão
             with connection.cursor() as cursor:
                 # Executar a stored procedure
-                cursor.execute("EXEC SP_ATUALIZA_VEICULO_SANKHYA")
+                execute_db_routine(cursor, "SP_ATUALIZA_VEICULO_SANKHYA")
                 
                 # Obter o número de registros afetados
                 rowcount = cursor.rowcount
@@ -1363,7 +1381,7 @@ def import_funcionarios(request):
                 with connection.cursor() as cursor:
                     # Execute the stored procedure
                     try:
-                        cursor.execute("EXEC SP_ATUALIZA_FUNC_SANKHYA")
+                        execute_db_routine(cursor, "SP_ATUALIZA_FUNC_SANKHYA")
                         rowcount = cursor.rowcount
                     except Exception as e:
                         print(f"Erro ao executar SP_ATUALIZA_FUNC_SANKHYA: {str(e)}")
@@ -1467,16 +1485,29 @@ def atualizar_nf_pedidos(request=None):
         with connection.cursor() as cursor:
             # Evita falha de conversão nvarchar->bigint dentro da procedure.
             # Mapeia pedidos com pedido_erp não numérico antes de executar.
-            cursor.execute(
-                """
-                SELECT TOP 10 id, pedido_erp
-                FROM controleBI_pedido
-                WHERE pedido_erp IS NOT NULL
-                  AND LTRIM(RTRIM(pedido_erp)) <> ''
-                  AND TRY_CONVERT(BIGINT, pedido_erp) IS NULL
-                ORDER BY id DESC
-                """
-            )
+            if connection.vendor == "postgresql":
+                cursor.execute(
+                    """
+                    SELECT id, pedido_erp
+                    FROM controleBI_pedido
+                    WHERE pedido_erp IS NOT NULL
+                      AND BTRIM(pedido_erp) <> ''
+                      AND BTRIM(pedido_erp) !~ '^[0-9]+$'
+                    ORDER BY id DESC
+                    LIMIT 10
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT TOP 10 id, pedido_erp
+                    FROM controleBI_pedido
+                    WHERE pedido_erp IS NOT NULL
+                      AND LTRIM(RTRIM(pedido_erp)) <> ''
+                      AND TRY_CONVERT(BIGINT, pedido_erp) IS NULL
+                    ORDER BY id DESC
+                    """
+                )
             invalidos = cursor.fetchall()
             if invalidos:
                 detalhes = ", ".join(
@@ -1489,7 +1520,7 @@ def atualizar_nf_pedidos(request=None):
                 )
 
             # Executar a stored procedure
-            cursor.execute("EXEC SP_ATUALIZA_NF_PEDIDO")
+            execute_db_routine(cursor, "SP_ATUALIZA_NF_PEDIDO")
             
             # Obter o número de registros afetados
             rowcount = cursor.rowcount
