@@ -246,10 +246,31 @@
     const chave = form.getAttribute('data-chave');
     const cell = document.querySelector('.integracao-status[data-chave="' + chave + '"]');
     const btn = form.querySelector('button[type="submit"]');
+    var codigoTabela = null;
+    if (chave === 'precos') {
+      var entrada = window.prompt(
+        'Informe o código da tabela de preço.\nUse 9999 para atualizar todas as tabelas.',
+        '9999'
+      );
+      if (entrada === null) return;
+      entrada = String(entrada).trim();
+      if (!entrada) {
+        setCellDone(chave, false, 'Informe um código');
+        return;
+      }
+      if (!/^\d+$/.test(entrada)) {
+        setCellDone(chave, false, 'Código inválido');
+        return;
+      }
+      codigoTabela = entrada;
+    }
     btn.disabled = true;
     setCellProcessing(chave);
 
     const fd = new FormData(form);
+    if (codigoTabela !== null) {
+      fd.append('codigo_tabela', codigoTabela);
+    }
     fetch(form.action, {
       method: 'POST',
       body: fd,

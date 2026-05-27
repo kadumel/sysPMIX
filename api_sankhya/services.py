@@ -567,6 +567,8 @@ def sync_contatos() -> dict[str, int]:
 
 
 def sync_funcionarios() -> dict[str, int]:
+    from api_sankhya.views import _funcionario_defaults_from_api_detalhe
+
     headers = _get_token_headers()
     result = SyncResult()
     page = 0
@@ -594,11 +596,10 @@ def sync_funcionarios() -> dict[str, int]:
                 )
                 dresp.raise_for_status()
                 detalhe = dresp.json()
-                defaults = {
-                    "cpf": _to_str(detalhe.get("cpf"), 14),
-                    "nome": _to_str(detalhe.get("nome"), 200),
-                    "matricula": _to_int(detalhe.get("matricula")),
-                }
+                if not isinstance(detalhe, dict):
+                    result.total_erros += 1
+                    continue
+                defaults = _funcionario_defaults_from_api_detalhe(detalhe, resumo)
                 obj, created = Funcionario.objects.update_or_create(
                     empresa_codigo=codigo_empresa,
                     codigo_funcionario=codigo_funcionario,

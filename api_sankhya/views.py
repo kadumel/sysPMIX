@@ -504,19 +504,22 @@ def getClientes():
     return out
 
 
-def getPrecos():
+def getPrecos(codigo_tabela: int | None = None):
     base_url = _get_env_or_setting("SANKHYA_URL_PRECOS").strip()
     headers = getToken()
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
 
-    codtabs = (
-        Cliente.objects.exclude(codtab__isnull=True)
-        .exclude(codtab=0)
-        .order_by()
-        .values_list("codtab", flat=True)
-        .distinct()
-    )
-    codtabs = list(codtabs)
+    if codigo_tabela is None:
+        codtabs = (
+            Cliente.objects.exclude(codtab__isnull=True)
+            .exclude(codtab=0)
+            .order_by()
+            .values_list("codtab", flat=True)
+            .distinct()
+        )
+        codtabs = list(codtabs)
+    else:
+        codtabs = [codigo_tabela]
     print(f"Processando {len(codtabs)} tabelas de preço")
     for codtab in codtabs:
         print(f"Processando tabela {codtab}")
@@ -881,6 +884,97 @@ def getContatos():
     return out
 
 
+def _funcionario_defaults_from_api_detalhe(detalhe: dict[str, Any], resumo: dict[str, Any] | None = None) -> dict[str, Any]:
+    """
+    Monta defaults para sankhya_funcionario a partir do JSON de detalhe da API
+    /v1/pessoal/funcionarios/{cod}/empresa/{emp} (objetos aninhados).
+    """
+    resumo = resumo or {}
+    dados_pessoais = detalhe.get("dadosPessoais") or {}
+    endereco = detalhe.get("endereco") or {}
+    bairro = endereco.get("bairro") or {}
+    cidade = endereco.get("cidade") or {}
+    dados_contratuais = detalhe.get("dadosContratuais") or {}
+    emp = dados_contratuais.get("empresa") or {}
+    depto = dados_contratuais.get("departamento") or {}
+    cargo = dados_contratuais.get("cargo") or {}
+    funcao = dados_contratuais.get("funcao") or {}
+    local_trabalho = dados_contratuais.get("localTrabalho") or {}
+    cidade_trab = dados_contratuais.get("cidadeTrabalho") or {}
+    sindicato = dados_contratuais.get("sindicato") or {}
+    carga_horaria = dados_contratuais.get("cargaHoraria") or {}
+    afast = detalhe.get("afastamento") or {}
+    causa_afast = afast.get("causaAfastamento") or {}
+    tipo_rescisao = afast.get("tipoRescisao") or {}
+    transf = detalhe.get("transferencia") or {}
+
+    defaults: dict[str, Any] = {
+        "cpf": _to_str(detalhe.get("cpf"), 14),
+        "nome": _to_str(detalhe.get("nome"), 200),
+        "matricula": _to_int(detalhe.get("matricula")),
+        "nascimento": _to_str(dados_pessoais.get("nascimento"), 10),
+        "sexo": _to_str(dados_pessoais.get("sexo"), 1),
+        "celular": _to_str(dados_pessoais.get("celular"), 20),
+        "email": _to_str(dados_pessoais.get("email"), 150),
+        "nome_mae": _to_str(dados_pessoais.get("nomeMae") or detalhe.get("nomeMae"), 200),
+        "endereco_cep": _to_str(endereco.get("cep"), 10),
+        "endereco_codigo": _to_int(endereco.get("codigo")),
+        "endereco_descricao": _to_str(endereco.get("descricao"), 200),
+        "endereco_numero": _to_str(endereco.get("numero"), 20),
+        "endereco_complemento": _to_str(endereco.get("complemento"), 100),
+        "bairro_codigo": _to_int(bairro.get("codigo")),
+        "bairro_descricao": _to_str(bairro.get("descricao"), 150),
+        "cidade_codigo": _to_int(cidade.get("codigo")),
+        "cidade_descricao": _to_str(cidade.get("descricao"), 150),
+        "cidade_codigo_ibge": _to_int(cidade.get("codigoIBGE")),
+        "empresa_cnpj": _to_str(emp.get("cnpj"), 20),
+        "empresa_razao_social": _to_str(emp.get("razaoSocial"), 200),
+        "data_admissao": _to_str(dados_contratuais.get("dataAdmissao"), 10),
+        "codigo_categoria_esocial": _to_int(dados_contratuais.get("codigoCategoriaEsocial")),
+        "situacao": _to_str(dados_contratuais.get("situacao") or resumo.get("situacao"), 2),
+        "salario_base": _to_decimal(dados_contratuais.get("salarioBase")),
+        "bolsa_estagio_ou_pro_labore": _to_decimal(dados_contratuais.get("bolsaEstagioOuProLabore")),
+        "departamento_codigo": _to_int(depto.get("codigo")),
+        "departamento_descricao": _to_str(depto.get("descricao"), 150),
+        "cargo_codigo": _to_int(cargo.get("codigo")),
+        "cargo_descricao": _to_str(cargo.get("descricao"), 150),
+        "cargo_cbo": _to_int(cargo.get("cbo")),
+        "funcao_codigo": _to_int(funcao.get("codigo")),
+        "funcao_descricao": _to_str(funcao.get("descricao"), 150),
+        "funcao_cbo": _to_int(funcao.get("cbo")),
+        "local_trabalho_codigo": _to_int(local_trabalho.get("codigo")),
+        "local_trabalho_descricao": _to_str(local_trabalho.get("descricao"), 150),
+        "cidade_trabalho_codigo": _to_int(cidade_trab.get("codigo")),
+        "cidade_trabalho_descricao": _to_str(cidade_trab.get("descricao"), 150),
+        "cidade_trabalho_codigo_ibge": _to_int(cidade_trab.get("codigoIBGE")),
+        "sindicato_codigo": _to_int(sindicato.get("codigo")),
+        "sindicato_nome": _to_str(sindicato.get("nome"), 200),
+        "sindicato_cnpj": _to_str(sindicato.get("cnpj"), 20),
+        "carga_horaria_codigo": _to_int(carga_horaria.get("codigo")),
+        "carga_horaria_descricao": _to_str(carga_horaria.get("descricao"), 150),
+        "afast_motivo_desligamento_esocial": _to_str(afast.get("motivoDesligamentoEsocial"), 200),
+        "afast_data_afastamento": _to_str(afast.get("dataAfastamento"), 10),
+        "afast_causa_codigo": _to_int(causa_afast.get("codigo")),
+        "afast_causa_descricao": _to_str(causa_afast.get("descricao"), 200),
+        "afast_tipo_rescisao_codigo": _to_int(tipo_rescisao.get("codigo")),
+        "afast_tipo_rescisao_descricao": _to_str(tipo_rescisao.get("descricao"), 200),
+        "afast_data_desligamento": _to_str(afast.get("dataDesligamento"), 10),
+        "afast_data_aviso_previo": _to_str(afast.get("dataAvisoPrevio"), 10),
+        "transf_data_transferencia_destino": _to_str(transf.get("dataTransferenciaDestino"), 10),
+        "transf_empresa_destino": _to_int(transf.get("empresaDestino")),
+        "transf_cnpj_empresa_destino": _to_str(transf.get("cnpjEmpresaDestino"), 20),
+        "transf_codigo_funcionario_destino": _to_int(transf.get("codigoFuncionarioDestino")),
+        "transf_motivo_desligamento": _to_str(transf.get("motivoDesligamento"), 200),
+        "transf_data_transferencia": _to_str(transf.get("dataTransferencia"), 10),
+        "transf_empresa_origem": _to_int(transf.get("empresaOrigem")),
+        "transf_codigo_funcionario_origem": _to_int(transf.get("codigoFuncionarioOrigem")),
+        "transf_data_inicio_vinculo": _to_str(transf.get("dataInicioVinculo"), 10),
+        "transf_cnpj_empresa_anterior": _to_str(transf.get("cnpjNaEmpresaAnterior"), 20),
+        "transf_matricula_empresa_anterior": _to_int(transf.get("matriculaNaEmpresaAnterior")),
+    }
+    return {k: v for k, v in defaults.items() if v is not None}
+
+
 def getFuncionarios():
     headers = getToken()
     page = 0
@@ -896,7 +990,7 @@ def getFuncionarios():
         data = resp.json()
         bloco = data[0] if isinstance(data, list) and data else data
         codigos = bloco.get("codigos", [])
-        has_more = str((bloco.get("pagination") or {}).get("hasMore", "false")).lower() == "true"
+        has_more = _pagination_has_more(bloco.get("pagination") if isinstance(bloco.get("pagination"), dict) else None)
         for resumo in codigos:
             codigo_empresa = _to_int(resumo.get("codigoEmpresa"))
             codigo_funcionario = _to_int(resumo.get("codigoFuncionario"))
@@ -919,7 +1013,9 @@ def getFuncionarios():
                 detalhe = det.json()
             except ValueError:
                 continue
-            defaults = {"cpf": _to_str(detalhe.get("cpf"), 14), "nome": _to_str(detalhe.get("nome"), 200), "matricula": _to_int(detalhe.get("matricula"))}
+            if not isinstance(detalhe, dict):
+                continue
+            defaults = _funcionario_defaults_from_api_detalhe(detalhe, resumo)
             _, created = Funcionario.objects.update_or_create(
                 empresa_codigo=codigo_empresa,
                 codigo_funcionario=codigo_funcionario,
@@ -1025,10 +1121,26 @@ def atualizar_integracao(request, chave: str):
         return redirect("api_sankhya_gestao_integracoes")
     integracao = INTEGRACOES[chave]
     nome = integracao["nome"]
+    codigo_tabela: int | None = None
+    if chave == "precos":
+        codigo_tabela_raw = (request.POST.get("codigo_tabela") or "").strip()
+        if not codigo_tabela_raw:
+            if _wants_json(request):
+                return JsonResponse({"error": "Informe o código da tabela para atualizar os preços."}, status=400)
+            messages.error(request, "Informe o código da tabela para atualizar os preços.")
+            return redirect("api_sankhya_gestao_integracoes")
+        codigo_tabela = _to_int(codigo_tabela_raw)
+        if codigo_tabela is None:
+            if _wants_json(request):
+                return JsonResponse({"error": "Código da tabela inválido."}, status=400)
+            messages.error(request, "Código da tabela inválido.")
+            return redirect("api_sankhya_gestao_integracoes")
+        if codigo_tabela == 9999:
+            codigo_tabela = None
     q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
         if q_sync:
-            resultado = run_integracao_sankhya(chave)
+            resultado = run_integracao_sankhya(chave, codigo_tabela=codigo_tabela)
             if resultado.get("erro"):
                 if _wants_json(request):
                     return JsonResponse(
@@ -1060,6 +1172,7 @@ def atualizar_integracao(request, chave: str):
             task_id = async_task(
                 "api_sankhya.tasks.run_integracao_sankhya",
                 chave,
+                codigo_tabela,
                 task_name=f"Sankhya: {nome}",
             )
             if _wants_json(request):
