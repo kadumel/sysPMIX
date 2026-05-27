@@ -68,12 +68,12 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
             .order_by('codigo_local_estoque')
             .first()
         )
-        if not preco:
+        if not preco or not preco.valor or preco.valor <= 0:
             return (
                 None,
-                f'Produto "{nome}" sem preço na tabela {codtab}. Atualize os preços antes de finalizar.',
+                f'Produto "{nome}" sem preço válido na tabela {codtab}. Atualize os preços antes de finalizar.',
             )
-        valor_unitario = preco.valor or Decimal('0')
+        valor_unitario = preco.valor
         valor_total = (valor_unitario * qty).quantize(Decimal('0.01'))
         linhas_validas.append(
             {

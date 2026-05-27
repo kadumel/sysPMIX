@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db.models import Prefetch, Q, QuerySet
+from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet
 
 from api_sankhya.models import Cliente, GrupoProduto, Preco, Produto
 from controleBI.models import PERFIS_PAINEL_BI_LOJA, PerfilUsuario, UsuarioClienteSankhya
@@ -167,17 +167,89 @@ def ancestrais(grupo: GrupoProduto, by_id: dict) -> list[GrupoProduto]:
     return list(reversed(chain))
 
 
+def _preco_positivo_na_tabela_exists(codtab: int):
+    return Preco.objects.filter(
+        codigo_produto=OuterRef('codigo_produto'),
+        codigo_tabela=codtab,
+        valor__gt=0,
+    )
+
+
+def aplicar_filtro_preco_tabela_cliente(
+    qs: QuerySet[Produto], codtab: int | None
+) -> QuerySet[Produto]:
+    """Restringe a produtos com preço > 0 na tabela (CODTAB) do cliente."""
+    if not codtab:
+        return qs.none()
+    return qs.filter(Exists(_preco_positivo_na_tabela_exists(codtab)))
+
+
+def codigos_grupo_com_produtos_precificados(
+    codtab: int | None, codigos_grupo_permitidos: set[int]
+) -> set[int]:
+    """Grupos que possuem ao menos um produto ativo com preço > 0 na tabela do cliente."""
+    if not codtab or not codigos_grupo_permitidos:
+        return set()
+    qs = Produto.objects.filter(
+        ativo=True, codigo_grupo_produto__in=codigos_grupo_permitidos
+    )
+    qs = aplicar_filtro_preco_tabela_cliente(qs, codtab)
+    return set(qs.values_list('codigo_grupo_produto', flat=True).distinct())
+
+
+def grupo_tem_produtos_precificados(
+    codigo_grupo: int, codigos_grupo_com_produtos: set[int], by_pai: dict
+) -> bool:
+    """True se o grupo ou algum descendente tem produto com preço na tabela do cliente."""
+    if not codigos_grupo_com_produtos:
+        return False
+    return bool(
+        codigos_grupo_e_descendentes(codigo_grupo, by_pai) & codigos_grupo_com_produtos
+    )
+
+
+def filtrar_arvore_grupos_com_produtos_precificados(
+    arvore: list[dict], codigos_grupo_com_produtos: set[int], by_pai: dict
+) -> list[dict]:
+    out: list[dict] = []
+    for node in arvore:
+        g = node['grupo']
+        if not grupo_tem_produtos_precificados(
+            g.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai
+        ):
+            continue
+        filhos_f = filtrar_arvore_grupos_com_produtos_precificados(
+            node['filhos'], codigos_grupo_com_produtos, by_pai
+        )
+        out.append({'grupo': g, 'filhos': filhos_f})
+    return out
+
+
+def grupos_flat_com_produtos_precificados(
+    raizes: list[GrupoProduto],
+    by_pai: dict,
+    codigos_grupo_com_produtos: set[int],
+) -> list[tuple[GrupoProduto, int]]:
+    return [
+        (g, depth)
+        for g, depth in grupos_flat_indent(raizes, by_pai)
+        if grupo_tem_produtos_precificados(g.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai)
+    ]
+
+
 def produtos_queryset(
     codigo_grupo: int | None,
     by_id: dict,
     by_pai: dict,
     codigos_grupo_permitidos: set[int],
+    codtab: int | None = None,
 ) -> QuerySet[Produto]:
-    """Somente produtos ativos cujo `codigo_grupo_produto` está nas categorias da loja."""
+    """Produtos ativos nas categorias da loja, com preço > 0 na tabela do cliente."""
     qs = Produto.objects.filter(ativo=True).order_by('nome', 'codigo_produto')
     if not codigos_grupo_permitidos:
         return qs.none()
     qs = qs.filter(codigo_grupo_produto__in=codigos_grupo_permitidos)
+    qs = aplicar_filtro_preco_tabela_cliente(qs, codtab)
     if codigo_grupo is None:
         return qs
     if codigo_grupo not in by_id:
@@ -293,7 +365,11 @@ def map_precos_por_codtab(codigos_produto: list[int], codtab: int | None) -> dic
     if not codtab or not codigos_produto:
         return {}
     precos = (
-        Preco.objects.filter(codigo_tabela=codtab, codigo_produto__in=codigos_produto)
+        Preco.objects.filter(
+            codigo_tabela=codtab,
+            codigo_produto__in=codigos_produto,
+            valor__gt=0,
+        )
         .order_by('codigo_produto', 'codigo_local_estoque')
         .values('codigo_produto', 'valor')
     )
@@ -304,3 +380,9 @@ def map_precos_por_codtab(codigos_produto: list[int], codtab: int | None) -> dic
         if codigo not in out:
             out[codigo] = row['valor']
     return out
+
+
+def produto_tem_preco_na_tabela(codigo_produto: int, codtab: int | None) -> bool:
+    if not codtab:
+        return False
+    return map_precos_por_codtab([codigo_produto], codtab).get(codigo_produto) is not None
