@@ -41,16 +41,37 @@ def _cart_add_wants_json(request):
 def index(request):
     by_id, by_pai, raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    codigos_grupo_com_produtos = catalog.codigos_grupo_com_produtos_precificados(
+        codtab_cliente, codigos_grupo_loja
+    )
+    arvore_grupos = catalog.filtrar_arvore_grupos_com_produtos_precificados(
+        catalog.arvore_grupos_nested(raizes, by_pai),
+        codigos_grupo_com_produtos,
+        by_pai,
+    )
+    grupos_flat = catalog.grupos_flat_com_produtos_precificados(
+        raizes, by_pai, codigos_grupo_com_produtos
+    )
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     grupo_atual = by_id.get(grupo_id) if grupo_id is not None else None
+    if grupo_atual and not catalog.grupo_tem_produtos_precificados(
+        grupo_atual.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai
+    ):
+        grupo_atual = None
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
 
-    qs = catalog.produtos_queryset(grupo_id, by_id, by_pai, codigos_grupo_loja)
+    qs = catalog.produtos_queryset(
+        grupo_id if grupo_atual else None,
+        by_id,
+        by_pai,
+        codigos_grupo_loja,
+        codtab_cliente,
+    )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
     paginator = Paginator(qs, catalog.PAGE_SIZE)
     page = paginator.get_page(request.GET.get('page'))
-    codtab_cliente = catalog.get_cliente_codtab(request)
     precos_por_produto = catalog.map_precos_por_codtab(
         [p.codigo_produto for p in page.object_list], codtab_cliente
     )
@@ -61,10 +82,8 @@ def index(request):
 
     context = {
         'banners': BannerPromocional.objects.filter(ativo=True).order_by('ordem', '-criado_em'),
-        'arvore_grupos': catalog.arvore_grupos_nested(raizes, by_pai),
-        'grupos_flat': [
-            {'grupo': g, 'depth': d} for g, d in catalog.grupos_flat_indent(raizes, by_pai)
-        ],
+        'arvore_grupos': arvore_grupos,
+        'grupos_flat': [{'grupo': g, 'depth': d} for g, d in grupos_flat],
         'grupo_atual': grupo_atual,
         'grupo_ancestrais': ancestrais,
         'produtos': page,
@@ -78,9 +97,12 @@ def partial_destaque(request):
     """Mais produtos (mesmo filtro de grupo e busca), próxima página após a primeira."""
     by_id, by_pai, _raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codtab_cliente = catalog.get_cliente_codtab(request)
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
-    qs = catalog.produtos_queryset(grupo_id, by_id, by_pai, codigos_grupo_loja)
+    qs = catalog.produtos_queryset(
+        grupo_id, by_id, by_pai, codigos_grupo_loja, codtab_cliente
+    )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
     start = catalog.PAGE_SIZE
@@ -88,7 +110,6 @@ def partial_destaque(request):
     chunk = list(qs[start : start + limit])
     has_more = len(chunk) > catalog.PAGE_SIZE
     chunk = chunk[: catalog.PAGE_SIZE]
-    codtab_cliente = catalog.get_cliente_codtab(request)
     precos_por_produto = catalog.map_precos_por_codtab(
         [p.codigo_produto for p in chunk], codtab_cliente
     )
@@ -169,6 +190,13 @@ def add_to_cart(request):
         if wants_json:
             return json_err('Este produto não está disponível na loja.', status=403)
         messages.warning(request, 'Este produto não está disponível na loja.')
+        return redirect(next_url)
+
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    if not catalog.produto_tem_preco_na_tabela(produto.codigo_produto, codtab_cliente):
+        if wants_json:
+            return json_err('Este produto não possui preço na sua tabela.', status=403)
+        messages.warning(request, 'Este produto não possui preço na sua tabela.')
         return redirect(next_url)
 
     nome = (produto.nome or '').strip() or f'Cód. {produto.codigo_produto}'

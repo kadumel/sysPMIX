@@ -30,8 +30,10 @@ from .models import (
     Empresa,
     Funcionario,
     GrupoProduto,
+    ItemNotaFiscal,
     ItemPedido,
     Logradouro,
+    NotaFiscal,
     Pedido,
     Preco,
     Produto,
@@ -307,6 +309,189 @@ def _max_dtalter_contato_iso():
     return maior_data.strftime("%Y-%m-%dT%H:%M:%S")
 
 
+NOTA_FISCAL_DTALTER_BASE = datetime(2026, 5, 1, 0, 0, 0)
+
+
+def _max_dtalter_nota_fiscal_iso():
+    """
+    Maior DTALTER persistido; se a tabela não tiver nenhum, usa 01/05/2026 como base.
+    """
+    maior_data = None
+    for valor in NotaFiscal.objects.exclude(dtalter__isnull=True).exclude(dtalter="").values_list("dtalter", flat=True):
+        dt = _parse_datetime_flexible(valor)
+        if dt and (maior_data is None or dt > maior_data):
+            maior_data = dt
+    if maior_data is None:
+        return NOTA_FISCAL_DTALTER_BASE.strftime("%Y-%m-%dT%H:%M:%S")
+    return maior_data.strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _crud_cell_val(cell):
+    if cell == {}:
+        return None
+    if isinstance(cell, dict) and "$" in cell:
+        val = cell.get("$")
+        return None if val == {} else val
+    return cell
+
+
+def _crud_normalize_field_name(name: str) -> str:
+    s = str(name).strip().upper()
+    if "." in s:
+        s = s.rsplit(".", 1)[-1]
+    for prefix in ("CABECALHONOTA_", "ITEMNOTA_", "ITEM_NOTA_"):
+        if s.startswith(prefix):
+            return s[len(prefix) :]
+    return s
+
+
+def _crud_idx_to_name_from_entities(entities: dict, fallback_fields: list[str]) -> dict[str, str]:
+    metadata = entities.get("metadata") or {}
+    fields_meta = metadata.get("fields") or {}
+    field_list = fields_meta.get("field") or []
+    if isinstance(field_list, dict):
+        field_list = [field_list]
+    idx_to_name: dict[str, str] = {}
+    for i, field in enumerate(field_list):
+        if isinstance(field, dict) and field.get("name"):
+            idx_to_name[f"f{i}"] = _crud_normalize_field_name(field.get("name"))
+    if not idx_to_name:
+        idx_to_name = {f"f{i}": name for i, name in enumerate(fallback_fields)}
+    return idx_to_name
+
+
+def _crud_row_to_record(row: Any, idx_to_name: dict[str, str]) -> dict[str, Any]:
+    if not isinstance(row, dict):
+        return {}
+    if any(str(k).startswith("f") for k in row.keys()):
+        out: dict[str, Any] = {}
+        for fk, name in idx_to_name.items():
+            if fk in row:
+                val = _crud_cell_val(row.get(fk))
+                if val is not None and val != "":
+                    out[name] = val
+        return out
+    return {
+        str(k).upper(): _crud_cell_val(v)
+        for k, v in row.items()
+        if not str(k).startswith("_")
+    }
+
+
+def _crud_row_to_flat_record(row: Any, idx_to_name: dict[str, str]) -> dict[str, Any]:
+    """
+    Achata linha CRUD com tryJoinedFields (f0..fN ou nós aninhados CabecalhoNota).
+    Ignora metadados auxiliares (_rmd, etc.) e prioriza mapeamento fN -> campo.
+    """
+    if not isinstance(row, dict):
+        return {}
+    if any(str(k).startswith("f") for k in row.keys()):
+        return _crud_row_to_record(row, idx_to_name)
+    out: dict[str, Any] = {}
+
+    def absorb(data: dict[str, Any]) -> None:
+        if not isinstance(data, dict):
+            return
+        if any(str(k).startswith("f") for k in data.keys()):
+            for name, val in _crud_row_to_record(data, idx_to_name).items():
+                if val is not None and val != "":
+                    out[name] = val
+            return
+        for k, v in data.items():
+            ku = str(k).upper()
+            if ku.startswith("_"):
+                continue
+            if ku in {"CABECALHONOTA", "CABECALHO_NOTA"} and isinstance(v, dict):
+                absorb(v)
+                continue
+            if isinstance(v, dict) and "$" not in v:
+                absorb(v)
+                continue
+            name = _crud_normalize_field_name(ku)
+            val = _crud_cell_val(v)
+            if val is not None and val != "":
+                out[name] = val
+
+    absorb(row)
+    return out
+
+
+def _build_notas_fiscais_load_records_body(page: int, criteria_date: str | None = None) -> dict[str, Any]:
+    """Payload CRUD ItemNota + CabecalhoNota (estrutura exigida pelo gateway Sankhya)."""
+    data_set: dict[str, Any] = {
+        "rootEntity": "ItemNota",
+        "includePresentationFields": "N",
+        "tryJoinedFields": "true",
+        "offsetPage": str(page),
+        "entity": [
+            {
+                "path": "",
+                "fieldset": {
+                    "list": "NUNOTA,SEQUENCIA,CODPROD,QTDNEG,VLRUNIT,VLRTOT,VLRDESC,USOPROD,STATUSNOTA",
+                },
+            },
+            {
+                "path": "CabecalhoNota",
+                "fieldset": {
+                    "list": (
+                        "NUNOTA,CODEMP,NUMNOTA,DTENTSAI,DTNEG,CODTIPOPER,CODPARC,CODVEND,TIPMOV,"
+                        "PENDENTE,STATUSNFE,STATUSNOTA,APROVADO,DTALTER"
+                    ),
+                },
+            },
+        ],
+    }
+    if criteria_date:
+        data_set["criteria"] = {
+            "expression": {"$": "DTALTER >= ?"},
+            "parameter": [{"type": "D", "$": criteria_date}],
+        }
+    return {
+        "serviceName": "CRUDServiceProvider.loadRecords",
+        "requestBody": {
+            "dataSet": data_set,
+        },
+    }
+
+
+def _crud_record_get(row: dict[str, Any], *keys: str):
+    for key in keys:
+        name = key.upper()
+        candidates = (
+            name,
+            f"CABECALHONOTA.{name}",
+            f"CABECALHONOTA_{name}",
+            f"ITEMNOTA.{name}",
+            f"ITEMNOTA_{name}",
+        )
+        for candidate in candidates:
+            if candidate in row and row[candidate] not in (None, ""):
+                return row[candidate]
+    return None
+
+
+def _crud_item_field_value(row_raw: dict, idx_to_name: dict[str, str], field: str):
+    """Valor do item (ItemNota), evitando colisão com campos do CabecalhoNota no join."""
+    field_u = field.upper()
+    item_val = None
+    any_val = None
+    for fk, name in idx_to_name.items():
+        if fk not in row_raw:
+            continue
+        nu = name.upper()
+        if field_u not in nu and nu != field_u:
+            continue
+        val = _crud_cell_val(row_raw.get(fk))
+        if val in (None, ""):
+            continue
+        any_val = val
+        if "ITEMNOTA" in nu:
+            return val
+        if not nu.startswith("CABECALHONOTA"):
+            item_val = val
+    return item_val if item_val is not None else any_val
+
+
 def _iso_to_criteria_date_start_of_day(value):
     dt = _parse_datetime_flexible(value)
     if dt is None:
@@ -504,19 +689,22 @@ def getClientes():
     return out
 
 
-def getPrecos():
+def getPrecos(codigo_tabela: int | None = None):
     base_url = _get_env_or_setting("SANKHYA_URL_PRECOS").strip()
     headers = getToken()
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
 
-    codtabs = (
-        Cliente.objects.exclude(codtab__isnull=True)
-        .exclude(codtab=0)
-        .order_by()
-        .values_list("codtab", flat=True)
-        .distinct()
-    )
-    codtabs = list(codtabs)
+    if codigo_tabela is None:
+        codtabs = (
+            Cliente.objects.exclude(codtab__isnull=True)
+            .exclude(codtab=0)
+            .order_by()
+            .values_list("codtab", flat=True)
+            .distinct()
+        )
+        codtabs = list(codtabs)
+    else:
+        codtabs = [codigo_tabela]
     print(f"Processando {len(codtabs)} tabelas de preço")
     for codtab in codtabs:
         print(f"Processando tabela {codtab}")
@@ -632,6 +820,7 @@ def getPedidosJson():
             codigo_nota = _codigo_nota_from_pedido_payload(p)
             if not codigo_nota:
                 continue
+            codigo_empresa = _to_int(p.get("codigoEmpresa"))
             cliente = p.get("cliente") or {}
             endereco = cliente.get("endereco") or {}
             defaults = {
@@ -711,7 +900,12 @@ def getPedidosJson():
                 "status_conferencia": _to_int(p.get("statusConferencia")),
             }
             defaults = {k: v for k, v in defaults.items() if v is not None}
-            pedido, created = Pedido.objects.update_or_create(codigo_nota=codigo_nota, defaults=defaults)
+            pedido, created = Pedido.objects.update_or_create(
+                codigo_nota=codigo_nota,
+                codigo_empresa=codigo_empresa,
+                origem=Pedido.ORIGEM_SANKHYA,
+                defaults=defaults,
+            )
             ItemPedido.objects.filter(pedido=pedido).delete()
             for item in p.get("itens") or []:
                 ItemPedido.objects.create(
@@ -736,6 +930,147 @@ def getPedidosJson():
             else:
                 out["total_atualizados"] += 1
         page += 1
+    return out
+
+
+def getNotasFiscais():
+    """
+    Importa notas fiscais emitidas via CRUD ItemNota + CabecalhoNota (SANKHYA_URL_GENERIC).
+    Carga incremental pelo maior DTALTER já persistido; sem DTALTER na base, filtra a partir de 01/05/2026.
+    """
+    headers = getToken()
+    headers["Content-Type"] = "application/json"
+    page = 0
+    has_more = True
+    out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
+    url = _get_env_or_setting("SANKHYA_URL_GENERIC")
+    tem_dtalter_local = NotaFiscal.objects.exclude(dtalter__isnull=True).exclude(dtalter="").exists()
+    ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_nota_fiscal_iso())
+    usar_filtro = bool(ultima_alteracao)
+    if ultima_alteracao:
+        origem = "maior DTALTER local" if tem_dtalter_local else "base 01/05/2026 (sem DTALTER na tabela)"
+        print(f"Notas fiscais — filtro DTALTER ({origem}): {ultima_alteracao}")
+
+    fallback_fields = [
+        "NUNOTA",
+        "SEQUENCIA",
+        "CODPROD",
+        "QTDNEG",
+        "VLRUNIT",
+        "VLRTOT",
+        "VLRDESC",
+        "USOPROD",
+        "STATUSNOTA",
+        "CODEMP",
+        "NUMNOTA",
+        "DTENTSAI",
+        "DTNEG",
+        "CODTIPOPER",
+        "CODPARC",
+        "CODVEND",
+        "TIPMOV",
+        "PENDENTE",
+        "STATUSNFE",
+        "STATUSNOTA",
+        "APROVADO",
+        "DTALTER",
+    ]
+
+    while has_more:
+        criteria = ultima_alteracao if usar_filtro else None
+        body = _build_notas_fiscais_load_records_body(page, criteria_date=criteria)
+        resp, headers = _request_with_token_retry("POST", url, headers, json=body, timeout=360)
+        resp.raise_for_status()
+        data = resp.json()
+        response_body = data.get("responseBody") or data
+        entities = response_body.get("entities") or {}
+        raw_records = entities.get("entity") or entities.get("record") or entities.get("records") or []
+        if isinstance(raw_records, dict):
+            raw_records = [raw_records]
+
+        idx_to_name = _crud_idx_to_name_from_entities(entities, fallback_fields)
+        records = [_crud_row_to_flat_record(r, idx_to_name) for r in raw_records]
+        raw_rows = list(raw_records)
+        com_nunota = sum(1 for r in records if _to_int(_crud_record_get(r, "NUNOTA")))
+        print(
+            f"Notas fiscais page={page} api={len(raw_records)} mapeados={len(records)} "
+            f"com_nunota={com_nunota} hasMore={entities.get('hasMoreResult')!r}"
+        )
+        if records and com_nunota == 0:
+            print("AVISO: mapeamento sem NUNOTA — amostra:", json.dumps(records[0], ensure_ascii=False, default=str))
+
+        if page == 0 and usar_filtro and not records and tem_dtalter_local:
+            base_criteria = _iso_to_criteria_date_start_of_day(
+                NOTA_FISCAL_DTALTER_BASE.strftime("%Y-%m-%dT%H:%M:%S")
+            )
+            if ultima_alteracao != base_criteria:
+                ultima_alteracao = base_criteria
+                has_more = True
+                print("Notas fiscais: reconsulta a partir de 01/05/2026.")
+                continue
+
+        has_more = str(entities.get("hasMoreResult", "false")).lower() in {"1", "true", "s"}
+        ignorados_sem_nunota = 0
+        for i, row in enumerate(records):
+            row_raw = raw_rows[i] if i < len(raw_rows) else {}
+            nunota = _to_int(_crud_record_get(row, "NUNOTA"))
+            if not nunota:
+                ignorados_sem_nunota += 1
+                if ignorados_sem_nunota <= 3:
+                    print(f"Linha ignorada (sem NUNOTA): {json.dumps(row, ensure_ascii=False, default=str)}")
+                continue
+            sequencia = _to_int(_crud_record_get(row, "SEQUENCIA"))
+            if sequencia is None:
+                sequencia = 0
+            dtalter = _to_datetime_iso_seconds(_crud_record_get(row, "DTALTER"))
+            nota_defaults = {
+                "codigo_empresa": _to_int(_crud_record_get(row, "CODEMP")),
+                "numero_nota": _to_int(_crud_record_get(row, "NUMNOTA")),
+                "data_entrada_saida": _to_date(_crud_record_get(row, "DTENTSAI")),
+                "data_negociacao": _to_date(_crud_record_get(row, "DTNEG")),
+                "codigo_tipo_operacao": _to_int(_crud_record_get(row, "CODTIPOPER")),
+                "codigo_parceiro": _to_int(_crud_record_get(row, "CODPARC")),
+                "codigo_vendedor": _to_int(_crud_record_get(row, "CODVEND")),
+                "tipo_movimento": _to_str(_crud_record_get(row, "TIPMOV"), 10),
+                "pendente": _to_str(_crud_record_get(row, "PENDENTE"), 5),
+                "status_nfe": _to_str(_crud_record_get(row, "STATUSNFE"), 30),
+                "status_nota": _to_str(_crud_record_get(row, "STATUSNOTA"), 30),
+                "aprovado": _to_str(_crud_record_get(row, "APROVADO"), 5),
+                "dtalter": _to_str(dtalter, 50),
+            }
+            nota_defaults = {k: v for k, v in nota_defaults.items() if v is not None}
+            nota, nota_created = NotaFiscal.objects.update_or_create(nunota=nunota, defaults=nota_defaults)
+
+            item_defaults = {
+                "cod_produto": _to_int(_crud_record_get(row, "CODPROD")),
+                "quantidade": _to_decimal(_crud_record_get(row, "QTDNEG")),
+                "valor_unitario": _to_decimal(_crud_record_get(row, "VLRUNIT")),
+                "valor_total": _to_decimal(_crud_record_get(row, "VLRTOT")),
+                "valor_desconto": _to_decimal(_crud_record_get(row, "VLRDESC")),
+                "uso_produto": _to_str(_crud_record_get(row, "USOPROD"), 10),
+                "status_nota": _to_str(
+                    _crud_item_field_value(row_raw, idx_to_name, "STATUSNOTA") or _crud_record_get(row, "STATUSNOTA"),
+                    30,
+                ),
+            }
+            item_defaults = {k: v for k, v in item_defaults.items() if v is not None}
+            _, item_created = ItemNotaFiscal.objects.update_or_create(
+                nota_fiscal=nota,
+                sequencia=sequencia,
+                defaults=item_defaults,
+            )
+            out["total_processados"] += 1
+            if nota_created or item_created:
+                out["total_inseridos"] += 1
+            else:
+                out["total_atualizados"] += 1
+        print(
+            f"Página {page} resumo: processados={out['total_processados']} "
+            f"inseridos={out['total_inseridos']} atualizados={out['total_atualizados']} "
+            f"ignorados_sem_nunota={ignorados_sem_nunota}"
+        )
+        page += 1
+    print(f"\nNotas fiscais — fim: {out}")
     return out
 
 
@@ -881,6 +1216,97 @@ def getContatos():
     return out
 
 
+def _funcionario_defaults_from_api_detalhe(detalhe: dict[str, Any], resumo: dict[str, Any] | None = None) -> dict[str, Any]:
+    """
+    Monta defaults para sankhya_funcionario a partir do JSON de detalhe da API
+    /v1/pessoal/funcionarios/{cod}/empresa/{emp} (objetos aninhados).
+    """
+    resumo = resumo or {}
+    dados_pessoais = detalhe.get("dadosPessoais") or {}
+    endereco = detalhe.get("endereco") or {}
+    bairro = endereco.get("bairro") or {}
+    cidade = endereco.get("cidade") or {}
+    dados_contratuais = detalhe.get("dadosContratuais") or {}
+    emp = dados_contratuais.get("empresa") or {}
+    depto = dados_contratuais.get("departamento") or {}
+    cargo = dados_contratuais.get("cargo") or {}
+    funcao = dados_contratuais.get("funcao") or {}
+    local_trabalho = dados_contratuais.get("localTrabalho") or {}
+    cidade_trab = dados_contratuais.get("cidadeTrabalho") or {}
+    sindicato = dados_contratuais.get("sindicato") or {}
+    carga_horaria = dados_contratuais.get("cargaHoraria") or {}
+    afast = detalhe.get("afastamento") or {}
+    causa_afast = afast.get("causaAfastamento") or {}
+    tipo_rescisao = afast.get("tipoRescisao") or {}
+    transf = detalhe.get("transferencia") or {}
+
+    defaults: dict[str, Any] = {
+        "cpf": _to_str(detalhe.get("cpf"), 14),
+        "nome": _to_str(detalhe.get("nome"), 200),
+        "matricula": _to_int(detalhe.get("matricula")),
+        "nascimento": _to_str(dados_pessoais.get("nascimento"), 10),
+        "sexo": _to_str(dados_pessoais.get("sexo"), 1),
+        "celular": _to_str(dados_pessoais.get("celular"), 20),
+        "email": _to_str(dados_pessoais.get("email"), 150),
+        "nome_mae": _to_str(dados_pessoais.get("nomeMae") or detalhe.get("nomeMae"), 200),
+        "endereco_cep": _to_str(endereco.get("cep"), 10),
+        "endereco_codigo": _to_int(endereco.get("codigo")),
+        "endereco_descricao": _to_str(endereco.get("descricao"), 200),
+        "endereco_numero": _to_str(endereco.get("numero"), 20),
+        "endereco_complemento": _to_str(endereco.get("complemento"), 100),
+        "bairro_codigo": _to_int(bairro.get("codigo")),
+        "bairro_descricao": _to_str(bairro.get("descricao"), 150),
+        "cidade_codigo": _to_int(cidade.get("codigo")),
+        "cidade_descricao": _to_str(cidade.get("descricao"), 150),
+        "cidade_codigo_ibge": _to_int(cidade.get("codigoIBGE")),
+        "empresa_cnpj": _to_str(emp.get("cnpj"), 20),
+        "empresa_razao_social": _to_str(emp.get("razaoSocial"), 200),
+        "data_admissao": _to_str(dados_contratuais.get("dataAdmissao"), 10),
+        "codigo_categoria_esocial": _to_int(dados_contratuais.get("codigoCategoriaEsocial")),
+        "situacao": _to_str(dados_contratuais.get("situacao") or resumo.get("situacao"), 2),
+        "salario_base": _to_decimal(dados_contratuais.get("salarioBase")),
+        "bolsa_estagio_ou_pro_labore": _to_decimal(dados_contratuais.get("bolsaEstagioOuProLabore")),
+        "departamento_codigo": _to_int(depto.get("codigo")),
+        "departamento_descricao": _to_str(depto.get("descricao"), 150),
+        "cargo_codigo": _to_int(cargo.get("codigo")),
+        "cargo_descricao": _to_str(cargo.get("descricao"), 150),
+        "cargo_cbo": _to_int(cargo.get("cbo")),
+        "funcao_codigo": _to_int(funcao.get("codigo")),
+        "funcao_descricao": _to_str(funcao.get("descricao"), 150),
+        "funcao_cbo": _to_int(funcao.get("cbo")),
+        "local_trabalho_codigo": _to_int(local_trabalho.get("codigo")),
+        "local_trabalho_descricao": _to_str(local_trabalho.get("descricao"), 150),
+        "cidade_trabalho_codigo": _to_int(cidade_trab.get("codigo")),
+        "cidade_trabalho_descricao": _to_str(cidade_trab.get("descricao"), 150),
+        "cidade_trabalho_codigo_ibge": _to_int(cidade_trab.get("codigoIBGE")),
+        "sindicato_codigo": _to_int(sindicato.get("codigo")),
+        "sindicato_nome": _to_str(sindicato.get("nome"), 200),
+        "sindicato_cnpj": _to_str(sindicato.get("cnpj"), 20),
+        "carga_horaria_codigo": _to_int(carga_horaria.get("codigo")),
+        "carga_horaria_descricao": _to_str(carga_horaria.get("descricao"), 150),
+        "afast_motivo_desligamento_esocial": _to_str(afast.get("motivoDesligamentoEsocial"), 200),
+        "afast_data_afastamento": _to_str(afast.get("dataAfastamento"), 10),
+        "afast_causa_codigo": _to_int(causa_afast.get("codigo")),
+        "afast_causa_descricao": _to_str(causa_afast.get("descricao"), 200),
+        "afast_tipo_rescisao_codigo": _to_int(tipo_rescisao.get("codigo")),
+        "afast_tipo_rescisao_descricao": _to_str(tipo_rescisao.get("descricao"), 200),
+        "afast_data_desligamento": _to_str(afast.get("dataDesligamento"), 10),
+        "afast_data_aviso_previo": _to_str(afast.get("dataAvisoPrevio"), 10),
+        "transf_data_transferencia_destino": _to_str(transf.get("dataTransferenciaDestino"), 10),
+        "transf_empresa_destino": _to_int(transf.get("empresaDestino")),
+        "transf_cnpj_empresa_destino": _to_str(transf.get("cnpjEmpresaDestino"), 20),
+        "transf_codigo_funcionario_destino": _to_int(transf.get("codigoFuncionarioDestino")),
+        "transf_motivo_desligamento": _to_str(transf.get("motivoDesligamento"), 200),
+        "transf_data_transferencia": _to_str(transf.get("dataTransferencia"), 10),
+        "transf_empresa_origem": _to_int(transf.get("empresaOrigem")),
+        "transf_codigo_funcionario_origem": _to_int(transf.get("codigoFuncionarioOrigem")),
+        "transf_data_inicio_vinculo": _to_str(transf.get("dataInicioVinculo"), 10),
+        "transf_cnpj_empresa_anterior": _to_str(transf.get("cnpjNaEmpresaAnterior"), 20),
+        "transf_matricula_empresa_anterior": _to_int(transf.get("matriculaNaEmpresaAnterior")),
+    }
+    return {k: v for k, v in defaults.items() if v is not None}
+
+
 def getFuncionarios():
     headers = getToken()
     page = 0
@@ -896,7 +1322,7 @@ def getFuncionarios():
         data = resp.json()
         bloco = data[0] if isinstance(data, list) and data else data
         codigos = bloco.get("codigos", [])
-        has_more = str((bloco.get("pagination") or {}).get("hasMore", "false")).lower() == "true"
+        has_more = _pagination_has_more(bloco.get("pagination") if isinstance(bloco.get("pagination"), dict) else None)
         for resumo in codigos:
             codigo_empresa = _to_int(resumo.get("codigoEmpresa"))
             codigo_funcionario = _to_int(resumo.get("codigoFuncionario"))
@@ -919,7 +1345,9 @@ def getFuncionarios():
                 detalhe = det.json()
             except ValueError:
                 continue
-            defaults = {"cpf": _to_str(detalhe.get("cpf"), 14), "nome": _to_str(detalhe.get("nome"), 200), "matricula": _to_int(detalhe.get("matricula"))}
+            if not isinstance(detalhe, dict):
+                continue
+            defaults = _funcionario_defaults_from_api_detalhe(detalhe, resumo)
             _, created = Funcionario.objects.update_or_create(
                 empresa_codigo=codigo_empresa,
                 codigo_funcionario=codigo_funcionario,
@@ -945,6 +1373,7 @@ INTEGRACOES = {
     "produtos": {"nome": "Produtos", "model": Produto, "runner": getProdutos},
     "grupos_produto": {"nome": "Grupos de Produto", "model": GrupoProduto, "runner": getGruposProduto},
     "pedidos": {"nome": "Pedidos", "model": Pedido, "runner": getPedidosJson},
+    "notas_fiscais": {"nome": "Notas Fiscais", "model": NotaFiscal, "runner": getNotasFiscais},
     "contatos": {"nome": "Contatos", "model": Contato, "runner": getContatos},
     "funcionarios": {"nome": "Funcionários", "model": Funcionario, "runner": getFuncionarios},
 }
@@ -972,6 +1401,16 @@ def _status_integracoes():
             "total_registros": ItemPedido.objects.count(),
             "permite_execucao": False,
             "observacao": "Atualizada junto com a integração de Pedidos.",
+        }
+    )
+    itens.append(
+        {
+            "chave": "itens_nota_fiscal",
+            "nome": "Itens da Nota Fiscal",
+            "ultima_atualizacao": ItemNotaFiscal.objects.aggregate(ultima=Max("updated_at")).get("ultima"),
+            "total_registros": ItemNotaFiscal.objects.count(),
+            "permite_execucao": False,
+            "observacao": "Atualizada junto com a integração de Notas Fiscais.",
         }
     )
     return itens
@@ -1025,10 +1464,26 @@ def atualizar_integracao(request, chave: str):
         return redirect("api_sankhya_gestao_integracoes")
     integracao = INTEGRACOES[chave]
     nome = integracao["nome"]
+    codigo_tabela: int | None = None
+    if chave == "precos":
+        codigo_tabela_raw = (request.POST.get("codigo_tabela") or "").strip()
+        if not codigo_tabela_raw:
+            if _wants_json(request):
+                return JsonResponse({"error": "Informe o código da tabela para atualizar os preços."}, status=400)
+            messages.error(request, "Informe o código da tabela para atualizar os preços.")
+            return redirect("api_sankhya_gestao_integracoes")
+        codigo_tabela = _to_int(codigo_tabela_raw)
+        if codigo_tabela is None:
+            if _wants_json(request):
+                return JsonResponse({"error": "Código da tabela inválido."}, status=400)
+            messages.error(request, "Código da tabela inválido.")
+            return redirect("api_sankhya_gestao_integracoes")
+        if codigo_tabela == 9999:
+            codigo_tabela = None
     q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
         if q_sync:
-            resultado = run_integracao_sankhya(chave)
+            resultado = run_integracao_sankhya(chave, codigo_tabela=codigo_tabela)
             if resultado.get("erro"):
                 if _wants_json(request):
                     return JsonResponse(
@@ -1060,6 +1515,7 @@ def atualizar_integracao(request, chave: str):
             task_id = async_task(
                 "api_sankhya.tasks.run_integracao_sankhya",
                 chave,
+                codigo_tabela,
                 task_name=f"Sankhya: {nome}",
             )
             if _wants_json(request):

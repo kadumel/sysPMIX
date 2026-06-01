@@ -409,12 +409,6 @@ class EnderecoCliente(models.Model):
         verbose_name = 'Endereço do Cliente'
         verbose_name_plural = 'Endereços dos Clientes'
         ordering = ['clienteERP', '-sn_padrao']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['cod_end_erp', 'cod_praca_erp'],
-                name='uniq_enderecocliente_cod_end_praca_erp',
-            )
-        ]
 
     def __str__(self):
         return f"{self.clienteERP.descr_cliente} - {self.end}, {self.num_end}"

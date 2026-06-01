@@ -479,9 +479,10 @@ def sync_pedidos() -> dict[str, int]:
                 codigo_nota = _to_int(p.get("codigoNota"))
                 if not codigo_nota:
                     continue
+                codigo_empresa = _to_int(p.get("codigoEmpresa"))
                 cliente = p.get("cliente") or {}
                 defaults = {
-                    "codigo_empresa": _to_int(p.get("codigoEmpresa")),
+                    "codigo_empresa": codigo_empresa,
                     "codigo_cliente": _to_int(p.get("codigoCliente")),
                     "cliente_nome": _to_str(cliente.get("nome"), 200),
                     "cliente_razao": _to_str(cliente.get("razao"), 200),
@@ -491,7 +492,12 @@ def sync_pedidos() -> dict[str, int]:
                     "valor_nota": _to_decimal(p.get("valorNota")),
                 }
                 defaults = {k: v for k, v in defaults.items() if v is not None}
-                pedido, created = Pedido.objects.update_or_create(codigo_nota=codigo_nota, defaults=defaults)
+                pedido, created = Pedido.objects.update_or_create(
+                    codigo_nota=codigo_nota,
+                    codigo_empresa=codigo_empresa,
+                    origem=Pedido.ORIGEM_SANKHYA,
+                    defaults=defaults,
+                )
                 ItemPedido.objects.filter(pedido=pedido).delete()
                 for item in p.get("itens") or []:
                     ItemPedido.objects.create(
@@ -567,6 +573,8 @@ def sync_contatos() -> dict[str, int]:
 
 
 def sync_funcionarios() -> dict[str, int]:
+    from api_sankhya.views import _funcionario_defaults_from_api_detalhe
+
     headers = _get_token_headers()
     result = SyncResult()
     page = 0
@@ -594,11 +602,10 @@ def sync_funcionarios() -> dict[str, int]:
                 )
                 dresp.raise_for_status()
                 detalhe = dresp.json()
-                defaults = {
-                    "cpf": _to_str(detalhe.get("cpf"), 14),
-                    "nome": _to_str(detalhe.get("nome"), 200),
-                    "matricula": _to_int(detalhe.get("matricula")),
-                }
+                if not isinstance(detalhe, dict):
+                    result.total_erros += 1
+                    continue
+                defaults = _funcionario_defaults_from_api_detalhe(detalhe, resumo)
                 obj, created = Funcionario.objects.update_or_create(
                     empresa_codigo=codigo_empresa,
                     codigo_funcionario=codigo_funcionario,
