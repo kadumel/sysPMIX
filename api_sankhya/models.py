@@ -438,7 +438,14 @@ class Pedido(models.Model):
     """
     Modelo para armazenar pedidos de venda da API Sankhya (v1/vendas/pedidos).
     """
-    codigo_nota = models.IntegerField(unique=True, verbose_name="Código da Nota")
+    ORIGEM_SANKHYA = 'SANKHYA'
+
+    origem = models.CharField(
+        max_length=50,
+        default=ORIGEM_SANKHYA,
+        verbose_name="Origem",
+    )
+    codigo_nota = models.IntegerField(verbose_name="Código da Nota")
     codigo_empresa = models.IntegerField(null=True, blank=True, verbose_name="Código Empresa")
     nome_empresa = models.CharField(max_length=200, null=True, blank=True, verbose_name="Nome Empresa")
     codigo_cliente = models.IntegerField(null=True, blank=True, verbose_name="Código Cliente")
@@ -532,15 +539,16 @@ class Pedido(models.Model):
         verbose_name_plural = 'Pedidos Sankhya'
         ordering = ['-data_negociacao', '-codigo_nota']
         db_table = 'sankhya_pedido'
+        unique_together = [['codigo_nota', 'codigo_empresa', 'origem']]
         indexes = [
-            models.Index(fields=['codigo_nota']),
+            models.Index(fields=['codigo_nota', 'codigo_empresa', 'origem']),
             models.Index(fields=['codigo_cliente']),
             models.Index(fields=['data_negociacao']),
             models.Index(fields=['pendente', 'confirmada']),
         ]
 
     def __str__(self):
-        return f"Nota {self.codigo_nota} - {self.cliente_nome or self.cliente_razao or 'N/A'}"
+        return f"Nota {self.codigo_nota} ({self.origem}) - {self.cliente_nome or self.cliente_razao or 'N/A'}"
 
 
 class ItemPedido(models.Model):
@@ -577,6 +585,83 @@ class ItemPedido(models.Model):
 
     def __str__(self):
         return f"{self.pedido_id} - Seq {self.sequencia} - {self.descricao_produto or 'N/A'}"
+
+
+class NotaFiscal(models.Model):
+    """
+    Cabeçalho de nota fiscal emitida (CRUD ItemNota + join CabecalhoNota).
+    Chave natural: NUNOTA.
+    """
+    nunota = models.IntegerField(unique=True, verbose_name="Nº único (NUNOTA)")
+    codigo_empresa = models.IntegerField(null=True, blank=True, verbose_name="Código Empresa (CODEMP)")
+    numero_nota = models.IntegerField(null=True, blank=True, verbose_name="Número NF (NUMNOTA)")
+    data_entrada_saida = models.DateField(null=True, blank=True, verbose_name="Data Entrada/Saída (DTENTSAI)")
+    data_negociacao = models.DateField(null=True, blank=True, verbose_name="Data Negociação (DTNEG)")
+    codigo_tipo_operacao = models.IntegerField(null=True, blank=True, verbose_name="Tipo Operação (CODTIPOPER)")
+    codigo_parceiro = models.IntegerField(null=True, blank=True, verbose_name="Parceiro (CODPARC)")
+    codigo_vendedor = models.IntegerField(null=True, blank=True, verbose_name="Vendedor (CODVEND)")
+    tipo_movimento = models.CharField(max_length=10, null=True, blank=True, verbose_name="Tipo Movimento (TIPMOV)")
+    pendente = models.CharField(max_length=5, null=True, blank=True, verbose_name="Pendente (PENDENTE)")
+    status_nfe = models.CharField(max_length=30, null=True, blank=True, verbose_name="Status NFe (STATUSNFE)")
+    status_nota = models.CharField(max_length=30, null=True, blank=True, verbose_name="Status Nota (STATUSNOTA)")
+    aprovado = models.CharField(max_length=5, null=True, blank=True, verbose_name="Aprovado (APROVADO)")
+    dtalter = models.CharField(max_length=50, null=True, blank=True, verbose_name="Data Alteração (DTALTER)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Nota Fiscal Sankhya"
+        verbose_name_plural = "Notas Fiscais Sankhya"
+        ordering = ["-data_negociacao", "-numero_nota"]
+        db_table = "sankhya_nota_fiscal"
+        indexes = [
+            models.Index(fields=["nunota"]),
+            models.Index(fields=["codigo_empresa", "numero_nota"]),
+            models.Index(fields=["codigo_parceiro"]),
+            models.Index(fields=["codigo_vendedor"]),
+            models.Index(fields=["data_negociacao"]),
+            models.Index(fields=["status_nfe"]),
+        ]
+
+    def __str__(self):
+        return f"NF {self.numero_nota or '?'} (NUNOTA {self.nunota})"
+
+
+class ItemNotaFiscal(models.Model):
+    """Item de nota fiscal emitida (linha ItemNota)."""
+    nota_fiscal = models.ForeignKey(NotaFiscal, on_delete=models.CASCADE, related_name="itens")
+    sequencia = models.IntegerField(verbose_name="Sequência (SEQUENCIA)")
+    cod_produto = models.IntegerField(null=True, blank=True, verbose_name="Código Produto (CODPROD)")
+    quantidade = models.DecimalField(
+        max_digits=15, decimal_places=4, null=True, blank=True, verbose_name="Quantidade (QTDNEG)"
+    )
+    valor_unitario = models.DecimalField(
+        max_digits=15, decimal_places=4, null=True, blank=True, verbose_name="Valor Unitário (VLRUNIT)"
+    )
+    valor_total = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True, verbose_name="Valor Total (VLRTOT)"
+    )
+    valor_desconto = models.DecimalField(
+        max_digits=15, decimal_places=2, null=True, blank=True, verbose_name="Valor Desconto (VLRDESC)"
+    )
+    uso_produto = models.CharField(max_length=10, null=True, blank=True, verbose_name="Uso Produto (USOPROD)")
+    status_nota = models.CharField(max_length=30, null=True, blank=True, verbose_name="Status Nota (STATUSNOTA)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Item Nota Fiscal Sankhya"
+        verbose_name_plural = "Itens Nota Fiscal Sankhya"
+        ordering = ["nota_fiscal", "sequencia"]
+        db_table = "sankhya_item_nota_fiscal"
+        unique_together = [["nota_fiscal", "sequencia"]]
+        indexes = [
+            models.Index(fields=["nota_fiscal"]),
+            models.Index(fields=["cod_produto"]),
+        ]
+
+    def __str__(self):
+        return f"{self.nota_fiscal_id} - Seq {self.sequencia} - Prod {self.cod_produto or '?'}"
 
 
 class Contato(models.Model):

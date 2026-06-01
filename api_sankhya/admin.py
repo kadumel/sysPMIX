@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido, Contato
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, NotaFiscal, ItemNotaFiscal, Contato
 )
 
 
@@ -352,8 +352,8 @@ class ItemPedidoInline(admin.TabularInline):
 
 @admin.register(Pedido)
 class PedidoAdmin(admin.ModelAdmin):
-    list_display = ('codigo_nota', 'numero_nota', 'codigo_cliente', 'cliente_nome', 'data_negociacao', 'valor_nota', 'entrega', 'pendente', 'confirmada', 'updated_at')
-    list_filter = ('pendente', 'confirmada', 'entrega', 'codigo_empresa', 'endereco_uf')
+    list_display = ('origem', 'codigo_nota', 'numero_nota', 'codigo_cliente', 'cliente_nome', 'data_negociacao', 'valor_nota', 'entrega', 'pendente', 'confirmada', 'updated_at')
+    list_filter = ('origem', 'pendente', 'confirmada', 'entrega', 'codigo_empresa', 'endereco_uf')
     search_fields = ('codigo_nota', 'numero_nota', 'codigo_cliente', 'cliente_nome', 'cliente_razao', 'cliente_cnpj_cpf')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 30
@@ -361,7 +361,7 @@ class PedidoAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Nota', {
-            'fields': ('codigo_nota', 'numero_nota', 'serie_nota', 'codigo_empresa', 'nome_empresa')
+            'fields': ('origem', 'codigo_nota', 'numero_nota', 'serie_nota', 'codigo_empresa', 'nome_empresa')
         }),
         ('Cliente', {
             'fields': ('codigo_cliente', 'cliente_tipo', 'cliente_cnpj_cpf', 'cliente_ie_rg', 'cliente_nome', 'cliente_razao', 'cliente_email', 'cliente_telefone')
@@ -386,6 +386,40 @@ class PedidoAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+
+
+class ItemNotaFiscalInline(admin.TabularInline):
+    model = ItemNotaFiscal
+    extra = 0
+    fields = (
+        "sequencia",
+        "cod_produto",
+        "quantidade",
+        "valor_unitario",
+        "valor_total",
+        "valor_desconto",
+        "uso_produto",
+        "status_nota",
+    )
+
+
+@admin.register(NotaFiscal)
+class NotaFiscalAdmin(admin.ModelAdmin):
+    list_display = (
+        "nunota",
+        "numero_nota",
+        "codigo_empresa",
+        "codigo_parceiro",
+        "codigo_vendedor",
+        "data_negociacao",
+        "status_nfe",
+        "pendente",
+        "updated_at",
+    )
+    list_filter = ("codigo_empresa", "status_nfe", "status_nota", "pendente", "aprovado")
+    search_fields = ("nunota", "numero_nota", "codigo_parceiro", "codigo_vendedor")
+    readonly_fields = ("created_at", "updated_at")
+    inlines = [ItemNotaFiscalInline]
 
 
 @admin.register(Contato)
