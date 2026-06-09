@@ -3,6 +3,8 @@ from django.utils import timezone
 
 from .models import (
     BannerPromocional,
+    Campanha,
+    ItemCampanha,
     ItemPedidoLoja,
     NotificacaoLoja,
     PedidoLoja,
@@ -172,6 +174,25 @@ class NotificacaoLojaAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+class ItemCampanhaInline(admin.TabularInline):
+    model = ItemCampanha
+    extra = 1
+    autocomplete_fields = ('produto',)
+
+
+@admin.register(Campanha)
+class CampanhaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nome', 'data_inicio', 'data_fim', 'criado_em')
+    list_filter = ('data_inicio', 'data_fim')
+    search_fields = ('nome', 'descricao')
+    readonly_fields = ('criado_em', 'atualizado_em')
+    inlines = [ItemCampanhaInline]
+    fieldsets = (
+        (None, {'fields': ('nome', 'descricao', 'data_inicio', 'data_fim')}),
+        ('Auditoria', {'fields': ('criado_em', 'atualizado_em')}),
+    )
 
 
 @admin.register(BannerPromocional)

@@ -8,7 +8,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
-from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto
+from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto, Produto as ProdutoSankhya
 from ecommerce import catalog as catalog_ecommerce
 from ecommerce.services import filtrar_pedidos_loja_notificacoes_comercial
 from .models import (
@@ -24,7 +24,13 @@ from .models import (
     PerfilUsuario,
     UsuarioClienteSankhya,
 )
-from .forms import VeiculoForm, CriarUsuarioClienteSankhyaForm, AlterarSenhaUsuarioClienteForm
+from .forms import (
+    VeiculoForm,
+    CampanhaForm,
+    ClienteSankhyaConfigForm,
+    CriarUsuarioClienteSankhyaForm,
+    AlterarSenhaUsuarioClienteForm,
+)
 from .services import FuncionarioService, PedidoService
 from django.db.models import Count, Prefetch, Sum, Q, Value
 from django.db.models import OuterRef, Subquery
@@ -51,6 +57,8 @@ from .services import VeiculoService, PedidoService, FuncionarioService, Cliente
 from api_sankhya.tasks import run_integracao_sankhya
 from django.db import connections
 from ecommerce.models import (
+    Campanha,
+    ItemCampanha,
     NotificacaoLoja,
     PedidoLoja,
     RotaDia,
@@ -1830,35 +1838,46 @@ class ListClienteSankhyaGestaoView(PerfilBIAccessMixin, ListView):
 
 
 class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
-    """Por cliente: criar usuários (perfil cliente) e alterar senhas."""
+    """Por cliente: configurações, criar usuários (perfil cliente) e alterar senhas."""
 
     template_name = 'cliente_sankhya/gestao_usuarios_cliente.html'
 
     def get_cliente(self, pk):
         return get_object_or_404(ClienteSankhya, pk=pk)
 
-    def get(self, request, pk):
-        cliente = self.get_cliente(pk)
-        vinculos = (
+    def _vinculos(self, cliente):
+        return (
             UsuarioClienteSankhya.objects.filter(cliente=cliente)
             .select_related('user')
             .order_by('user__username')
         )
-        form = CriarUsuarioClienteSankhyaForm()
-        return render(
-            request,
-            self.template_name,
-            {
-                'cliente': cliente,
-                'vinculos': vinculos,
-                'form_criar': form,
-                'form_senha': AlterarSenhaUsuarioClienteForm(),
-            },
-        )
+
+    def _render(self, request, cliente, **extra):
+        ctx = {
+            'cliente': cliente,
+            'vinculos': self._vinculos(cliente),
+            'form_config': extra.pop('form_config', ClienteSankhyaConfigForm(instance=cliente)),
+            'form_criar': extra.pop('form_criar', CriarUsuarioClienteSankhyaForm()),
+            'form_senha': extra.pop('form_senha', AlterarSenhaUsuarioClienteForm()),
+        }
+        ctx.update(extra)
+        return render(request, self.template_name, ctx)
+
+    def get(self, request, pk):
+        cliente = self.get_cliente(pk)
+        return self._render(request, cliente)
 
     def post(self, request, pk):
         cliente = self.get_cliente(pk)
         action = request.POST.get('action')
+
+        if action == 'salvar_config':
+            form_config = ClienteSankhyaConfigForm(request.POST, instance=cliente)
+            if form_config.is_valid():
+                form_config.save()
+                messages.success(request, 'Configurações do cliente atualizadas.')
+                return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+            return self._render(request, cliente, form_config=form_config)
 
         if action == 'criar_usuario':
             form = CriarUsuarioClienteSankhyaForm(request.POST)
@@ -1886,21 +1905,7 @@ class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
                     return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
                 except Exception as exc:
                     messages.error(request, f'Erro ao criar usuário: {exc}')
-            vinculos = (
-                UsuarioClienteSankhya.objects.filter(cliente=cliente)
-                .select_related('user')
-                .order_by('user__username')
-            )
-            return render(
-                request,
-                self.template_name,
-                {
-                    'cliente': cliente,
-                    'vinculos': vinculos,
-                    'form_criar': form,
-                    'form_senha': AlterarSenhaUsuarioClienteForm(),
-                },
-            )
+            return self._render(request, cliente, form_criar=form)
 
         if action == 'alterar_senha':
             raw_uid = request.POST.get('user_id')
@@ -1922,22 +1927,12 @@ class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
                 user.save()
                 messages.success(request, f'Senha do usuário "{user.username}" atualizada.')
                 return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
-            vinculos = (
-                UsuarioClienteSankhya.objects.filter(cliente=cliente)
-                .select_related('user')
-                .order_by('user__username')
-            )
-            return render(
+            return self._render(
                 request,
-                self.template_name,
-                {
-                    'cliente': cliente,
-                    'vinculos': vinculos,
-                    'form_criar': CriarUsuarioClienteSankhyaForm(),
-                    'form_senha': form_senha,
-                    'senha_user_id': raw_uid,
-                    'abrir_modal_senha': True,
-                },
+                cliente,
+                form_senha=form_senha,
+                senha_user_id=raw_uid,
+                abrir_modal_senha=True,
             )
 
         return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
@@ -2169,6 +2164,159 @@ class GestaoRotasEcommerceView(PerfilGestaoRotasMixin, View):
         return render(request, self.template_name, {'rotas': rotas})
 
 
+def _status_campanha(campanha, ref=None):
+    hoje = ref or date.today()
+    if hoje < campanha.data_inicio:
+        return 'futura'
+    if hoje > campanha.data_fim:
+        return 'encerrada'
+    return 'vigente'
+
+
+class GestaoCampanhasEcommerceView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/campanhas.html'
+
+    def get(self, request):
+        hoje = date.today()
+        qs = Campanha.objects.annotate(qtd_produtos=Count('itens'))
+        search = (request.GET.get('search') or '').strip()
+        if search:
+            q = Q(nome__icontains=search) | Q(descricao__icontains=search)
+            if search.isdigit():
+                q |= Q(pk=int(search))
+            qs = qs.filter(q)
+
+        status = (request.GET.get('status') or '').strip()
+        if status == 'vigente':
+            qs = qs.filter(data_inicio__lte=hoje, data_fim__gte=hoje)
+        elif status == 'futura':
+            qs = qs.filter(data_inicio__gt=hoje)
+        elif status == 'encerrada':
+            qs = qs.filter(data_fim__lt=hoje)
+
+        campanhas = []
+        for c in qs.order_by('-data_inicio', 'nome'):
+            c.status_periodo = _status_campanha(c, hoje)
+            campanhas.append(c)
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'campanhas': campanhas,
+                'current_search': search,
+                'filtro_status': status,
+            },
+        )
+
+
+class CampanhaEcommerceFormView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/campanha_form.html'
+
+    def _get_campanha(self, pk):
+        return get_object_or_404(
+            Campanha.objects.prefetch_related('itens__produto'),
+            pk=pk,
+        )
+
+    def _produtos_busca(self, campanha, termo):
+        termo = (termo or '').strip()
+        if not termo or not campanha:
+            return []
+        qs = ProdutoSankhya.objects.filter(ativo=True)
+        if termo.isdigit():
+            cod = int(termo)
+            qs = qs.filter(Q(codigo_produto=cod) | Q(nome__icontains=termo) | Q(referencia__icontains=termo))
+        else:
+            qs = qs.filter(
+                Q(nome__icontains=termo)
+                | Q(referencia__icontains=termo)
+                | Q(marca__icontains=termo)
+            )
+        ja_ids = campanha.itens.values_list('produto_id', flat=True)
+        return list(qs.exclude(id__in=ja_ids).order_by('nome', 'codigo_produto')[:25])
+
+    def _render(self, request, campanha=None, form=None, **extra):
+        itens = []
+        produtos_busca = []
+        busca_produto = (request.GET.get('q') or extra.pop('busca_produto', '') or '').strip()
+        if campanha:
+            itens = list(campanha.itens.select_related('produto').order_by('produto__nome', 'produto__codigo_produto'))
+            if busca_produto:
+                produtos_busca = self._produtos_busca(campanha, busca_produto)
+        ctx = {
+            'campanha': campanha,
+            'form': form or CampanhaForm(instance=campanha),
+            'itens': itens,
+            'busca_produto': busca_produto,
+            'produtos_busca': produtos_busca,
+            'status_periodo': _status_campanha(campanha) if campanha else None,
+        }
+        ctx.update(extra)
+        return render(request, self.template_name, ctx)
+
+    def get(self, request, pk=None):
+        campanha = self._get_campanha(pk) if pk else None
+        return self._render(request, campanha)
+
+    def post(self, request, pk=None):
+        action = (request.POST.get('action') or 'salvar').strip()
+        campanha = self._get_campanha(pk) if pk else None
+
+        if action == 'excluir' and campanha:
+            nome = campanha.nome
+            campanha.delete()
+            messages.success(request, f'Campanha "{nome}" excluída.')
+            return redirect('gestao_campanhas_ecommerce')
+
+        if action == 'adicionar_produto' and campanha:
+            raw_pid = request.POST.get('produto_id')
+            try:
+                produto_id = int(raw_pid)
+            except (TypeError, ValueError):
+                messages.error(request, 'Produto inválido.')
+                return redirect('gestao_campanha_editar', pk=campanha.pk)
+            produto = ProdutoSankhya.objects.filter(pk=produto_id, ativo=True).first()
+            if not produto:
+                messages.error(request, 'Produto não encontrado ou inativo.')
+                return redirect('gestao_campanha_editar', pk=campanha.pk)
+            _, created = ItemCampanha.objects.get_or_create(campanha=campanha, produto=produto)
+            if created:
+                messages.success(request, f'Produto "{produto.nome or produto.codigo_produto}" adicionado à campanha.')
+            else:
+                messages.info(request, 'Este produto já faz parte da campanha.')
+            q = (request.POST.get('q') or '').strip()
+            url = reverse('gestao_campanha_editar', kwargs={'pk': campanha.pk})
+            if q:
+                url = f'{url}?{urlencode({"q": q})}'
+            return redirect(url)
+
+        if action == 'remover_produto' and campanha:
+            raw_iid = request.POST.get('item_id')
+            try:
+                item_id = int(raw_iid)
+            except (TypeError, ValueError):
+                messages.error(request, 'Item inválido.')
+                return redirect('gestao_campanha_editar', pk=campanha.pk)
+            deleted, _ = ItemCampanha.objects.filter(pk=item_id, campanha=campanha).delete()
+            if deleted:
+                messages.success(request, 'Produto removido da campanha.')
+            else:
+                messages.error(request, 'Item não encontrado nesta campanha.')
+            return redirect('gestao_campanha_editar', pk=campanha.pk)
+
+        form = CampanhaForm(request.POST, instance=campanha)
+        if form.is_valid():
+            campanha = form.save()
+            if pk:
+                messages.success(request, 'Campanha atualizada.')
+                return redirect('gestao_campanha_editar', pk=campanha.pk)
+            messages.success(request, 'Campanha criada. Agora você pode adicionar produtos.')
+            return redirect('gestao_campanha_editar', pk=campanha.pk)
+
+        return self._render(request, campanha, form=form)
+
+
 class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
     template_name = 'ecommerce_gestao/notificacoes.html'
 
@@ -2194,7 +2342,7 @@ class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
         )
         pedidos = (
             PedidoLoja.objects.select_related('cliente', 'user', 'aprovado_por')
-            .prefetch_related('itens')
+            .prefetch_related('itens', 'analise__itens')
             .annotate(
                 comercial_responsavel_nome=responsavel_nome_sq,
                 comercial_responsavel_username=responsavel_username_sq,

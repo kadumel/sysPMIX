@@ -210,7 +210,7 @@ class ClienteAdmin(admin.ModelAdmin):
             'fields': ('codend', 'numero', 'complemento', 'bairro', 'cidade', 'cep')
         }),
         ('Comercial', {
-            'fields': ('codtab',)
+            'fields': ('codtab', 'tempo_analise')
         }),
         ('Localização GPS', {
             'fields': ('latitude', 'longitude')

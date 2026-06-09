@@ -243,6 +243,11 @@ class Cliente(models.Model):
     cidade = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cidade")
     cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP")
     codtab = models.IntegerField(null=True, blank=True, verbose_name="Código da Tabela de Preço")
+    tempo_analise = models.PositiveIntegerField(
+        default=2,
+        verbose_name="Tempo de análise (meses)",
+        help_text="Período padrão em meses para análise comercial do cliente.",
+    )
     dtalter = models.CharField(max_length=50, null=True, blank=True, verbose_name="Data Alteração (DTALTER)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")

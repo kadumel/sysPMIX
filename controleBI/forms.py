@@ -1,7 +1,54 @@
 from django import forms
 from django.contrib.auth.models import User
 
+from api_sankhya.models import Cliente as ClienteSankhya
+from ecommerce.models import Campanha
+
 from .models import Veiculo
+
+
+class CampanhaForm(forms.ModelForm):
+    class Meta:
+        model = Campanha
+        fields = ['nome', 'descricao', 'data_inicio', 'data_fim']
+        labels = {
+            'nome': 'Nome da campanha',
+            'descricao': 'Descrição',
+            'data_inicio': 'Data de início',
+            'data_fim': 'Data de fim',
+        }
+        widgets = {
+            'nome': forms.TextInput(attrs={'class': 'form-control'}),
+            'descricao': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'data_inicio': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+            'data_fim': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
+        }
+
+    def clean(self):
+        data = super().clean()
+        ini = data.get('data_inicio')
+        fim = data.get('data_fim')
+        if ini and fim and fim < ini:
+            raise forms.ValidationError('A data de fim deve ser igual ou posterior à data de início.')
+        return data
+
+
+class ClienteSankhyaConfigForm(forms.ModelForm):
+    class Meta:
+        model = ClienteSankhya
+        fields = ['tempo_analise']
+        labels = {
+            'tempo_analise': 'Tempo de análise (meses)',
+        }
+        widgets = {
+            'tempo_analise': forms.NumberInput(attrs={'class': 'form-control', 'min': 1, 'step': 1}),
+        }
+
+    def clean_tempo_analise(self):
+        valor = self.cleaned_data['tempo_analise']
+        if valor is not None and valor < 1:
+            raise forms.ValidationError('Informe pelo menos 1 mês.')
+        return valor
 
 
 class CriarUsuarioClienteSankhyaForm(forms.Form):

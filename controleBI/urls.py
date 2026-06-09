@@ -8,6 +8,8 @@ from .views import (
     ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView,
     ListClienteSankhyaGestaoView, GestaoUsuariosClienteSankhyaView,
     GestaoCategoriasEcommerceView,
+    GestaoCampanhasEcommerceView,
+    CampanhaEcommerceFormView,
     GestaoRotasEcommerceView,
     GestaoNotificacoesEcommerceView,
     EcommerceClientesSelectorView,
@@ -71,6 +73,21 @@ urlpatterns = [
         'categorias-ecommerce/',
         GestaoCategoriasEcommerceView.as_view(),
         name='gestao_categorias_ecommerce',
+    ),
+    path(
+        'campanhas-ecommerce/',
+        GestaoCampanhasEcommerceView.as_view(),
+        name='gestao_campanhas_ecommerce',
+    ),
+    path(
+        'campanhas-ecommerce/nova/',
+        CampanhaEcommerceFormView.as_view(),
+        name='gestao_campanha_nova',
+    ),
+    path(
+        'campanhas-ecommerce/<int:pk>/editar/',
+        CampanhaEcommerceFormView.as_view(),
+        name='gestao_campanha_editar',
     ),
     path(
         'rotas-ecommerce/',

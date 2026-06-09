@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 import os
 
@@ -107,6 +108,68 @@ class ItemPedidoLoja(models.Model):
         return f'{self.codigo_produto} x {self.quantidade}'
 
 
+class AnalisePedidoLoja(models.Model):
+    """Snapshot das sugestões exibidas ao cliente na finalização do pedido."""
+
+    pedido = models.OneToOneField(
+        PedidoLoja,
+        on_delete=models.CASCADE,
+        related_name='analise',
+        verbose_name='Pedido',
+    )
+    tempo_analise_meses = models.PositiveIntegerField(
+        default=2,
+        verbose_name='Período analisado (meses)',
+    )
+    gerada_em = models.DateTimeField(auto_now_add=True, verbose_name='Gerada em')
+
+    class Meta:
+        verbose_name = 'Análise do pedido (loja)'
+        verbose_name_plural = 'Análises dos pedidos (loja)'
+
+    def __str__(self):
+        return f'Análise pedido #{self.pedido_id}'
+
+
+class ItemAnalisePedidoLoja(models.Model):
+    class Tipo(models.TextChoices):
+        ESQUECIDOS = 'esquecidos', 'Itens que costuma pedir'
+        NOVIDADES = 'novidades', 'Novidades'
+        CURVA_A = 'curva_a', 'Curva A (alto giro)'
+
+    analise = models.ForeignKey(
+        AnalisePedidoLoja,
+        on_delete=models.CASCADE,
+        related_name='itens',
+        verbose_name='Análise',
+    )
+    tipo = models.CharField(max_length=20, choices=Tipo.choices, db_index=True, verbose_name='Tipo')
+    codigo_produto = models.IntegerField(verbose_name='Código produto')
+    nome_produto = models.CharField(max_length=300, verbose_name='Nome do produto')
+    grupo_produto = models.CharField(max_length=200, blank=True, verbose_name='Grupo de produto')
+    detalhe = models.CharField(
+        max_length=200,
+        blank=True,
+        verbose_name='Detalhe',
+        help_text='Ex.: frequência no histórico, campanha, posição na curva A.',
+    )
+    ordem = models.PositiveIntegerField(default=0, verbose_name='Ordem')
+
+    class Meta:
+        verbose_name = 'Item da análise do pedido'
+        verbose_name_plural = 'Itens da análise do pedido'
+        ordering = ['tipo', 'ordem', 'codigo_produto']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['analise', 'codigo_produto'],
+                name='uniq_analise_pedido_produto',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.get_tipo_display()} — {self.codigo_produto}'
+
+
 class NotificacaoLoja(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -134,6 +197,60 @@ class NotificacaoLoja(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class Campanha(models.Model):
+    nome = models.CharField(max_length=120, verbose_name='Nome')
+    descricao = models.TextField(blank=True, verbose_name='Descrição')
+    data_inicio = models.DateField(verbose_name='Data de início', db_index=True)
+    data_fim = models.DateField(verbose_name='Data de fim', db_index=True)
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Campanha'
+        verbose_name_plural = 'Campanhas'
+        ordering = ['-data_inicio', 'nome']
+
+    def __str__(self):
+        return self.nome
+
+    def clean(self):
+        super().clean()
+        if self.data_inicio and self.data_fim and self.data_fim < self.data_inicio:
+            raise ValidationError({
+                'data_fim': 'A data de fim deve ser igual ou posterior à data de início.',
+            })
+
+
+class ItemCampanha(models.Model):
+    campanha = models.ForeignKey(
+        Campanha,
+        on_delete=models.CASCADE,
+        related_name='itens',
+        verbose_name='Campanha',
+    )
+    produto = models.ForeignKey(
+        'api_sankhya.Produto',
+        on_delete=models.CASCADE,
+        related_name='itens_campanha',
+        verbose_name='Produto Sankhya',
+    )
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+
+    class Meta:
+        verbose_name = 'Item da campanha'
+        verbose_name_plural = 'Itens da campanha'
+        ordering = ['campanha', 'produto__codigo_produto']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campanha', 'produto'],
+                name='uniq_campanha_produto',
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.campanha} — {self.produto}'
 
 
 class BannerPromocional(models.Model):

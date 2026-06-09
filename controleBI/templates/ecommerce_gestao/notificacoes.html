@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load analise_extras %}
 
 {% block content %}
 <div class="container-fluid">
@@ -117,7 +118,8 @@
                                     <button type="button" class="btn btn-sm btn-outline-secondary" title="Ver itens" data-bs-toggle="modal" data-bs-target="#itensPedidoModal{{ pedido.id }}">
                                         <i class="bi bi-card-list"></i>
                                     </button>
-                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Análise de indicadores (em desenvolvimento)" disabled>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" title="Análise do pedido"
+                                            data-bs-toggle="modal" data-bs-target="#analisePedidoModal{{ pedido.id }}">
                                         <i class="bi bi-graph-up"></i>
                                     </button>
                                     {% if pedido.status == 'pendente' %}
@@ -185,6 +187,119 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="analisePedidoModal{{ pedido.id }}" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Análise do pedido #{{ pedido.id }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                {% if pedido.analise %}
+                <p class="text-muted small mb-3">
+                    Sugestões exibidas ao cliente na finalização
+                    (período de {{ pedido.analise.tempo_analise_meses }} meses · {{ pedido.analise.gerada_em|date:'d/m/Y H:i' }}).
+                </p>
+                <div class="accordion" id="accordionAnalisePedido{{ pedido.id }}">
+                    {% itens_analise_tipo pedido.analise 'esquecidos' as itens_esquecidos %}
+                    {% if itens_esquecidos %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                                    data-bs-target="#analisePedido{{ pedido.id }}Esquecidos" aria-expanded="false">
+                                Itens que costuma pedir e não incluiu
+                                <span class="badge bg-primary ms-2">{{ itens_esquecidos|length }}</span>
+                            </button>
+                        </h2>
+                        <div id="analisePedido{{ pedido.id }}Esquecidos" class="accordion-collapse collapse"
+                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
+                            <div class="accordion-body p-0">
+                                <ul class="list-group list-group-flush">
+                                    {% for item in itens_esquecidos %}
+                                    <li class="list-group-item py-2">
+                                        <strong>{{ item.nome_produto }}</strong>
+                                        <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
+                                        {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% itens_analise_tipo pedido.analise 'novidades' as itens_novidades %}
+                    {% if itens_novidades %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#analisePedido{{ pedido.id }}Novidades"
+                                    aria-expanded="false">
+                                Novidades sugeridas
+                                <span class="badge bg-warning text-dark ms-2">{{ itens_novidades|length }}</span>
+                            </button>
+                        </h2>
+                        <div id="analisePedido{{ pedido.id }}Novidades" class="accordion-collapse collapse"
+                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
+                            <div class="accordion-body p-0">
+                                <ul class="list-group list-group-flush">
+                                    {% for item in itens_novidades %}
+                                    <li class="list-group-item py-2">
+                                        <strong>{{ item.nome_produto }}</strong>
+                                        <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
+                                        {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% itens_analise_tipo pedido.analise 'curva_a' as itens_curva_a %}
+                    {% if itens_curva_a %}
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#analisePedido{{ pedido.id }}CurvaA"
+                                    aria-expanded="false">
+                                Curva A — alto giro não adquirido
+                                <span class="badge bg-success ms-2">{{ itens_curva_a|length }}</span>
+                            </button>
+                        </h2>
+                        <div id="analisePedido{{ pedido.id }}CurvaA" class="accordion-collapse collapse"
+                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
+                            <div class="accordion-body">
+                                {% for subgrupo, itens_sub in itens_curva_a|agrupar_curva_a %}
+                                <div class="mb-3">
+                                    <div class="small fw-semibold text-uppercase text-muted border-bottom pb-1 mb-2">{{ subgrupo }}</div>
+                                    <ul class="list-group list-group-flush border rounded">
+                                        {% for item in itens_sub %}
+                                        <li class="list-group-item py-2">
+                                            <strong>{{ item.nome_produto }}</strong>
+                                            <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
+                                            {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if not itens_esquecidos and not itens_novidades and not itens_curva_a %}
+                <p class="text-muted mb-0">Nenhuma sugestão registrada para este pedido.</p>
+                {% endif %}
+                {% else %}
+                <p class="text-muted mb-0">Este pedido não possui análise registrada.</p>
+                {% endif %}
             </div>
         </div>
     </div>

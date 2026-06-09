@@ -9,6 +9,7 @@ from api_sankhya.models import Preco, Produto
 
 from . import catalog
 from .cart_session import clear_cart, get_cart
+from .analise_pedido import persistir_analise_pedido
 from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente
 
 
@@ -30,7 +31,12 @@ def criar_notificacao(user, titulo: str, mensagem: str, pedido: PedidoLoja | Non
     )
 
 
-def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None, str | None]:
+def finalizar_pedido_loja(
+    request,
+    user,
+    cliente_api,
+    analise_snapshot: dict | None = None,
+) -> tuple[PedidoLoja | None, str | None]:
     """
     Monta o pedido a partir da sessão do carrinho.
     Retorna (pedido, mensagem_erro).
@@ -108,6 +114,8 @@ def finalizar_pedido_loja(request, user, cliente_api) -> tuple[PedidoLoja | None
             total_pedido += row['valor_total']
         pedido.valor_total = total_pedido
         pedido.save(update_fields=['valor_total'])
+        if analise_snapshot:
+            persistir_analise_pedido(pedido, analise_snapshot)
         clear_cart(request)
 
     criar_notificacao(
