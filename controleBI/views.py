@@ -3,7 +3,7 @@ from collections import Counter, defaultdict
 
 from django.template.loader import render_to_string
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -37,6 +37,7 @@ from django.db.models import OuterRef, Subquery
 from django.db.models.functions import Coalesce, TruncMonth
 from datetime import datetime, timedelta, date
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
+from .mapa_rotas_pdf import gerar_mapa_rotas_pdf, gerar_mapa_rotas_semana_pdf
 from .mixins import PerfilBIAccessMixin, PerfilGestaoRotasMixin, PerfilMapaRotasEcommerceMixin
 from .decorators import requer_acesso_bi
 from .perfil_utils import ensure_perfil
@@ -2675,6 +2676,26 @@ def _week_range_containing(d: date) -> tuple[date, date]:
     return start, end
 
 
+def _rotas_dia_queryset(user, data_ini: date, data_fim: date):
+    perfil = ensure_perfil(user)
+    qs = (
+        RotaDia.objects.filter(data__gte=data_ini, data__lte=data_fim)
+        .select_related('rota_padrao', 'rota_padrao__responsavel', 'veiculo', 'motorista', 'criado_por')
+        .prefetch_related(
+            'ajudantes_equipe__funcionario',
+            Prefetch(
+                'clientes_rota',
+                queryset=RotaDiaCliente.objects.select_related('cliente').order_by('ordem', 'id'),
+            ),
+        )
+        .annotate(total_clientes=Count('clientes_rota'))
+        .order_by('data', 'rota_padrao__nome', 'id')
+    )
+    if perfil and perfil.perfil == PerfilUsuario.Perfil.COMERCIAL:
+        qs = qs.filter(rota_padrao__responsavel=user)
+    return qs
+
+
 class MapaRotasSemanaView(PerfilMapaRotasEcommerceMixin, View):
     """Rotas a executar da semana (comercial: só rotas padrão em que é responsável)."""
 
@@ -2689,23 +2710,7 @@ class MapaRotasSemanaView(PerfilMapaRotasEcommerceMixin, View):
         week_start, week_end = _week_range_containing(ref)
 
         perfil = ensure_perfil(request.user)
-        qs = (
-            RotaDia.objects.filter(data__gte=week_start, data__lte=week_end)
-            .select_related('rota_padrao', 'rota_padrao__responsavel', 'veiculo', 'motorista', 'criado_por')
-            .prefetch_related(
-                'ajudantes_equipe__funcionario',
-                Prefetch(
-                    'clientes_rota',
-                    queryset=RotaDiaCliente.objects.select_related('cliente').order_by('ordem', 'id'),
-                ),
-            )
-            .annotate(total_clientes=Count('clientes_rota'))
-            .order_by('data', 'rota_padrao__nome', 'id')
-        )
-        if perfil and perfil.perfil == PerfilUsuario.Perfil.COMERCIAL:
-            qs = qs.filter(rota_padrao__responsavel=request.user)
-
-        rotas_list = list(qs)
+        rotas_list = list(_rotas_dia_queryset(request.user, week_start, week_end))
         rotas_por_dia = defaultdict(list)
         for rd in rotas_list:
             rotas_por_dia[rd.data].append(rd)
@@ -2739,6 +2744,56 @@ class MapaRotasSemanaView(PerfilMapaRotasEcommerceMixin, View):
                 'pode_editar_rotas_dia': bool(perfil and perfil.perfil in PERFIS_GESTAO_ROTAS),
             },
         )
+
+
+class MapaRotasDiaPdfView(PerfilMapaRotasEcommerceMixin, View):
+    """PDF do mapa de rotas de um dia (layout em 4 colunas)."""
+
+    def get(self, request):
+        data_raw = request.GET.get('data')
+        try:
+            dia = date.fromisoformat(data_raw) if data_raw else date.today()
+        except ValueError:
+            dia = date.today()
+
+        rotas = list(_rotas_dia_queryset(request.user, dia, dia))
+        if not rotas:
+            messages.warning(request, 'Não há rotas neste dia para gerar o PDF.')
+            ref = request.GET.get('ref') or dia.isoformat()
+            return redirect(f'{reverse("ecommerce_mapa_rotas_semana")}?{urlencode({"ref": ref})}')
+
+        pdf_bytes = gerar_mapa_rotas_pdf(dia, rotas)
+        filename = f'mapa-rotas-{dia.isoformat()}.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
+
+
+class MapaRotasSemanaPdfView(PerfilMapaRotasEcommerceMixin, View):
+    """PDF do mapa de rotas da semana inteira (um dia por página)."""
+
+    def get(self, request):
+        ref_raw = request.GET.get('ref')
+        try:
+            ref = date.fromisoformat(ref_raw) if ref_raw else date.today()
+        except ValueError:
+            ref = date.today()
+
+        week_start, week_end = _week_range_containing(ref)
+        rotas_list = list(_rotas_dia_queryset(request.user, week_start, week_end))
+        if not rotas_list:
+            messages.warning(request, 'Não há rotas nesta semana para gerar o PDF.')
+            return redirect(f'{reverse("ecommerce_mapa_rotas_semana")}?{urlencode({"ref": ref.isoformat()})}')
+
+        rotas_por_dia = defaultdict(list)
+        for rd in rotas_list:
+            rotas_por_dia[rd.data].append(rd)
+
+        pdf_bytes = gerar_mapa_rotas_semana_pdf(week_start, rotas_por_dia)
+        filename = f'mapa-rotas-semana-{week_start.isoformat()}.pdf'
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        return response
 
 
 class RotaPadraoFormView(PerfilGestaoRotasMixin, View):
