@@ -5,6 +5,7 @@ Análise de pedido antes da finalização: itens esquecidos, novidades e curva A
 from __future__ import annotations
 
 import calendar
+import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from itertools import groupby
@@ -38,6 +39,8 @@ TIPO_CURVA_A = ItemAnalisePedidoLoja.Tipo.CURVA_A
 DATA_CORTE_PEDIDO_PARA_NOTA = date(2026, 4, 30)
 # Pedidos Sankhya considerados na análise do e-commerce (mesmo critério da integração).
 CODIGO_CONTATO_PEDIDO_ANALISE = 999999
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -151,10 +154,23 @@ def _data_meses_atras(ref: date, meses: int) -> date:
 
 
 def _periodo_analise(cliente: Cliente, ref: date | None = None) -> tuple[date, date, int]:
-    ref = ref or date.today()
+    ref = ref or catalog.data_referencia_ecommerce()
     meses = max(1, int(getattr(cliente, 'tempo_analise', None) or 2))
     inicio = _data_meses_atras(ref, meses)
     return inicio, ref, meses
+
+
+def _produtos_comprados_cliente_desde(
+    cliente: Cliente,
+    desde: date,
+    ate: date | None = None,
+) -> set[int]:
+    """Produtos comprados pelo cliente desde uma data (loja + Sankhya no período)."""
+    ate = ate or catalog.data_referencia_ecommerce()
+    if desde > ate:
+        return set()
+    freq, _ = _freq_pedidos_cliente_periodo(cliente, desde, ate)
+    return set(freq.keys())
 
 
 def _inicio_notas_fiscais() -> date:
@@ -465,16 +481,27 @@ def _itens_novidades(
     if not campanhas:
         return []
 
-    ja_comprou = _produtos_ja_comprados_cliente(cliente)
     codigos_campanha: dict[int, str] = {}
     for campanha in campanhas:
+        comprados_desde_inicio = _produtos_comprados_cliente_desde(cliente, campanha.data_inicio, ref)
         for cod in ItemCampanha.objects.filter(campanha=campanha).values_list(
             'produto__codigo_produto', flat=True
         ):
-            if cod and cod not in cart_codigos and cod not in excluir and cod not in ja_comprou:
+            if (
+                cod
+                and cod not in cart_codigos
+                and cod not in excluir
+                and cod not in comprados_desde_inicio
+            ):
                 codigos_campanha.setdefault(int(cod), campanha.nome)
 
     if not codigos_campanha:
+        if campanhas:
+            logger.info(
+                'Análise novidades: campanhas vigentes=%s, nenhum produto elegível (cliente=%s).',
+                len(campanhas),
+                cliente.pk,
+            )
         return []
 
     produtos = _produtos_disponiveis_loja(set(codigos_campanha.keys()), codtab, codigos_permitidos)
@@ -492,6 +519,16 @@ def _itens_novidades(
                 f'Campanha: {codigos_campanha[cod]}',
                 idx,
             )
+        )
+
+    if codigos_campanha and not out:
+        logger.warning(
+            'Análise novidades: %s produto(s) de campanha filtrados pela loja '
+            '(cliente=%s, codtab=%s, grupos_permitidos=%s).',
+            len(codigos_campanha),
+            cliente.pk,
+            codtab,
+            len(codigos_permitidos),
         )
     return out
 
@@ -601,15 +638,92 @@ def _itens_curva_a(
     return out
 
 
+def diagnosticar_novidades_campanha(
+    cliente: Cliente,
+    cart: list[dict],
+    ref: date | None = None,
+) -> dict:
+    """Detalha por que produtos de campanha não entram em novidades (uso em DEBUG/suporte)."""
+    ref = ref or catalog.data_referencia_ecommerce()
+    cart_codigos = _codigos_carrinho(cart)
+    codtab = catalog.normalizar_codtab(getattr(cliente, 'codtab', None))
+    codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
+    desde, ate, meses = _periodo_analise(cliente, ref)
+    esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, codigos_permitidos)
+    excluir = {s.codigo_produto for s in esquecidos}
+    campanhas = _campanhas_vigentes(ref)
+
+    diag: dict = {
+        'data_referencia': ref.isoformat(),
+        'cliente_id': cliente.pk,
+        'codigo_cliente': cliente.codigo_cliente,
+        'codtab': codtab,
+        'grupos_permitidos': len(codigos_permitidos),
+        'campanhas_vigentes': [
+            {
+                'id': c.pk,
+                'nome': c.nome,
+                'data_inicio': c.data_inicio.isoformat(),
+                'data_fim': c.data_fim.isoformat(),
+            }
+            for c in campanhas
+        ],
+        'produtos': [],
+    }
+
+    if not campanhas:
+        diag['motivo'] = 'nenhuma_campanha_vigente'
+        return diag
+
+    for campanha in campanhas:
+        comprados_desde_inicio = _produtos_comprados_cliente_desde(cliente, campanha.data_inicio, ref)
+        for cod in ItemCampanha.objects.filter(campanha=campanha).values_list(
+            'produto__codigo_produto', flat=True
+        ):
+            if not cod:
+                continue
+            cod = int(cod)
+            produto = Produto.objects.filter(codigo_produto=cod).first()
+            preco = catalog.map_precos_por_codtab([cod], codtab).get(cod) if codtab else None
+            motivos: list[str] = []
+            if cod in cart_codigos:
+                motivos.append('no_carrinho')
+            if cod in excluir:
+                motivos.append('em_esquecidos')
+            if cod in comprados_desde_inicio:
+                motivos.append('comprado_desde_inicio_campanha')
+            if not produto or not produto.ativo:
+                motivos.append('produto_inativo_ou_inexistente')
+            elif not catalog.produto_permitido_na_loja(produto, codigos_permitidos):
+                motivos.append('grupo_nao_habilitado_loja')
+            if not preco or preco <= 0:
+                motivos.append('sem_preco_na_tabela_cliente')
+            diag['produtos'].append(
+                {
+                    'codigo_produto': cod,
+                    'campanha': campanha.nome,
+                    'elegivel': not motivos,
+                    'motivos': motivos,
+                    'preco_tabela': str(preco) if preco else None,
+                }
+            )
+
+    if not diag['produtos']:
+        diag['motivo'] = 'campanhas_sem_produtos'
+    elif all(not p['elegivel'] for p in diag['produtos']):
+        diag['motivo'] = 'todos_produtos_filtrados'
+    return diag
+
+
 def calcular_analise_pedido(
     cliente: Cliente,
     cart: list[dict],
     ref: date | None = None,
 ) -> ResultadoAnalise:
-    ref = ref or date.today()
+    ref = ref or catalog.data_referencia_ecommerce()
     desde, ate, meses = _periodo_analise(cliente, ref)
     cart_codigos = _codigos_carrinho(cart)
-    codtab = getattr(cliente, 'codtab', None)
+    codtab = catalog.normalizar_codtab(getattr(cliente, 'codtab', None))
     codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
 
     esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, codigos_permitidos)

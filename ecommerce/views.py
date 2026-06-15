@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,6 +26,7 @@ from .analise_pedido import (
     SESSION_ANALISE_KEY,
     ResultadoAnalise,
     calcular_analise_pedido,
+    diagnosticar_novidades_campanha,
     remover_sugestao_do_snapshot,
 )
 from .models import BannerPromocional, NotificacaoLoja, PedidoLoja
@@ -455,17 +457,22 @@ def checkout_analise_preview(request):
 
     ctx_carrinho = _cart_snapshot_context(request)
     snapshots = _render_cart_snapshots_html(request)
-    return JsonResponse(
-        {
-            'ok': True,
-            'tem_sugestoes': resultado.tem_sugestoes,
-            'html': html,
-            'total_sugestoes': len(resultado.todas_sugestoes()),
-            **snapshots,
-            'cart_count': ctx_carrinho['cart_count'],
-            'cart_units_label': ctx_carrinho['cart_units_label'],
-        }
-    )
+    payload = {
+        'ok': True,
+        'tem_sugestoes': resultado.tem_sugestoes,
+        'html': html,
+        'total_sugestoes': len(resultado.todas_sugestoes()),
+        'total_novidades': len(resultado.novidades),
+        **snapshots,
+        'cart_count': ctx_carrinho['cart_count'],
+        'cart_units_label': ctx_carrinho['cart_units_label'],
+    }
+    if settings.DEBUG:
+        payload['debug_novidades'] = diagnosticar_novidades_campanha(
+            cliente_ctx,
+            get_cart(request),
+        )
+    return JsonResponse(payload)
 
 
 @login_required

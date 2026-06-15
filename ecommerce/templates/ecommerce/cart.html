@@ -187,6 +187,9 @@ document.addEventListener('DOMContentLoaded', function () {
                     alert(data.erro || 'Erro ao carregar análise.');
                     return;
                 }
+                if (data.debug_novidades) {
+                    console.info('Análise — novidades (debug):', data.debug_novidades);
+                }
                 if (!data.tem_sugestoes) {
                     formFinalizar.submit();
                     return;
