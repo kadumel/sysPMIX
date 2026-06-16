@@ -1,5 +1,6 @@
 from urllib.parse import urlencode
 from collections import Counter, defaultdict
+import logging
 
 from django.template.loader import render_to_string
 from django.shortcuts import render, redirect
@@ -10,7 +11,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto, Produto as ProdutoSankhya
 from ecommerce import catalog as catalog_ecommerce
-from ecommerce.services import filtrar_pedidos_loja_notificacoes_comercial
+from ecommerce.services import filtrar_pedidos_loja_notificacoes_comercial, integrar_pedido_no_sistema_externo
+from ecommerce.sankhya_integracao import IntegracaoSankhyaError
 from .models import (
     Funcionario,
     Veiculo,
@@ -68,7 +70,10 @@ from ecommerce.models import (
     RotaPadrao,
     RotaPadraoAjudante,
     RotaPadraoCliente,
+    TopEnvioSankhya,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def log_exception(request, origem, error, context=None):
@@ -2401,6 +2406,7 @@ class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
 
         context = {
             'pedidos': pedidos,
+            'tops_envio': TopEnvioSankhya.objects.filter(ativo=True).order_by('descricao', 'codigo_top'),
             'total_pedidos': pedidos.count(),
             'pendentes': pedidos.filter(status=PedidoLoja.Status.PENDENTE).count(),
             'autorizados': pedidos.filter(status=PedidoLoja.Status.AUTORIZADO).count(),
@@ -2437,16 +2443,69 @@ def gestao_notificacao_aprovar(request, pk: int):
         messages.warning(request, 'Este pedido já foi analisado.')
         return redirect('gestao_notificacoes_ecommerce')
 
+    top_envio_id = request.POST.get('top_envio_id')
+    try:
+        top_envio = TopEnvioSankhya.objects.get(pk=int(top_envio_id), ativo=True)
+    except (TypeError, ValueError, TopEnvioSankhya.DoesNotExist):
+        messages.error(request, 'Selecione uma TOP válida para envio ao Sankhya.')
+        return redirect('gestao_notificacoes_ecommerce')
+
+    logger.info(
+        'Aprovação pedido loja #%s iniciada por %s (TOP %s).',
+        pedido.pk,
+        request.user.username,
+        top_envio.codigo_top,
+    )
+    print(
+        f'\n=== Aprovação pedido #{pedido.pk} (TOP {top_envio.codigo_top}) ===',
+        flush=True,
+    )
+
+    try:
+        aprovado_em = timezone.now()
+        ref_sankhya = integrar_pedido_no_sistema_externo(
+            pedido,
+            top_envio=top_envio,
+            aprovado_em=aprovado_em,
+        )
+    except IntegracaoSankhyaError as exc:
+        logger.warning('Falha na integração Sankhya do pedido #%s: %s', pedido.pk, exc)
+        print(f'ERRO integração pedido #{pedido.pk}: {exc}', flush=True)
+        messages.error(request, str(exc))
+        return redirect('gestao_notificacoes_ecommerce')
+    except Exception:
+        logger.exception('Erro inesperado ao aprovar pedido #%s.', pedido.pk)
+        print(f'ERRO inesperado ao aprovar pedido #{pedido.pk}. Veja o log do servidor.', flush=True)
+        messages.error(
+            request,
+            'Erro inesperado ao integrar o pedido no Sankhya. Tente novamente ou contate o suporte.',
+        )
+        return redirect('gestao_notificacoes_ecommerce')
+
     pedido.status = PedidoLoja.Status.AUTORIZADO
+    pedido.top_envio = top_envio
+    pedido.codigo_pedido_sankhya = str(ref_sankhya)[:20]
     pedido.aprovado_por = request.user
-    pedido.aprovado_em = timezone.now()
-    pedido.save(update_fields=['status', 'aprovado_por', 'aprovado_em', 'atualizado_em'])
+    pedido.aprovado_em = aprovado_em
+    pedido.save(
+        update_fields=[
+            'status',
+            'top_envio',
+            'codigo_pedido_sankhya',
+            'aprovado_por',
+            'aprovado_em',
+            'atualizado_em',
+        ]
+    )
 
     NotificacaoLoja.objects.create(
         user=pedido.user,
         pedido=pedido,
         titulo=f'Pedido #{pedido.pk} aprovado',
-        mensagem='Seu pedido foi aprovado pelo comercial e seguirá para integração no Sankhya.',
+        mensagem=(
+            'Seu pedido foi aprovado pelo comercial e integrado no Sankhya '
+            f'com a TOP {top_envio.codigo_top}. Pedido Sankhya: {ref_sankhya}.'
+        ),
     )
     messages.success(request, f'Pedido #{pedido.pk} aprovado com sucesso.')
     return redirect('gestao_notificacoes_ecommerce')

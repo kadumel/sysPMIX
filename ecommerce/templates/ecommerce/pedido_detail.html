@@ -30,7 +30,7 @@
             </div>
         </div>
 
-        <p class="text-muted small mb-4">Registrado em {{ pedido.criado_em|date:"d/m/Y H:i" }}{% if pedido.codigo_pedido_externo %} · Referência no sistema: <strong>{{ pedido.codigo_pedido_externo }}</strong>{% endif %}</p>
+        <p class="text-muted small mb-4">Registrado em {{ pedido.criado_em|date:"d/m/Y H:i" }}{% if pedido.codigo_pedido_sankhya %} · Pedido Sankhya: <strong>{{ pedido.codigo_pedido_sankhya }}</strong>{% endif %}</p>
 
         {% if pedido.observacao_comercial %}
         <div class="alert alert-info border-0 small mb-4">

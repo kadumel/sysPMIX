@@ -31,6 +31,14 @@ class PedidoLoja(models.Model):
         blank=True,
         verbose_name='Código da tabela de preço',
     )
+    top_envio = models.ForeignKey(
+        'TopEnvioSankhya',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pedidos_loja',
+        verbose_name='TOP de envio',
+    )
     valor_total = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -49,11 +57,12 @@ class PedidoLoja(models.Model):
         verbose_name='Observações do comercial',
         help_text='Visível ao cliente e gera notificação quando alterado.',
     )
-    codigo_pedido_externo = models.CharField(
-        max_length=80,
+    codigo_pedido_sankhya = models.CharField(
+        max_length=20,
         blank=True,
-        verbose_name='Código no sistema externo',
-        help_text='Preenchido após integração (ERP/Sankhya etc.).',
+        db_index=True,
+        verbose_name='Código do pedido no Sankhya',
+        help_text='Preenchido com retorno.codigoPedido após inclusão bem-sucedida na API Sankhya.',
     )
     aprovado_por = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -197,6 +206,45 @@ class NotificacaoLoja(models.Model):
 
     def __str__(self):
         return self.titulo
+
+
+class TopEnvioSankhya(models.Model):
+    codigo_top = models.IntegerField(unique=True, verbose_name='Código TOP')
+    codigo_modelo = models.IntegerField(verbose_name='Código modelo')
+    descricao = models.CharField(max_length=200, verbose_name='Descrição')
+    ativo = models.BooleanField(default=True, db_index=True, verbose_name='Ativo')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'TOP para envio Sankhya'
+        verbose_name_plural = 'TOPs para envio Sankhya'
+        ordering = ['descricao', 'codigo_top']
+
+    def __str__(self):
+        return f'{self.codigo_top} - {self.descricao}'
+
+
+class LocalEstoqueEcommerce(models.Model):
+    """Mapeamento do local de estoque Sankhya por UF para envio de pedidos."""
+
+    uf = models.CharField(max_length=2, unique=True, verbose_name='UF', db_index=True)
+    codigo_local = models.CharField(
+        max_length=12,
+        verbose_name='Código do local',
+        help_text='Código numérico do local no Sankhya (CODLOCAL), enviado como inteiro na API.',
+    )
+    ativo = models.BooleanField(default=True, db_index=True, verbose_name='Ativo')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    class Meta:
+        verbose_name = 'Local de estoque (e-commerce)'
+        verbose_name_plural = 'Locais de estoque (e-commerce)'
+        ordering = ['uf', 'codigo_local']
+
+    def __str__(self):
+        return f'{self.uf} — local {self.codigo_local}'
 
 
 class Campanha(models.Model):

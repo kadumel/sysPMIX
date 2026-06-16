@@ -277,7 +277,7 @@ def sync_clientes() -> dict[str, int]:
                             "list": (
                                 "CODPARC,TIPPESSOA,CGC_CPF,IDENTINSCESTAD,NOMEPARC,RAZAOSOCIAL,EMAIL,"
                                 "TELEFONE,LIMCREDMENSAL,GRUPOAUTOR,LATITUDE,LONGITUDE,CODEND,NUMEND,"
-                                "COMPLEMENTO,CODBAI,CODCID,CEP,CODTAB"
+                                "COMPLEMENTO,CODBAI,CODCID,CEP,CODTAB,CODVEND,CODEMP"
                             )
                         }
                     },
@@ -331,6 +331,8 @@ def sync_clientes() -> dict[str, int]:
                     "cidade": _to_str((row.get("f16") or {}).get("$") if isinstance(row.get("f16"), dict) else row.get("f16"), 100),
                     "cep": _to_str((row.get("f17") or {}).get("$") if isinstance(row.get("f17"), dict) else row.get("f17"), 10),
                     "codtab": _to_int((row.get("f18") or {}).get("$") if isinstance(row.get("f18"), dict) else row.get("f18")),
+                    "codvend": _to_int((row.get("f19") or {}).get("$") if isinstance(row.get("f19"), dict) else row.get("f19")),
+                    "codigo_empresa": _to_int((row.get("f20") or {}).get("$") if isinstance(row.get("f20"), dict) else row.get("f20")),
                 }
                 defaults = {k: v for k, v in defaults.items() if v is not None}
 

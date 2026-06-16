@@ -160,19 +160,6 @@ def _periodo_analise(cliente: Cliente, ref: date | None = None) -> tuple[date, d
     return inicio, ref, meses
 
 
-def _produtos_comprados_cliente_desde(
-    cliente: Cliente,
-    desde: date,
-    ate: date | None = None,
-) -> set[int]:
-    """Produtos comprados pelo cliente desde uma data (loja + Sankhya no período)."""
-    ate = ate or catalog.data_referencia_ecommerce()
-    if desde > ate:
-        return set()
-    freq, _ = _freq_pedidos_cliente_periodo(cliente, desde, ate)
-    return set(freq.keys())
-
-
 def _inicio_notas_fiscais() -> date:
     return DATA_CORTE_PEDIDO_PARA_NOTA + timedelta(days=1)
 
@@ -472,7 +459,6 @@ def _campanhas_vigentes(ref: date) -> list[Campanha]:
 def _itens_novidades(
     cliente: Cliente,
     cart_codigos: set[int],
-    excluir: set[int],
     ref: date,
     codtab: int | None,
     codigos_permitidos: set[int],
@@ -483,15 +469,12 @@ def _itens_novidades(
 
     codigos_campanha: dict[int, str] = {}
     for campanha in campanhas:
-        comprados_desde_inicio = _produtos_comprados_cliente_desde(cliente, campanha.data_inicio, ref)
         for cod in ItemCampanha.objects.filter(campanha=campanha).values_list(
             'produto__codigo_produto', flat=True
         ):
             if (
                 cod
                 and cod not in cart_codigos
-                and cod not in excluir
-                and cod not in comprados_desde_inicio
             ):
                 codigos_campanha.setdefault(int(cod), campanha.nome)
 
@@ -648,9 +631,6 @@ def diagnosticar_novidades_campanha(
     cart_codigos = _codigos_carrinho(cart)
     codtab = catalog.normalizar_codtab(getattr(cliente, 'codtab', None))
     codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
-    desde, ate, meses = _periodo_analise(cliente, ref)
-    esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, codigos_permitidos)
-    excluir = {s.codigo_produto for s in esquecidos}
     campanhas = _campanhas_vigentes(ref)
 
     diag: dict = {
@@ -676,7 +656,6 @@ def diagnosticar_novidades_campanha(
         return diag
 
     for campanha in campanhas:
-        comprados_desde_inicio = _produtos_comprados_cliente_desde(cliente, campanha.data_inicio, ref)
         for cod in ItemCampanha.objects.filter(campanha=campanha).values_list(
             'produto__codigo_produto', flat=True
         ):
@@ -688,10 +667,6 @@ def diagnosticar_novidades_campanha(
             motivos: list[str] = []
             if cod in cart_codigos:
                 motivos.append('no_carrinho')
-            if cod in excluir:
-                motivos.append('em_esquecidos')
-            if cod in comprados_desde_inicio:
-                motivos.append('comprado_desde_inicio_campanha')
             if not produto or not produto.ativo:
                 motivos.append('produto_inativo_ou_inexistente')
             elif not catalog.produto_permitido_na_loja(produto, codigos_permitidos):
@@ -729,8 +704,7 @@ def calcular_analise_pedido(
     esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, codigos_permitidos)
     usados = {s.codigo_produto for s in esquecidos}
 
-    novidades = _itens_novidades(cliente, cart_codigos, usados, ref, codtab, codigos_permitidos)
-    usados.update(s.codigo_produto for s in novidades)
+    novidades = _itens_novidades(cliente, cart_codigos, ref, codtab, codigos_permitidos)
 
     curva_a = _itens_curva_a(cliente, cart_codigos, usados, desde, ate, codtab, codigos_permitidos)
 
@@ -754,7 +728,13 @@ def persistir_analise_pedido(pedido: PedidoLoja, resultado: ResultadoAnalise | d
     )
     analise.itens.all().delete()
     bulk: list[ItemAnalisePedidoLoja] = []
+    codigos_incluidos: set[int] = set()
     for sugestao in resultado.todas_sugestoes():
+        # Evita violação da constraint uniq_analise_pedido_produto quando um
+        # produto aparece em mais de uma seção da análise.
+        if sugestao.codigo_produto in codigos_incluidos:
+            continue
+        codigos_incluidos.add(sugestao.codigo_produto)
         bulk.append(
             ItemAnalisePedidoLoja(
                 analise=analise,

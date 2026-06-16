@@ -1,25 +1,38 @@
-"""Regras de negócio dos pedidos da loja e integração externa (stub)."""
+"""Regras de negócio dos pedidos da loja e integração externa."""
 
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
 from django.db.models import Exists, OuterRef
+from django.utils import timezone
 
 from api_sankhya.models import Preco, Produto
 
 from . import catalog
 from .cart_session import clear_cart, get_cart
 from .analise_pedido import persistir_analise_pedido
-from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente
+from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente, TopEnvioSankhya
+from .sankhya_integracao import IntegracaoSankhyaError, integrar_pedido_loja_sankhya
 
 
-def integrar_pedido_no_sistema_externo(pedido: PedidoLoja) -> str | None:
+def integrar_pedido_no_sistema_externo(
+    pedido: PedidoLoja,
+    top_envio: TopEnvioSankhya | None = None,
+    aprovado_em: datetime | None = None,
+) -> str:
     """
-    Registra o pedido no sistema terceiro (ERP, Sankhya, etc.).
-    Retorna código/referência ou None em falha.
-    Substituir por chamada real quando a API estiver disponível.
+    Registra o pedido no Sankhya via POST /v1/vendas/pedidos.
+    Retorna o código do pedido no ERP ou levanta IntegracaoSankhyaError.
     """
-    return f'EXT-{pedido.pk}'
+    top = top_envio or pedido.top_envio
+    if not top:
+        raise IntegracaoSankhyaError('TOP de envio não informada.')
+    return integrar_pedido_loja_sankhya(
+        pedido,
+        top,
+        aprovado_em=aprovado_em or timezone.now(),
+    )
 
 
 def criar_notificacao(user, titulo: str, mensagem: str, pedido: PedidoLoja | None = None):
