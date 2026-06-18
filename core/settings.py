@@ -259,7 +259,7 @@ Q_CLUSTER = {
     'bulk': 5,
     'orm': 'default',
     'catch_up': False,
-    'sync': os.environ.get('DJANGO_Q_SYNC', '').lower() in ('1', 'true', 'yes'),
+    'sync': os.environ.get('DJANGO_Q_SYNC', '').strip().lower() in ('1', 'true', 'yes', 'on'),
 }
 
 

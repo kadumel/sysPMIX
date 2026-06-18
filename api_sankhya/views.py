@@ -21,7 +21,6 @@ from controleBI.perfil_utils import ensure_perfil
 
 from django_q.models import Task
 
-from .tasks import run_integracao_sankhya, run_todas_integracoes_sankhya
 from .models import (
     Bairro,
     Cidade,
@@ -1496,6 +1495,41 @@ def gestao_integracoes(request):
     )
 
 
+def _dispatch_q_task(func_path: str, *args, task_name: str) -> dict:
+    """
+    Enfileira no django-q2. Com Q_CLUSTER['sync']=True, o próprio django-q2 executa inline (_sync).
+    """
+    task_id = async_task(func_path, *args, task_name=task_name)
+    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
+    if not q_sync:
+        return {"completed": False, "sync": False, "task_id": task_id}
+    t = Task.objects.filter(id=task_id).first()
+    payload = _json_safe(t.result) if t and t.result is not None else None
+    success = bool(t and t.success)
+    if success and isinstance(payload, dict):
+        if payload.get("erro"):
+            success = False
+        elif payload.get("erros"):
+            success = False
+    out: dict[str, Any] = {
+        "completed": True,
+        "sync": True,
+        "success": success,
+        "task_id": task_id,
+        "resultado": payload,
+    }
+    if not success:
+        if isinstance(payload, dict) and payload.get("erro"):
+            out["error"] = payload.get("erro")
+        elif isinstance(payload, dict) and payload.get("erros"):
+            out["erros"] = payload.get("erros")
+        elif t and t.result is not None:
+            out["error"] = str(t.result)
+        else:
+            out["error"] = "Falha na tarefa"
+    return out
+
+
 @login_required
 @requer_acesso_bi
 @require_GET
@@ -1555,32 +1589,26 @@ def atualizar_integracao(request, chave: str):
             custom = (request.POST.get("dtalter_desde") or "").strip()
             if custom:
                 dtalter_desde = custom
-    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
-        if q_sync:
-            resultado = run_integracao_sankhya(
-                chave,
-                codigo_tabela=codigo_tabela,
-                dtalter_desde=dtalter_desde,
-            )
-            if resultado.get("erro"):
-                if _wants_json(request):
-                    return JsonResponse(
-                        {"completed": True, "sync": True, "success": False, "nome": nome, "error": resultado.get("erro")},
-                        status=400,
-                    )
-                messages.error(request, f"Erro ao atualizar {nome}: {resultado.get('erro')}")
-            else:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {
-                            "completed": True,
-                            "sync": True,
-                            "success": True,
-                            "nome": nome,
-                            "resultado": _json_safe(resultado),
-                        }
-                    )
+        dispatch = _dispatch_q_task(
+            "api_sankhya.tasks.run_integracao_sankhya",
+            chave,
+            codigo_tabela,
+            dtalter_desde,
+            task_name=f"Sankhya: {nome}",
+        )
+        if _wants_json(request):
+            payload = {
+                "chave": chave,
+                "nome": nome,
+                **dispatch,
+            }
+            if dispatch.get("completed") and not dispatch.get("success"):
+                return JsonResponse(payload, status=400)
+            return JsonResponse(payload)
+        if dispatch.get("completed"):
+            resultado = dispatch.get("resultado") or {}
+            if dispatch.get("success"):
                 messages.success(
                     request,
                     (
@@ -1590,24 +1618,9 @@ def atualizar_integracao(request, chave: str):
                         f"Atualizados: {resultado.get('total_atualizados', '-')}"
                     ),
                 )
+            else:
+                messages.error(request, f"Erro ao atualizar {nome}: {dispatch.get('error', 'Falha na tarefa')}")
         else:
-            task_id = async_task(
-                "api_sankhya.tasks.run_integracao_sankhya",
-                chave,
-                codigo_tabela,
-                dtalter_desde,
-                task_name=f"Sankhya: {nome}",
-            )
-            if _wants_json(request):
-                return JsonResponse(
-                    {
-                        "completed": False,
-                        "sync": False,
-                        "task_id": task_id,
-                        "chave": chave,
-                        "nome": nome,
-                    }
-                )
             messages.success(
                 request,
                 f"{nome}: sincronização enfileirada e executada em segundo plano pelo worker "
@@ -1627,50 +1640,33 @@ def atualizar_todas_integracoes(request):
     denied = _require_admin_integracoes(request)
     if denied:
         return denied
-    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
-        if q_sync:
-            resultado = run_todas_integracoes_sankhya()
-            erros = resultado.get("erros") or []
+        dispatch = _dispatch_q_task(
+            "api_sankhya.tasks.run_todas_integracoes_sankhya",
+            task_name="Sankhya: todas as integrações",
+        )
+        if _wants_json(request):
+            payload = {
+                "chave": "__todas__",
+                "nome": "Todas as integrações",
+                **dispatch,
+            }
+            if dispatch.get("completed") and not dispatch.get("success"):
+                return JsonResponse(payload, status=400)
+            return JsonResponse(payload)
+        if dispatch.get("completed"):
+            erros = (dispatch.get("erros") or (dispatch.get("resultado") or {}).get("erros") or [])
             if erros:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {
-                            "completed": True,
-                            "sync": True,
-                            "success": False,
-                            "erros": erros,
-                        },
-                        status=400,
-                    )
                 messages.warning(
                     request,
                     "Algumas integrações falharam: " + " | ".join(erros[:5]),
                 )
             else:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {"completed": True, "sync": True, "success": True, "resultado": _json_safe(resultado)}
-                    )
                 messages.success(
                     request,
                     "Atualização completa concluída com sucesso.",
                 )
         else:
-            task_id = async_task(
-                "api_sankhya.tasks.run_todas_integracoes_sankhya",
-                task_name="Sankhya: todas as integrações",
-            )
-            if _wants_json(request):
-                return JsonResponse(
-                    {
-                        "completed": False,
-                        "sync": False,
-                        "task_id": task_id,
-                        "chave": "__todas__",
-                        "nome": "Todas as integrações",
-                    }
-                )
             messages.success(
                 request,
                 "Todas as integrações foram enfileiradas; o worker processará em sequência. "
