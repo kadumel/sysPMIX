@@ -80,6 +80,62 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalClientesDtalter" tabindex="-1" aria-labelledby="modalClientesDtalterLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalClientesDtalterLabel">Atualizar clientes</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    A sincronização incremental usa o maior <strong>DTALTER</strong> já gravado na base local
+                    para buscar apenas registros alterados no Sankhya.
+                </p>
+                <dl class="row small mb-3">
+                    <dt class="col-sm-5">Última DTALTER local</dt>
+                    <dd class="col-sm-7" id="clientesUltimaDtalter">
+                        {% if clientes_sync.ultima_dtalter_exibicao %}
+                            {{ clientes_sync.ultima_dtalter_exibicao }}
+                        {% else %}
+                            <span class="text-muted">Nenhuma — primeira carga trará todos</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">Filtro padrão (incremental)</dt>
+                    <dd class="col-sm-7" id="clientesDtalterCriteria">
+                        {% if clientes_sync.dtalter_criteria_padrao %}
+                            {{ clientes_sync.dtalter_criteria_padrao }}
+                        {% else %}
+                            <span class="text-muted">Sem filtro</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+                <div class="mb-3">
+                    <label for="clientesDtalterDesde" class="form-label">DTALTER a partir de (opcional)</label>
+                    <input type="datetime-local" class="form-control" id="clientesDtalterDesde"
+                           value="{{ clientes_sync.dtalter_input_padrao }}">
+                    <div class="form-text">
+                        Deixe em branco para usar o filtro incremental padrão acima.
+                        Informe uma data anterior para reimportar todos os clientes (ex.: nova coluna no cadastro).
+                    </div>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="clientesSincronizarTudo">
+                    <label class="form-check-label" for="clientesSincronizarTudo">
+                        Trazer todos os clientes (ignorar filtro DTALTER)
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarClientesSync">
+                    <i class="bi bi-arrow-repeat me-1"></i>Iniciar atualização
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -242,7 +298,7 @@
     }
   }
 
-  function submitIntegracao(form) {
+  function submitIntegracao(form, extraFields) {
     const chave = form.getAttribute('data-chave');
     const cell = document.querySelector('.integracao-status[data-chave="' + chave + '"]');
     const btn = form.querySelector('button[type="submit"]');
@@ -270,6 +326,11 @@
     const fd = new FormData(form);
     if (codigoTabela !== null) {
       fd.append('codigo_tabela', codigoTabela);
+    }
+    if (extraFields) {
+      Object.keys(extraFields).forEach(function (key) {
+        fd.append(key, extraFields[key]);
+      });
     }
     fetch(form.action, {
       method: 'POST',
@@ -342,9 +403,53 @@
       });
   }
 
+  var modalClientesEl = document.getElementById('modalClientesDtalter');
+  var modalClientes = modalClientesEl ? new bootstrap.Modal(modalClientesEl) : null;
+  var formClientesPendente = null;
+
+  function abrirModalClientes(form) {
+    formClientesPendente = form;
+    var chk = document.getElementById('clientesSincronizarTudo');
+    var inp = document.getElementById('clientesDtalterDesde');
+    if (chk) chk.checked = false;
+    if (inp) inp.disabled = false;
+    if (modalClientes) modalClientes.show();
+  }
+
+  var chkClientesTudo = document.getElementById('clientesSincronizarTudo');
+  var inpClientesDtalter = document.getElementById('clientesDtalterDesde');
+  if (chkClientesTudo && inpClientesDtalter) {
+    chkClientesTudo.addEventListener('change', function () {
+      inpClientesDtalter.disabled = chkClientesTudo.checked;
+    });
+  }
+
+  var btnConfirmarClientes = document.getElementById('btnConfirmarClientesSync');
+  if (btnConfirmarClientes) {
+    btnConfirmarClientes.addEventListener('click', function () {
+      if (!formClientesPendente) return;
+      var extra = {};
+      var sincronizarTudo = document.getElementById('clientesSincronizarTudo');
+      var dtalterInput = document.getElementById('clientesDtalterDesde');
+      if (sincronizarTudo && sincronizarTudo.checked) {
+        extra.sincronizar_tudo = '1';
+      } else if (dtalterInput && dtalterInput.value) {
+        extra.dtalter_desde = dtalterInput.value;
+      }
+      if (modalClientes) modalClientes.hide();
+      submitIntegracao(formClientesPendente, extra);
+      formClientesPendente = null;
+    });
+  }
+
   document.querySelectorAll('form.form-integracao').forEach(function (form) {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
+      const chave = form.getAttribute('data-chave');
+      if (chave === 'clientes') {
+        abrirModalClientes(form);
+        return;
+      }
       submitIntegracao(form);
     });
   });

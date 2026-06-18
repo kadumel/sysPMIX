@@ -3,6 +3,8 @@ from django.utils import timezone
 
 from .models import (
     BannerPromocional,
+    Campanha,
+    ItemCampanha,
     ItemPedidoLoja,
     NotificacaoLoja,
     PedidoLoja,
@@ -13,8 +15,11 @@ from .models import (
     RotaPadrao,
     RotaPadraoAjudante,
     RotaPadraoCliente,
+    TopEnvioSankhya,
+    LocalEstoqueEcommerce,
 )
 from .services import criar_notificacao, integrar_pedido_no_sistema_externo
+from .sankhya_integracao import IntegracaoSankhyaError
 
 
 class ItemPedidoLojaInline(admin.TabularInline):
@@ -31,21 +36,24 @@ class PedidoLojaAdmin(admin.ModelAdmin):
         'user',
         'cliente',
         'codtab',
+        'top_envio',
         'valor_total',
         'status',
-        'codigo_pedido_externo',
+        'codigo_pedido_sankhya',
         'criado_em',
     )
     list_filter = ('status', 'criado_em')
     search_fields = (
         'user__username',
         'user__email',
-        'codigo_pedido_externo',
+        'codigo_pedido_sankhya',
     )
     readonly_fields = (
         'aprovado_por',
         'aprovado_em',
         'codtab',
+        'codigo_pedido_sankhya',
+        'top_envio',
         'valor_total',
         'criado_em',
         'atualizado_em',
@@ -56,7 +64,7 @@ class PedidoLojaAdmin(admin.ModelAdmin):
     fieldsets = (
         (None, {'fields': ('user', 'cliente', 'status', 'codtab', 'valor_total')}),
         ('Comercial', {'fields': ('observacao_comercial',)}),
-        ('Integração', {'fields': ('codigo_pedido_externo',)}),
+        ('Integração Sankhya', {'fields': ('codigo_pedido_sankhya', 'top_envio')}),
         (
             'Auditoria',
             {'fields': ('aprovado_por', 'aprovado_em', 'criado_em', 'atualizado_em')},
@@ -92,8 +100,8 @@ class PedidoLojaAdmin(admin.ModelAdmin):
                     (
                         'Seu pedido foi autorizado.'
                         + (
-                            f' Referência no sistema: {obj.codigo_pedido_externo}.'
-                            if obj.codigo_pedido_externo
+                            f' Pedido Sankhya: {obj.codigo_pedido_sankhya}.'
+                            if obj.codigo_pedido_sankhya
                             else ''
                         )
                     ),
@@ -114,21 +122,30 @@ class PedidoLojaAdmin(admin.ModelAdmin):
         for pedido in queryset:
             if pedido.status != PedidoLoja.Status.PENDENTE:
                 continue
-            ref = integrar_pedido_no_sistema_externo(pedido)
-            if not ref:
+            if not pedido.top_envio_id:
                 self.message_user(
                     request,
-                    f'Falha na integração do pedido #{pedido.pk}.',
+                    f'Pedido #{pedido.pk} sem TOP de envio. Aprove pela gestão de notificações.',
                     level=messages.ERROR,
                 )
                 continue
-            pedido.codigo_pedido_externo = str(ref)[:80]
+            try:
+                aprovado_em = timezone.now()
+                ref = integrar_pedido_no_sistema_externo(pedido, aprovado_em=aprovado_em)
+            except IntegracaoSankhyaError as exc:
+                self.message_user(
+                    request,
+                    f'Pedido #{pedido.pk}: {exc}',
+                    level=messages.ERROR,
+                )
+                continue
+            pedido.codigo_pedido_sankhya = str(ref)[:20]
             pedido.status = PedidoLoja.Status.AUTORIZADO
             pedido.aprovado_por = request.user
-            pedido.aprovado_em = timezone.now()
+            pedido.aprovado_em = aprovado_em
             pedido.save(
                 update_fields=[
-                    'codigo_pedido_externo',
+                    'codigo_pedido_sankhya',
                     'status',
                     'aprovado_por',
                     'aprovado_em',
@@ -138,7 +155,7 @@ class PedidoLojaAdmin(admin.ModelAdmin):
             criar_notificacao(
                 pedido.user,
                 f'Pedido #{pedido.pk} autorizado',
-                f'Seu pedido foi aprovado e registrado no sistema. Referência: {ref}.',
+                f'Seu pedido foi aprovado e registrado no Sankhya. Pedido: {ref}.',
                 pedido=pedido,
             )
             ok += 1
@@ -172,6 +189,41 @@ class NotificacaoLojaAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(TopEnvioSankhya)
+class TopEnvioSankhyaAdmin(admin.ModelAdmin):
+    list_display = ('codigo_top', 'codigo_modelo', 'descricao', 'ativo', 'atualizado_em')
+    list_filter = ('ativo',)
+    search_fields = ('codigo_top', 'codigo_modelo', 'descricao')
+    list_editable = ('ativo',)
+
+
+@admin.register(LocalEstoqueEcommerce)
+class LocalEstoqueEcommerceAdmin(admin.ModelAdmin):
+    list_display = ('uf', 'codigo_local', 'ativo', 'atualizado_em')
+    list_filter = ('ativo', 'uf')
+    search_fields = ('uf', 'codigo_local')
+    list_editable = ('ativo',)
+
+
+class ItemCampanhaInline(admin.TabularInline):
+    model = ItemCampanha
+    extra = 1
+    autocomplete_fields = ('produto',)
+
+
+@admin.register(Campanha)
+class CampanhaAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nome', 'data_inicio', 'data_fim', 'criado_em')
+    list_filter = ('data_inicio', 'data_fim')
+    search_fields = ('nome', 'descricao')
+    readonly_fields = ('criado_em', 'atualizado_em')
+    inlines = [ItemCampanhaInline]
+    fieldsets = (
+        (None, {'fields': ('nome', 'descricao', 'data_inicio', 'data_fim')}),
+        ('Auditoria', {'fields': ('criado_em', 'atualizado_em')}),
+    )
 
 
 @admin.register(BannerPromocional)

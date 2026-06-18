@@ -14,63 +14,11 @@
 
         {% if linhas %}
         <div class="card mb-3 ecommerce-cart-card">
-            <div class="card-body p-0">
-                <ul class="list-group list-group-flush">
-                    {% for linha in linhas %}
-                    <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-                        <div>
-                            <span class="fw-medium">{{ linha.nome }}</span>
-                            <span class="text-muted small d-block">Cód. {{ linha.codigo_produto }}</span>
-                            <div class="d-flex align-items-center gap-2 mt-1">
-                                <form method="post" action="{% url 'ecommerce_adjust_cart_qty' %}" class="m-0">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="codigo_produto" value="{{ linha.codigo_produto }}">
-                                    <input type="hidden" name="acao" value="dec">
-                                    <input type="hidden" name="next" value="{{ request.path }}">
-                                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Diminuir quantidade">
-                                        <i class="bi bi-dash-lg"></i>
-                                    </button>
-                                </form>
-                                <span class="small fw-semibold">Qtd. {{ linha.qty_label }}</span>
-                                <form method="post" action="{% url 'ecommerce_adjust_cart_qty' %}" class="m-0">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="codigo_produto" value="{{ linha.codigo_produto }}">
-                                    <input type="hidden" name="acao" value="inc">
-                                    <input type="hidden" name="next" value="{{ request.path }}">
-                                    <button type="submit" class="btn btn-outline-secondary btn-sm" title="Aumentar quantidade">
-                                        <i class="bi bi-plus-lg"></i>
-                                    </button>
-                                </form>
-                            </div>
-                            {% if linha.preco_unitario is not None %}
-                            <span class="text-muted small d-block">Unitário: R$ {{ linha.preco_unitario|floatformat:2 }} · Subtotal: <strong>R$ {{ linha.subtotal|floatformat:2 }}</strong></span>
-                            {% endif %}
-                        </div>
-                        <form method="post" action="{% url 'ecommerce_remove_cart' %}" class="m-0">
-                            {% csrf_token %}
-                            <input type="hidden" name="codigo_produto" value="{{ linha.codigo_produto }}">
-                            <input type="hidden" name="next" value="{{ request.path }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
-                        </form>
-                    </li>
-                    {% endfor %}
-                </ul>
+            <div class="card-body p-0" id="cartPageListWrap">
+                {% include 'ecommerce/partials/cart_page_list.html' %}
             </div>
-            <div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <span class="text-muted small">{{ ecommerce_cart_count }} produto{{ ecommerce_cart_count|pluralize }} · soma das quantidades: <strong>{{ ecommerce_cart_units_label }}</strong>{% if codtab_cliente %} · Tabela {{ codtab_cliente }}{% endif %}</span>
-                {% if total_geral > 0 %}
-                <span class="fw-semibold">Total: R$ {{ total_geral|floatformat:2 }}</span>
-                {% endif %}
-                <div class="d-flex gap-2">
-                    <form method="post" action="{% url 'ecommerce_clear_cart' %}" class="m-0" onsubmit="return confirm('Esvaziar o carrinho?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-outline-secondary btn-sm">Esvaziar</button>
-                    </form>
-                    <form method="post" action="{% url 'ecommerce_checkout_finalizar' %}" class="m-0" onsubmit="return confirm('Enviar este pedido para análise do comercial?');">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-send me-1"></i>Finalizar pedido</button>
-                    </form>
-                </div>
+            <div id="cartPageFooterWrap">
+                {% include 'ecommerce/partials/cart_page_footer.html' %}
             </div>
         </div>
         {% else %}
@@ -85,4 +33,178 @@
         {% endif %}
     </div>
 </div>
+
+{% if linhas %}
+<div class="modal fade" id="modalCheckoutAnalise" tabindex="-1" aria-labelledby="modalCheckoutAnaliseTitulo" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalCheckoutAnaliseTitulo">
+                    <i class="bi bi-clipboard-check me-2"></i>Análise do seu pedido
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body p-3" id="checkoutAnaliseSugestoes">
+                <div class="text-center text-muted py-4">Carregando sugestões...</div>
+            </div>
+            <div class="modal-footer flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Voltar ao carrinho</button>
+                <form method="post" action="{% url 'ecommerce_checkout_finalizar' %}" class="m-0" id="formCheckoutFinalizar">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send me-1"></i>Confirmar pedido
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if linhas %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var btn = document.getElementById('btnCheckoutAnalise');
+    var modalEl = document.getElementById('modalCheckoutAnalise');
+    var sugestoesEl = document.getElementById('checkoutAnaliseSugestoes');
+    var formFinalizar = document.getElementById('formCheckoutFinalizar');
+    if (!btn || !modalEl || !sugestoesEl || !formFinalizar || !window.bootstrap) return;
+
+    var modal = new bootstrap.Modal(modalEl);
+    var analiseUrl = '{% url "ecommerce_checkout_analise" %}';
+    var addUrl = '{% url "ecommerce_checkout_analise_adicionar" %}';
+    var csrfInput = formFinalizar.querySelector('input[name=csrfmiddlewaretoken]');
+
+    function getCsrf() {
+        return csrfInput ? csrfInput.value : '';
+    }
+
+    function atualizarBadgesNav(count) {
+        document.querySelectorAll('.js-ecommerce-cart-lines').forEach(function (el) {
+            el.textContent = count;
+            if (count > 0) {
+                el.classList.remove('d-none');
+            } else {
+                el.classList.add('d-none');
+            }
+        });
+    }
+
+    function atualizarCarrinhoUI(data) {
+        var listWrap = document.getElementById('cartPageListWrap');
+        if (listWrap && data.cart_page_list_html) {
+            listWrap.innerHTML = data.cart_page_list_html;
+        }
+        var footerWrap = document.getElementById('cartPageFooterWrap');
+        if (footerWrap && data.cart_page_footer_html) {
+            footerWrap.innerHTML = data.cart_page_footer_html;
+            var novoBtn = document.getElementById('btnCheckoutAnalise');
+            if (novoBtn) {
+                novoBtn.addEventListener('click', abrirAnalise);
+            }
+        }
+        if (data.cart_count !== undefined) {
+            atualizarBadgesNav(data.cart_count);
+        }
+    }
+
+    function mostrarAnaliseVazia() {
+        sugestoesEl.innerHTML =
+            '<div class="text-center py-4">' +
+            '<i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i>' +
+            '<p class="mb-0 mt-2 text-muted">Todas as sugestões foram incluídas no carrinho.</p>' +
+            '<p class="small text-muted mb-0">Você pode confirmar o pedido quando quiser.</p>' +
+            '</div>';
+    }
+
+    function removerItemDaAnaliseUI(btn) {
+        var listItem = btn.closest('.list-group-item');
+        if (!listItem) return;
+
+        var accordionItem = listItem.closest('.accordion-item');
+        listItem.remove();
+
+        if (accordionItem) {
+            var restantes = accordionItem.querySelectorAll('.list-group-item').length;
+            var badge = accordionItem.querySelector('.accordion-header .badge');
+            if (badge) {
+                badge.textContent = restantes;
+            }
+            if (restantes === 0) {
+                accordionItem.remove();
+            }
+        }
+
+        var accordion = document.getElementById('accordionAnaliseCheckout');
+        if (!accordion || !accordion.querySelector('.accordion-item')) {
+            mostrarAnaliseVazia();
+        }
+    }
+
+    function bindAddButtons() {
+        sugestoesEl.querySelectorAll('.js-analise-add-cart').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var row = b.closest('.js-analise-add-row');
+                var qtyInput = row ? row.querySelector('.js-analise-qty') : null;
+                var qty = qtyInput ? qtyInput.value.trim() : '1';
+                var codigo = b.getAttribute('data-codigo');
+                b.disabled = true;
+                var fd = new FormData();
+                fd.append('codigo_produto', codigo);
+                fd.append('qty', qty);
+                fetch(addUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
+                    body: fd,
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.ok) {
+                            atualizarCarrinhoUI(data);
+                            removerItemDaAnaliseUI(b);
+                        } else {
+                            b.disabled = false;
+                            alert(data.erro || 'Não foi possível adicionar o item.');
+                        }
+                    })
+                    .catch(function () {
+                        b.disabled = false;
+                        alert('Erro ao adicionar item.');
+                    });
+            });
+        });
+    }
+
+    function abrirAnalise() {
+        fetch(analiseUrl, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) {
+                    alert(data.erro || 'Erro ao carregar análise.');
+                    return;
+                }
+                if (data.debug_novidades) {
+                    console.info('Análise — novidades (debug):', data.debug_novidades);
+                }
+                if (!data.tem_sugestoes) {
+                    formFinalizar.submit();
+                    return;
+                }
+                sugestoesEl.innerHTML = data.html;
+                bindAddButtons();
+                modal.show();
+            })
+            .catch(function () {
+                alert('Erro ao carregar análise.');
+            });
+    }
+
+    btn.addEventListener('click', abrirAnalise);
+});
+</script>
+{% endif %}
 {% endblock %}

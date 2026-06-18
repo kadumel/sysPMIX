@@ -1,0 +1,21 @@
+<div class="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center gap-2" id="cartPageFooter">
+    <span class="text-muted small" id="cartPageResumo">
+        <span id="cartPageCount">{{ cart_count }}</span> produto{{ cart_count|pluralize }} ·
+        soma das quantidades: <strong id="cartPageUnits">{{ cart_units_label }}</strong>
+        {% if codtab_cliente %} · Tabela {{ codtab_cliente }}{% endif %}
+    </span>
+    {% if total_geral > 0 %}
+    <span class="fw-semibold" id="cartPageTotal">Total: R$ {{ total_geral|floatformat:2 }}</span>
+    {% else %}
+    <span class="fw-semibold d-none" id="cartPageTotal"></span>
+    {% endif %}
+    <div class="d-flex gap-2">
+        <form method="post" action="{% url 'ecommerce_clear_cart' %}" class="m-0" onsubmit="return confirm('Esvaziar o carrinho?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Esvaziar</button>
+        </form>
+        <button type="button" class="btn btn-primary btn-sm" id="btnCheckoutAnalise">
+            <i class="bi bi-send me-1"></i>Finalizar pedido
+        </button>
+    </div>
+</div>

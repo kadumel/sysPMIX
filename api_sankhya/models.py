@@ -240,9 +240,22 @@ class Cliente(models.Model):
     numero = models.CharField(max_length=20, null=True, blank=True, verbose_name="Número")
     complemento = models.CharField(max_length=100, null=True, blank=True, verbose_name="Complemento")
     bairro = models.CharField(max_length=100, null=True, blank=True, verbose_name="Bairro")
-    cidade = models.CharField(max_length=100, null=True, blank=True, verbose_name="Cidade")
+    cidade = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        verbose_name="Cidade (CODCID)",
+        help_text='Código da cidade no Sankhya (CODCID), relacionado a sankhya_cidade.codigo_cidade.',
+    )
     cep = models.CharField(max_length=10, null=True, blank=True, verbose_name="CEP")
     codtab = models.IntegerField(null=True, blank=True, verbose_name="Código da Tabela de Preço")
+    codvend = models.IntegerField(null=True, blank=True, verbose_name="Código do Vendedor (CODVEND)")
+    codigo_empresa = models.IntegerField(null=True, blank=True, verbose_name="Código da Empresa (CODEMP)")
+    tempo_analise = models.PositiveIntegerField(
+        default=2,
+        verbose_name="Tempo de análise (meses)",
+        help_text="Período padrão em meses para análise comercial do cliente.",
+    )
     dtalter = models.CharField(max_length=50, null=True, blank=True, verbose_name="Data Alteração (DTALTER)")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
@@ -259,6 +272,8 @@ class Cliente(models.Model):
             models.Index(fields=['tipo']),
             models.Index(fields=['cidade']),
             models.Index(fields=['codtab']),
+            models.Index(fields=['codvend']),
+            models.Index(fields=['codigo_empresa']),
             models.Index(fields=['codend']),
         ]
     

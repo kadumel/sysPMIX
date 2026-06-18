@@ -15,7 +15,7 @@
                         <th>Pedido</th>
                         <th>Data</th>
                         <th>Status</th>
-                        <th>Referência externa</th>
+                        <th>Pedido Sankhya</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -33,7 +33,7 @@
                             <span class="badge text-bg-secondary">Rejeitado</span>
                             {% endif %}
                         </td>
-                        <td class="small">{% if p.codigo_pedido_externo %}{{ p.codigo_pedido_externo }}{% else %}—{% endif %}</td>
+                        <td class="small">{% if p.codigo_pedido_sankhya %}{{ p.codigo_pedido_sankhya }}{% else %}—{% endif %}</td>
                         <td class="text-end">
                             <div class="d-inline-flex gap-2">
                                 <a href="{% url 'ecommerce_pedido_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Detalhes</a>

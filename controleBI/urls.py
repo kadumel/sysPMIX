@@ -8,6 +8,8 @@ from .views import (
     ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView,
     ListClienteSankhyaGestaoView, GestaoUsuariosClienteSankhyaView,
     GestaoCategoriasEcommerceView,
+    GestaoCampanhasEcommerceView,
+    CampanhaEcommerceFormView,
     GestaoRotasEcommerceView,
     GestaoNotificacoesEcommerceView,
     EcommerceClientesSelectorView,
@@ -17,6 +19,8 @@ from .views import (
     notificacoes_pendentes_count_api,
     RotasDiaListView,
     MapaRotasSemanaView,
+    MapaRotasDiaPdfView,
+    MapaRotasSemanaPdfView,
     RotaPadraoFormView,
     RotaDiaBuilderView,
 )
@@ -73,6 +77,21 @@ urlpatterns = [
         name='gestao_categorias_ecommerce',
     ),
     path(
+        'campanhas-ecommerce/',
+        GestaoCampanhasEcommerceView.as_view(),
+        name='gestao_campanhas_ecommerce',
+    ),
+    path(
+        'campanhas-ecommerce/nova/',
+        CampanhaEcommerceFormView.as_view(),
+        name='gestao_campanha_nova',
+    ),
+    path(
+        'campanhas-ecommerce/<int:pk>/editar/',
+        CampanhaEcommerceFormView.as_view(),
+        name='gestao_campanha_editar',
+    ),
+    path(
         'rotas-ecommerce/',
         GestaoRotasEcommerceView.as_view(),
         name='gestao_rotas_ecommerce',
@@ -101,6 +120,16 @@ urlpatterns = [
         'rotas-ecommerce/mapa-rotas/',
         MapaRotasSemanaView.as_view(),
         name='ecommerce_mapa_rotas_semana',
+    ),
+    path(
+        'rotas-ecommerce/mapa-rotas/pdf/',
+        MapaRotasDiaPdfView.as_view(),
+        name='ecommerce_mapa_rotas_dia_pdf',
+    ),
+    path(
+        'rotas-ecommerce/mapa-rotas/pdf-semana/',
+        MapaRotasSemanaPdfView.as_view(),
+        name='ecommerce_mapa_rotas_semana_pdf',
     ),
     path(
         'notificacoes-ecommerce/',

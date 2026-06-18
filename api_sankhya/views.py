@@ -21,7 +21,6 @@ from controleBI.perfil_utils import ensure_perfil
 
 from django_q.models import Task
 
-from .tasks import run_integracao_sankhya, run_todas_integracoes_sankhya
 from .models import (
     Bairro,
     Cidade,
@@ -499,6 +498,56 @@ def _iso_to_criteria_date_start_of_day(value):
     return dt.strftime("%d/%m/%Y %H:%M:%S")
 
 
+def _user_input_to_criteria_date(value: str | None) -> str | None:
+    """Converte entrada do formulário (date ou datetime-local) para critério Sankhya."""
+    if not value:
+        return None
+    valor = value.strip()
+    if not valor:
+        return None
+    if "T" in valor:
+        try:
+            dt = datetime.fromisoformat(valor)
+            return dt.strftime("%d/%m/%Y %H:%M:%S")
+        except ValueError:
+            pass
+    if len(valor) == 10 and valor[4] == "-" and valor[7] == "-":
+        try:
+            y, m, d = (int(valor[0:4]), int(valor[5:7]), int(valor[8:10]))
+            return datetime(y, m, d).strftime("%d/%m/%Y %H:%M:%S")
+        except (TypeError, ValueError):
+            pass
+    return _iso_to_criteria_date_start_of_day(valor)
+
+
+def _clientes_sync_modal_context() -> dict[str, str | None]:
+    iso = _max_dtalter_cliente_iso()
+    criteria = _iso_to_criteria_date_start_of_day(iso) if iso else None
+    dt = _parse_datetime_flexible(iso) if iso else None
+    return {
+        "ultima_dtalter_iso": iso,
+        "ultima_dtalter_exibicao": dt.strftime("%d/%m/%Y %H:%M:%S") if dt else None,
+        "dtalter_criteria_padrao": criteria,
+        "dtalter_input_padrao": dt.strftime("%Y-%m-%dT%H:%M") if dt else "",
+    }
+
+
+def _resolve_dtalter_desde_clientes(dtalter_desde: str | None) -> str | None:
+    """
+    None -> usa maior DTALTER local (incremental padrão).
+    '__full__' -> sem filtro (carga completa).
+    Outro valor -> data informada pelo usuário.
+    """
+    if dtalter_desde is None:
+        return None
+    valor = str(dtalter_desde).strip()
+    if not valor or valor == "__default__":
+        return None
+    if valor == "__full__":
+        return "__full__"
+    return valor
+
+
 def _sync_paginated(url: str, list_key: str, callback: Callable[[dict[str, Any]], tuple[bool, bool]], start_page: int = 0):
     page = start_page
     has_more = True
@@ -592,16 +641,29 @@ def getBairros():
     return _sync_paginated(_get_env_or_setting("SANKHYA_URL_BAIRROS"), "bairros", cb)
 
 
-def getClientes():
+def getClientes(dtalter_desde=None):
     headers = getToken()
     headers["Content-Type"] = "application/json"
     page = 0
     has_more = True
     out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
     url = _get_env_or_setting("SANKHYA_URL_GENERIC")
-    ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_cliente_iso())
-    if ultima_alteracao:
-        print(f"Filtro DTALTER formatado: {ultima_alteracao}")
+
+    modo = _resolve_dtalter_desde_clientes(dtalter_desde)
+    if modo == "__full__":
+        ultima_alteracao = None
+        print("Sincronização de clientes: sem filtro DTALTER (carga completa).")
+    elif modo:
+        ultima_alteracao = _user_input_to_criteria_date(str(modo))
+        if ultima_alteracao:
+            print(f"Filtro DTALTER customizado: {ultima_alteracao}")
+        else:
+            ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_cliente_iso())
+            print(f"Filtro DTALTER (fallback automático): {ultima_alteracao}")
+    else:
+        ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_cliente_iso())
+        if ultima_alteracao:
+            print(f"Filtro DTALTER incremental: {ultima_alteracao}")
     while has_more:
         data_set = {
             "rootEntity": "Parceiro",
@@ -612,7 +674,7 @@ def getClientes():
                     "list": (
                         "CODPARC,TIPPESSOA,CGC_CPF,IDENTINSCESTAD,NOMEPARC,RAZAOSOCIAL,EMAIL,"
                         "TELEFONE,LIMCREDMENSAL,GRUPOAUTOR,LATITUDE,LONGITUDE,CODEND,NUMEND,"
-                        "COMPLEMENTO,CODBAI,CODCID,CEP,CODTAB,DTALTER"
+                        "COMPLEMENTO,CODBAI,CODCID,CEP,CODTAB,CODVEND,DTALTER"
                     )
                 }
             },
@@ -654,7 +716,7 @@ def getClientes():
                 else:
                     numero = telefone
             dtalter = _to_datetime_iso_seconds(
-                (row.get("f19") or {}).get("$") if isinstance(row.get("f19"), dict) else row.get("f19")
+                (row.get("f20") or {}).get("$") if isinstance(row.get("f20"), dict) else row.get("f20")
             )
             defaults = {
                 "tipo": _to_str((row.get("f1") or {}).get("$") if isinstance(row.get("f1"), dict) else row.get("f1"), 10),
@@ -676,6 +738,7 @@ def getClientes():
                 "cidade": _to_str((row.get("f16") or {}).get("$") if isinstance(row.get("f16"), dict) else row.get("f16"), 100),
                 "cep": _to_str((row.get("f17") or {}).get("$") if isinstance(row.get("f17"), dict) else row.get("f17"), 10),
                 "codtab": _to_int((row.get("f18") or {}).get("$") if isinstance(row.get("f18"), dict) else row.get("f18")),
+                "codvend": _to_int((row.get("f19") or {}).get("$") if isinstance(row.get("f19"), dict) else row.get("f19")),
                 "dtalter": _to_str(dtalter, 50),
             }
             defaults = {k: v for k, v in defaults.items() if v is not None}
@@ -1425,8 +1488,46 @@ def gestao_integracoes(request):
     return render(
         request,
         "api_sankhya/gestao_integracoes.html",
-        {"integracoes": _status_integracoes()},
+        {
+            "integracoes": _status_integracoes(),
+            "clientes_sync": _clientes_sync_modal_context(),
+        },
     )
+
+
+def _dispatch_q_task(func_path: str, *args, task_name: str) -> dict:
+    """
+    Enfileira no django-q2. Com Q_CLUSTER['sync']=True, o próprio django-q2 executa inline (_sync).
+    """
+    task_id = async_task(func_path, *args, task_name=task_name)
+    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
+    if not q_sync:
+        return {"completed": False, "sync": False, "task_id": task_id}
+    t = Task.objects.filter(id=task_id).first()
+    payload = _json_safe(t.result) if t and t.result is not None else None
+    success = bool(t and t.success)
+    if success and isinstance(payload, dict):
+        if payload.get("erro"):
+            success = False
+        elif payload.get("erros"):
+            success = False
+    out: dict[str, Any] = {
+        "completed": True,
+        "sync": True,
+        "success": success,
+        "task_id": task_id,
+        "resultado": payload,
+    }
+    if not success:
+        if isinstance(payload, dict) and payload.get("erro"):
+            out["error"] = payload.get("erro")
+        elif isinstance(payload, dict) and payload.get("erros"):
+            out["erros"] = payload.get("erros")
+        elif t and t.result is not None:
+            out["error"] = str(t.result)
+        else:
+            out["error"] = "Falha na tarefa"
+    return out
 
 
 @login_required
@@ -1465,6 +1566,7 @@ def atualizar_integracao(request, chave: str):
     integracao = INTEGRACOES[chave]
     nome = integracao["nome"]
     codigo_tabela: int | None = None
+    dtalter_desde: str | None = None
     if chave == "precos":
         codigo_tabela_raw = (request.POST.get("codigo_tabela") or "").strip()
         if not codigo_tabela_raw:
@@ -1480,28 +1582,33 @@ def atualizar_integracao(request, chave: str):
             return redirect("api_sankhya_gestao_integracoes")
         if codigo_tabela == 9999:
             codigo_tabela = None
-    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
+    if chave == "clientes":
+        if request.POST.get("sincronizar_tudo") in ("1", "true", "on", "yes"):
+            dtalter_desde = "__full__"
+        else:
+            custom = (request.POST.get("dtalter_desde") or "").strip()
+            if custom:
+                dtalter_desde = custom
     try:
-        if q_sync:
-            resultado = run_integracao_sankhya(chave, codigo_tabela=codigo_tabela)
-            if resultado.get("erro"):
-                if _wants_json(request):
-                    return JsonResponse(
-                        {"completed": True, "sync": True, "success": False, "nome": nome, "error": resultado.get("erro")},
-                        status=400,
-                    )
-                messages.error(request, f"Erro ao atualizar {nome}: {resultado.get('erro')}")
-            else:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {
-                            "completed": True,
-                            "sync": True,
-                            "success": True,
-                            "nome": nome,
-                            "resultado": _json_safe(resultado),
-                        }
-                    )
+        dispatch = _dispatch_q_task(
+            "api_sankhya.tasks.run_integracao_sankhya",
+            chave,
+            codigo_tabela,
+            dtalter_desde,
+            task_name=f"Sankhya: {nome}",
+        )
+        if _wants_json(request):
+            payload = {
+                "chave": chave,
+                "nome": nome,
+                **dispatch,
+            }
+            if dispatch.get("completed") and not dispatch.get("success"):
+                return JsonResponse(payload, status=400)
+            return JsonResponse(payload)
+        if dispatch.get("completed"):
+            resultado = dispatch.get("resultado") or {}
+            if dispatch.get("success"):
                 messages.success(
                     request,
                     (
@@ -1511,23 +1618,9 @@ def atualizar_integracao(request, chave: str):
                         f"Atualizados: {resultado.get('total_atualizados', '-')}"
                     ),
                 )
+            else:
+                messages.error(request, f"Erro ao atualizar {nome}: {dispatch.get('error', 'Falha na tarefa')}")
         else:
-            task_id = async_task(
-                "api_sankhya.tasks.run_integracao_sankhya",
-                chave,
-                codigo_tabela,
-                task_name=f"Sankhya: {nome}",
-            )
-            if _wants_json(request):
-                return JsonResponse(
-                    {
-                        "completed": False,
-                        "sync": False,
-                        "task_id": task_id,
-                        "chave": chave,
-                        "nome": nome,
-                    }
-                )
             messages.success(
                 request,
                 f"{nome}: sincronização enfileirada e executada em segundo plano pelo worker "
@@ -1547,50 +1640,33 @@ def atualizar_todas_integracoes(request):
     denied = _require_admin_integracoes(request)
     if denied:
         return denied
-    q_sync = getattr(settings, "Q_CLUSTER", {}).get("sync", False)
     try:
-        if q_sync:
-            resultado = run_todas_integracoes_sankhya()
-            erros = resultado.get("erros") or []
+        dispatch = _dispatch_q_task(
+            "api_sankhya.tasks.run_todas_integracoes_sankhya",
+            task_name="Sankhya: todas as integrações",
+        )
+        if _wants_json(request):
+            payload = {
+                "chave": "__todas__",
+                "nome": "Todas as integrações",
+                **dispatch,
+            }
+            if dispatch.get("completed") and not dispatch.get("success"):
+                return JsonResponse(payload, status=400)
+            return JsonResponse(payload)
+        if dispatch.get("completed"):
+            erros = (dispatch.get("erros") or (dispatch.get("resultado") or {}).get("erros") or [])
             if erros:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {
-                            "completed": True,
-                            "sync": True,
-                            "success": False,
-                            "erros": erros,
-                        },
-                        status=400,
-                    )
                 messages.warning(
                     request,
                     "Algumas integrações falharam: " + " | ".join(erros[:5]),
                 )
             else:
-                if _wants_json(request):
-                    return JsonResponse(
-                        {"completed": True, "sync": True, "success": True, "resultado": _json_safe(resultado)}
-                    )
                 messages.success(
                     request,
                     "Atualização completa concluída com sucesso.",
                 )
         else:
-            task_id = async_task(
-                "api_sankhya.tasks.run_todas_integracoes_sankhya",
-                task_name="Sankhya: todas as integrações",
-            )
-            if _wants_json(request):
-                return JsonResponse(
-                    {
-                        "completed": False,
-                        "sync": False,
-                        "task_id": task_id,
-                        "chave": "__todas__",
-                        "nome": "Todas as integrações",
-                    }
-                )
             messages.success(
                 request,
                 "Todas as integrações foram enfileiradas; o worker processará em sequência. "

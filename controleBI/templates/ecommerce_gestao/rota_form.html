@@ -60,14 +60,17 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Ajudantes</label>
-                        <select name="ajudantes" class="form-select" size="5" multiple>
+                        <div class="border rounded p-2 bg-light rota-checkbox-list rota-checkbox-list-sm">
                             {% for a in ajudantes %}
-                            <option value="{{ a.id }}" {% if a.id in ajudantes_selecionados %}selected{% endif %}>
-                                {{ a.nome }} ({{ a.codigo_erp }})
-                            </option>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="ajudantes" value="{{ a.id }}" id="ajudante_{{ a.id }}" {% if a.id in ajudantes_selecionados %}checked{% endif %}>
+                                <label class="form-check-label" for="ajudante_{{ a.id }}">{{ a.nome }} ({{ a.codigo_erp }})</label>
+                            </div>
+                            {% empty %}
+                            <p class="text-muted small mb-0">Nenhum ajudante disponível.</p>
                             {% endfor %}
-                        </select>
-                        <div class="form-text">Ctrl/Cmd para vários ajudantes.</div>
+                        </div>
+                        <div class="form-text">Marque os ajudantes desta rota.</div>
                     </div>
                     <div class="col-12">
                         <label class="form-label">Descrição</label>
@@ -94,14 +97,19 @@
                         Mostrar somente clientes selecionados
                     </label>
                 </div>
-                <select name="clientes" id="clientesRotaSelect" class="form-select" size="14" multiple>
+                <div id="clientesRotaLista" class="border rounded p-2 bg-light rota-checkbox-list">
                     {% for cliente in clientes %}
-                    <option value="{{ cliente.id }}" {% if cliente.id in selecionados %}selected{% endif %}>
-                        {{ cliente.nome|default:cliente.razao|default:'Cliente sem nome' }} - {{ cliente.codigo_cliente }}
-                    </option>
+                    <div class="form-check rota-cliente-item" data-label="{{ cliente.nome|default:cliente.razao|default:'Cliente sem nome' }} - {{ cliente.codigo_cliente }}">
+                        <input class="form-check-input" type="checkbox" name="clientes" value="{{ cliente.id }}" id="cliente_{{ cliente.id }}" {% if cliente.id in selecionados %}checked{% endif %}>
+                        <label class="form-check-label" for="cliente_{{ cliente.id }}">
+                            {{ cliente.nome|default:cliente.razao|default:'Cliente sem nome' }} - {{ cliente.codigo_cliente }}
+                        </label>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted small mb-0">Nenhum cliente disponível.</p>
                     {% endfor %}
-                </select>
-                <div class="form-text">Use Ctrl/Cmd para selecionar múltiplos clientes.</div>
+                </div>
+                <div class="form-text">Marque os clientes desta rota.</div>
 
                 <div class="mt-4 d-flex gap-2">
                     <button type="submit" class="btn btn-primary">
@@ -116,42 +124,49 @@
 {% endblock %}
 
 {% block extra_js %}
+<style>
+    .rota-checkbox-list {
+        max-height: 22rem;
+        overflow-y: auto;
+    }
+    .rota-checkbox-list-sm {
+        max-height: 10rem;
+    }
+    .rota-checkbox-list .form-check {
+        margin-bottom: 0.35rem;
+    }
+    .rota-checkbox-list .form-check:last-child {
+        margin-bottom: 0;
+    }
+</style>
 <script>
     (function () {
         const input = document.getElementById('filtroClientesRota');
-        const select = document.getElementById('clientesRotaSelect');
+        const lista = document.getElementById('clientesRotaLista');
         const somenteSelecionados = document.getElementById('filtroSomenteSelecionados');
-        if (!input || !select || !somenteSelecionados) return;
+        if (!input || !lista || !somenteSelecionados) return;
 
-        const options = Array.from(select.options).map(function (option) {
-            return { value: option.value, label: option.textContent, selected: option.selected };
-        });
+        const items = Array.from(lista.querySelectorAll('.rota-cliente-item'));
 
-        function renderFilteredOptions(term, onlySelected) {
-            const normalized = (term || '').trim().toLowerCase();
-            const selectedValues = new Set(
-                Array.from(select.selectedOptions).map(function (o) { return o.value; })
-            );
+        function applyFilter() {
+            const normalized = (input.value || '').trim().toLowerCase();
+            const onlySelected = somenteSelecionados.checked;
 
-            select.innerHTML = '';
-            options.forEach(function (entry) {
-                const match = !normalized || entry.label.toLowerCase().indexOf(normalized) !== -1;
-                const isSelected = selectedValues.has(entry.value) || entry.selected;
-                if (onlySelected && !isSelected) return;
-                if (!match) return;
-                const option = document.createElement('option');
-                option.value = entry.value;
-                option.textContent = entry.label;
-                option.selected = isSelected;
-                select.appendChild(option);
+            items.forEach(function (item) {
+                const label = (item.dataset.label || '').toLowerCase();
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                const match = !normalized || label.indexOf(normalized) !== -1;
+                const isSelected = checkbox && checkbox.checked;
+                item.classList.toggle('d-none', !(match && (!onlySelected || isSelected)));
             });
         }
 
-        input.addEventListener('input', function () {
-            renderFilteredOptions(input.value, somenteSelecionados.checked);
-        });
-        somenteSelecionados.addEventListener('change', function () {
-            renderFilteredOptions(input.value, somenteSelecionados.checked);
+        input.addEventListener('input', applyFilter);
+        somenteSelecionados.addEventListener('change', applyFilter);
+        lista.addEventListener('change', function (event) {
+            if (event.target.matches('input[type="checkbox"]') && somenteSelecionados.checked) {
+                applyFilter();
+            }
         });
     })();
 </script>

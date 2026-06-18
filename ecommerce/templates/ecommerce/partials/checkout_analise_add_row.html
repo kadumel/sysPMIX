@@ -1,0 +1,10 @@
+<div class="d-flex align-items-center gap-2 flex-shrink-0 js-analise-add-row">
+    <label class="visually-hidden" for="analise-qty-{{ item.codigo_produto }}">Quantidade</label>
+    <input type="text" id="analise-qty-{{ item.codigo_produto }}"
+           class="form-control form-control-sm js-analise-qty text-center"
+           style="width: 4.5rem;" value="1" inputmode="decimal" autocomplete="off"
+           title="Quantidade">
+    <button type="button" class="btn btn-sm btn-outline-primary js-analise-add-cart" data-codigo="{{ item.codigo_produto }}">
+        <i class="bi bi-cart-plus me-1"></i>Adicionar
+    </button>
+</div>

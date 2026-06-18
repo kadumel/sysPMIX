@@ -3,7 +3,9 @@ Catálogo a partir das tabelas Sankhya: sankhya_produto e sankhya_grupo_produto.
 """
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet
 
@@ -13,6 +15,23 @@ from ecommerce.models import ProdutoImagem
 
 PAGE_SIZE = 24
 BUSCA_MAX_LEN = 120
+ECOMMERCE_TZ = ZoneInfo('America/Sao_Paulo')
+
+
+def normalizar_codtab(codtab) -> int | None:
+    if codtab in (None, 0, ''):
+        return None
+    try:
+        return int(codtab)
+    except (TypeError, ValueError):
+        return None
+
+
+def data_referencia_ecommerce() -> date:
+    """Data civil usada em campanhas e análise de pedido (fuso Brasil)."""
+    from django.utils import timezone
+
+    return timezone.now().astimezone(ECOMMERCE_TZ).date()
 
 
 def grupos_ativos_map(apenas_visiveis_loja: bool = False):
@@ -322,8 +341,8 @@ def get_cliente_codtab(user) -> int | None:
         cliente = getattr(vinculo, 'cliente', None)
     if cliente is None:
         return None
-    codtab = getattr(cliente, 'codtab', None)
-    if codtab in (None, 0):
+    codtab = normalizar_codtab(getattr(cliente, 'codtab', None))
+    if codtab is None:
         return None
     return codtab
 

@@ -40,6 +40,17 @@
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
             <h4 class="card-title mb-0"><i class="bi bi-map me-2"></i>Mapa de Rotas</h4>
             <div class="d-flex flex-wrap align-items-center gap-2">
+                {% if total_rotas_semana %}
+                <a
+                    href="{% url 'ecommerce_mapa_rotas_semana_pdf' %}?ref={{ ref|date:'Y-m-d' }}"
+                    class="btn btn-danger btn-sm"
+                    target="_blank"
+                    rel="noopener"
+                    title="Emitir PDF de toda a semana"
+                >
+                    <i class="bi bi-file-earmark-pdf me-1"></i>PDF da semana
+                </a>
+                {% endif %}
                 <a href="{% url 'ecommerce_mapa_rotas_semana' %}?ref={{ prev_week_ref }}" class="btn btn-outline-secondary btn-sm">
                     <i class="bi bi-chevron-left"></i> Semana anterior
                 </a>
@@ -74,17 +85,30 @@
 
             {% for dia in dias_grid %}
             <section class="mb-4">
-                <button
-                    type="button"
-                    class="mapa-dia-titulo btn btn-link text-secondary text-decoration-none border-bottom pb-2 mb-0 w-100 text-start d-flex align-items-center justify-content-between gap-2 px-0{% if not forloop.first %} collapsed{% endif %}"
-                    data-bs-toggle="collapse"
-                    data-bs-target="#mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
-                    aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
-                    aria-controls="mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
-                >
-                    <span>{{ dia.dia_semana }}, {{ dia.data|date:'d/m/Y' }}</span>
-                    <i class="bi bi-chevron-down mapa-dia-chevron" aria-hidden="true"></i>
-                </button>
+                <div class="d-flex align-items-center justify-content-between gap-2 border-bottom pb-2 mb-0">
+                    <button
+                        type="button"
+                        class="mapa-dia-titulo btn btn-link text-secondary text-decoration-none flex-grow-1 text-start d-flex align-items-center justify-content-between gap-2 px-0{% if not forloop.first %} collapsed{% endif %}"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
+                        aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}"
+                        aria-controls="mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}"
+                    >
+                        <span>{{ dia.dia_semana }}, {{ dia.data|date:'d/m/Y' }}</span>
+                        <i class="bi bi-chevron-down mapa-dia-chevron" aria-hidden="true"></i>
+                    </button>
+                    {% if dia.rotas %}
+                    <a
+                        href="{% url 'ecommerce_mapa_rotas_dia_pdf' %}?data={{ dia.data|date:'Y-m-d' }}&ref={{ ref|date:'Y-m-d' }}"
+                        class="btn btn-outline-danger btn-sm flex-shrink-0"
+                        target="_blank"
+                        rel="noopener"
+                        title="Emitir PDF do dia"
+                    >
+                        <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                    </a>
+                    {% endif %}
+                </div>
                 <div class="collapse pt-3{% if forloop.first %} show{% endif %}" id="mapa-collapse-dia-{{ dia.data|date:'Y-m-d' }}">
                 {% if dia.rotas %}
                 <div class="row g-3">

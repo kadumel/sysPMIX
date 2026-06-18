@@ -1,9 +1,10 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.conf import settings
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from decimal import Decimal
 
 from api_sankhya.models import Produto
@@ -21,14 +22,36 @@ from .cart_session import (
     parse_quantity,
     remove_product,
 )
+from .analise_pedido import (
+    SESSION_ANALISE_KEY,
+    ResultadoAnalise,
+    calcular_analise_pedido,
+    diagnosticar_novidades_campanha,
+    remover_sugestao_do_snapshot,
+)
 from .models import BannerPromocional, NotificacaoLoja, PedidoLoja
 from .services import finalizar_pedido_loja
+
+
+_CARRINHO_ACOES_NEXT = frozenset(
+    {
+        '/ecommerce/carrinho/adicionar/',
+        '/ecommerce/carrinho/remover/',
+        '/ecommerce/carrinho/ajustar-quantidade/',
+        '/ecommerce/carrinho/limpar/',
+        '/ecommerce/carrinho/finalizar/',
+        '/ecommerce/carrinho/analise/',
+        '/ecommerce/carrinho/analise/adicionar/',
+    }
+)
 
 
 def _safe_ecommerce_next(url, default='/ecommerce/'):
     if url and isinstance(url, str) and url.startswith('/') and not url.startswith('//'):
         if url.startswith('/ecommerce'):
-            return url
+            normalizado = url if url.endswith('/') else f'{url}/'
+            if normalizado not in _CARRINHO_ACOES_NEXT:
+                return url
     return default
 
 
@@ -36,6 +59,74 @@ def _cart_add_wants_json(request):
     return request.headers.get('X-Requested-With') == 'XMLHttpRequest' or (
         'application/json' in (request.headers.get('Accept') or '')
     )
+
+
+def _cliente_para_checkout(request):
+    cliente = catalog.get_cliente_context(request)
+    if not cliente:
+        v = (
+            UsuarioClienteSankhya.objects.select_related('cliente')
+            .filter(user=request.user)
+            .first()
+        )
+        cliente = v.cliente if v and v.cliente else None
+    return cliente
+
+
+def _cart_snapshot_context(request) -> dict:
+    raw = get_cart(request)
+    codigos = [int(i['codigo_produto']) for i in raw if i.get('codigo_produto') is not None]
+    produtos = (
+        {p.codigo_produto: p for p in catalog.prefetch_imagens_produto_loja(Produto.objects.filter(codigo_produto__in=codigos))}
+        if codigos
+        else {}
+    )
+    codtab_cliente = catalog.get_cliente_codtab(request)
+    precos_por_produto = catalog.map_precos_por_codtab(codigos, codtab_cliente)
+    linhas = []
+    total_geral = Decimal('0')
+    for item in raw:
+        cid = item.get('codigo_produto')
+        if cid is None:
+            continue
+        cid = int(cid)
+        p = produtos.get(cid)
+        q = float(item.get('qty') or 0)
+        qty_decimal = Decimal(str(q))
+        preco_unitario = precos_por_produto.get(cid)
+        subtotal = None
+        if preco_unitario is not None:
+            subtotal = preco_unitario * qty_decimal
+            total_geral += subtotal
+        linhas.append(
+            {
+                'codigo_produto': cid,
+                'nome': (p.nome if p else None) or item.get('nome') or f'Produto {cid}',
+                'qty': q,
+                'qty_label': format_qty_display(q),
+                'preco_unitario': preco_unitario,
+                'subtotal': subtotal,
+            }
+        )
+    return {
+        'linhas': linhas,
+        'total_geral': total_geral,
+        'codtab_cliente': codtab_cliente,
+        'cart_count': cart_line_count(request),
+        'cart_units_label': format_qty_display(cart_total_units(request)),
+    }
+
+
+def _render_cart_snapshots_html(request) -> dict[str, str]:
+    ctx = _cart_snapshot_context(request)
+    return {
+        'cart_page_list_html': render(
+            request, 'ecommerce/partials/cart_page_list.html', ctx
+        ).content.decode('utf-8'),
+        'cart_page_footer_html': render(
+            request, 'ecommerce/partials/cart_page_footer.html', ctx
+        ).content.decode('utf-8'),
+    }
 
 
 def index(request):
@@ -126,41 +217,8 @@ def partial_destaque(request):
 
 
 def cart_view(request):
-    raw = get_cart(request)
-    codigos = [int(i['codigo_produto']) for i in raw if i.get('codigo_produto') is not None]
-    produtos = {p.codigo_produto: p for p in catalog.prefetch_imagens_produto_loja(Produto.objects.filter(codigo_produto__in=codigos))} if codigos else {}
-    codtab_cliente = catalog.get_cliente_codtab(request)
-    precos_por_produto = catalog.map_precos_por_codtab(codigos, codtab_cliente)
-    linhas = []
-    total_geral = Decimal('0')
-    for item in raw:
-        cid = item.get('codigo_produto')
-        if cid is None:
-            continue
-        cid = int(cid)
-        p = produtos.get(cid)
-        q = float(item.get('qty') or 0)
-        qty_decimal = Decimal(str(q))
-        preco_unitario = precos_por_produto.get(cid)
-        subtotal = None
-        if preco_unitario is not None:
-            subtotal = preco_unitario * qty_decimal
-            total_geral += subtotal
-        linhas.append(
-            {
-                'codigo_produto': cid,
-                'nome': (p.nome if p else None) or item.get('nome') or f'Produto {cid}',
-                'qty': q,
-                'qty_label': format_qty_display(q),
-                'preco_unitario': preco_unitario,
-                'subtotal': subtotal,
-            }
-        )
-    return render(
-        request,
-        'ecommerce/cart.html',
-        {'linhas': linhas, 'total_geral': total_geral, 'codtab_cliente': codtab_cliente},
-    )
+    ctx = _cart_snapshot_context(request)
+    return render(request, 'ecommerce/cart.html', ctx)
 
 
 @require_POST
@@ -375,24 +433,132 @@ def notificacoes_marcar_todas_lidas(request):
 
 
 @login_required
+@require_GET
+def checkout_analise_preview(request):
+    cliente_ctx = _cliente_para_checkout(request)
+    if not cliente_ctx:
+        return JsonResponse(
+            {'ok': False, 'erro': 'Cliente não vinculado ao usuário.'},
+            status=400,
+        )
+    if not get_cart(request):
+        return JsonResponse({'ok': False, 'erro': 'O carrinho está vazio.'}, status=400)
+
+    resultado = calcular_analise_pedido(cliente_ctx, get_cart(request))
+    snapshot = resultado.to_session_dict()
+    request.session[SESSION_ANALISE_KEY] = snapshot
+    request.session.modified = True
+
+    html = render(
+        request,
+        'ecommerce/partials/checkout_analise_modal_body.html',
+        {'analise': resultado},
+    ).content.decode('utf-8')
+
+    ctx_carrinho = _cart_snapshot_context(request)
+    snapshots = _render_cart_snapshots_html(request)
+    payload = {
+        'ok': True,
+        'tem_sugestoes': resultado.tem_sugestoes,
+        'html': html,
+        'total_sugestoes': len(resultado.todas_sugestoes()),
+        'total_novidades': len(resultado.novidades),
+        **snapshots,
+        'cart_count': ctx_carrinho['cart_count'],
+        'cart_units_label': ctx_carrinho['cart_units_label'],
+    }
+    if settings.DEBUG:
+        payload['debug_novidades'] = diagnosticar_novidades_campanha(
+            cliente_ctx,
+            get_cart(request),
+        )
+    return JsonResponse(payload)
+
+
+@login_required
+@require_POST
+def checkout_analise_adicionar(request):
+    cliente_ctx = _cliente_para_checkout(request)
+    if not cliente_ctx:
+        return JsonResponse({'ok': False, 'erro': 'Cliente não vinculado.'}, status=400)
+
+    snapshot = request.session.get(SESSION_ANALISE_KEY)
+    if not isinstance(snapshot, dict):
+        return JsonResponse({'ok': False, 'erro': 'Análise expirada. Abra a finalização novamente.'}, status=400)
+
+    try:
+        codigo = int(request.POST.get('codigo_produto'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'erro': 'Produto inválido.'}, status=400)
+
+    permitidos = {
+        int(row['codigo_produto'])
+        for sec in ('esquecidos', 'novidades', 'curva_a')
+        for row in snapshot.get(sec, [])
+    }
+    if codigo not in permitidos:
+        return JsonResponse({'ok': False, 'erro': 'Produto não está nas sugestões atuais.'}, status=400)
+
+    produto = Produto.objects.filter(codigo_produto=codigo, ativo=True).first()
+    if not produto:
+        return JsonResponse({'ok': False, 'erro': 'Produto indisponível.'}, status=400)
+
+    qty = parse_quantity(request.POST.get('qty'))
+    if qty is None:
+        return JsonResponse({'ok': False, 'erro': 'Quantidade inválida.'}, status=400)
+    add_product(request, codigo, (produto.nome or '').strip(), qty)
+    remover_sugestao_do_snapshot(snapshot, codigo)
+    request.session[SESSION_ANALISE_KEY] = snapshot
+    request.session.modified = True
+
+    resultado = ResultadoAnalise.from_session_dict(snapshot)
+    analise_html = render(
+        request,
+        'ecommerce/partials/checkout_analise_modal_body.html',
+        {'analise': resultado},
+    ).content.decode('utf-8')
+
+    ctx = _cart_snapshot_context(request)
+    snapshots = _render_cart_snapshots_html(request)
+    return JsonResponse(
+        {
+            'ok': True,
+            'html': analise_html,
+            'tem_sugestoes': resultado.tem_sugestoes,
+            'total_sugestoes': len(resultado.todas_sugestoes()),
+            'cart_count': ctx['cart_count'],
+            'cart_units_label': ctx['cart_units_label'],
+            'total_geral': f'{ctx["total_geral"]:.2f}',
+            **snapshots,
+        }
+    )
+
+
+@login_required
 @require_POST
 def checkout_finalizar(request):
-    cliente_ctx = catalog.get_cliente_context(request)
-    if not cliente_ctx:
-        v = (
-            UsuarioClienteSankhya.objects.select_related('cliente')
-            .filter(user=request.user)
-            .first()
-        )
-        cliente_ctx = v.cliente if v and v.cliente else None
+    cliente_ctx = _cliente_para_checkout(request)
     if not cliente_ctx:
         messages.error(
             request,
             'É necessário ter um cliente Sankhya vinculado ao seu usuário para finalizar o pedido.',
         )
         return redirect('ecommerce_cart')
-    pedido, err = finalizar_pedido_loja(request, request.user, cliente_ctx)
+
+    snapshot = request.session.pop(SESSION_ANALISE_KEY, None)
+    if snapshot is None:
+        resultado = calcular_analise_pedido(cliente_ctx, get_cart(request))
+        snapshot = resultado.to_session_dict()
+
+    pedido, err = finalizar_pedido_loja(
+        request,
+        request.user,
+        cliente_ctx,
+        analise_snapshot=snapshot,
+    )
     if err:
+        request.session[SESSION_ANALISE_KEY] = snapshot
+        request.session.modified = True
         messages.error(request, err)
         return redirect('ecommerce_cart')
     messages.success(

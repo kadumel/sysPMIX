@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{% url 'gestao_campanhas_ecommerce' %}">Campanhas</a></li>
+            <li class="breadcrumb-item active" aria-current="page">
+                {% if campanha %}{{ campanha.nome }}{% else %}Nova campanha{% endif %}
+            </li>
+        </ol>
+    </nav>
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-megaphone me-2"></i>
+                        {% if campanha %}Dados da campanha{% else %}Nova campanha{% endif %}
+                    </h5>
+                    {% if campanha and status_periodo %}
+                    {% if status_periodo == 'vigente' %}
+                    <span class="badge text-bg-success">Vigente</span>
+                    {% elif status_periodo == 'futura' %}
+                    <span class="badge text-bg-info">Futura</span>
+                    {% else %}
+                    <span class="badge text-bg-secondary">Encerrada</span>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                <div class="card-body">
+                    <form method="post" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="salvar">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_nome">{{ form.nome.label }}</label>
+                            {{ form.nome }}
+                            {% if form.nome.errors %}<div class="text-danger small">{{ form.nome.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_descricao">{{ form.descricao.label }}</label>
+                            {{ form.descricao }}
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_data_inicio">{{ form.data_inicio.label }}</label>
+                                {{ form.data_inicio }}
+                                {% if form.data_inicio.errors %}<div class="text-danger small">{{ form.data_inicio.errors }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_data_fim">{{ form.data_fim.label }}</label>
+                                {{ form.data_fim }}
+                                {% if form.data_fim.errors %}<div class="text-danger small">{{ form.data_fim.errors }}</div>{% endif %}
+                            </div>
+                        </div>
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-1"></i>
+                                {% if campanha %}Salvar alterações{% else %}Criar campanha{% endif %}
+                            </button>
+                            <a href="{% url 'gestao_campanhas_ecommerce' %}" class="btn btn-outline-secondary">Voltar</a>
+                        </div>
+                    </form>
+
+                    {% if campanha %}
+                    <hr class="my-4">
+                    <form method="post" onsubmit="return confirm('Excluir esta campanha e todos os produtos vinculados?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="excluir">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash me-1"></i>Excluir campanha
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            {% if campanha %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0"><i class="bi bi-search me-2"></i>Adicionar produtos</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-2 align-items-end mb-3">
+                        <div class="col-md-9">
+                            <label for="q" class="form-label">Buscar produto</label>
+                            <input type="text" class="form-control" id="q" name="q"
+                                   placeholder="Código, nome, referência ou marca..."
+                                   value="{{ busca_produto }}">
+                        </div>
+                        <div class="col-md-3">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search me-1"></i>Buscar
+                            </button>
+                        </div>
+                    </form>
+
+                    {% if busca_produto and not produtos_busca %}
+                    <p class="text-muted small mb-0">Nenhum produto encontrado ou todos já estão na campanha.</p>
+                    {% endif %}
+
+                    {% if produtos_busca %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Produto</th>
+                                    <th class="text-end">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in produtos_busca %}
+                                <tr>
+                                    <td>{{ p.codigo_produto }}</td>
+                                    <td>
+                                        {{ p.nome|default:"—" }}
+                                        {% if p.referencia %}<br><small class="text-muted">Ref: {{ p.referencia }}</small>{% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <form method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="adicionar_produto">
+                                            <input type="hidden" name="produto_id" value="{{ p.pk }}">
+                                            <input type="hidden" name="q" value="{{ busca_produto }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                                <i class="bi bi-plus-lg"></i> Adicionar
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% elif not busca_produto %}
+                    <p class="text-muted small mb-0">Use a busca para localizar produtos ativos do Sankhya e incluí-los na campanha.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0"><i class="bi bi-box-seam me-2"></i>Produtos da campanha</h5>
+                    <span class="badge bg-primary">{{ itens|length }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Produto</th>
+                                    <th class="text-end">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in itens %}
+                                <tr>
+                                    <td>{{ item.produto.codigo_produto }}</td>
+                                    <td>
+                                        {{ item.produto.nome|default:"—" }}
+                                        {% if item.produto.referencia %}
+                                        <br><small class="text-muted">Ref: {{ item.produto.referencia }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">
+                                        <form method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="action" value="remover_produto">
+                                            <input type="hidden" name="item_id" value="{{ item.pk }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-x-lg"></i> Remover
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        Nenhum produto vinculado ainda.
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card">
+                <div class="card-body text-muted">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Salve a campanha para liberar o cadastro de produtos.
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
