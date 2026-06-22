@@ -1,3 +1,6 @@
+from datetime import date
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -329,11 +332,34 @@ def _safe_ecommerce_redirect_path(url: str | None, default: str = '/ecommerce/no
     return default
 
 
+def _pedidos_list_query(request, *, ordem=None, dir_param=None, data_ini=None, data_fim=None, status=None):
+    params = {}
+    for key, value in (
+        ('data_ini', data_ini if data_ini is not None else request.GET.get('data_ini', '')),
+        ('data_fim', data_fim if data_fim is not None else request.GET.get('data_fim', '')),
+        ('status', status if status is not None else request.GET.get('status', '')),
+        ('ordem', ordem if ordem is not None else request.GET.get('ordem', '')),
+        ('dir', dir_param if dir_param is not None else request.GET.get('dir', '')),
+    ):
+        value = (value or '').strip()
+        if value:
+            params[key] = value
+    return '?' + urlencode(params) if params else '?'
+
+
+def _pedidos_list_sort_link(request, column, ordem_atual, dir_atual):
+    if ordem_atual == column:
+        next_dir = 'desc' if dir_atual == 'asc' else 'asc'
+    else:
+        next_dir = 'asc'
+    return _pedidos_list_query(request, ordem=column, dir_param=next_dir)
+
+
 @login_required
 def pedidos_list(request):
     perfil = getattr(getattr(request.user, 'perfil_usuario', None), 'perfil', None)
     cliente_ctx = catalog.get_cliente_context(request)
-    pedidos = PedidoLoja.objects.select_related('cliente').prefetch_related('itens')
+    pedidos = PedidoLoja.objects.select_related('cliente')
     if perfil in PERFIS_PAINEL_BI_LOJA:
         if cliente_ctx:
             pedidos = pedidos.filter(cliente=cliente_ctx)
@@ -341,7 +367,75 @@ def pedidos_list(request):
             pedidos = PedidoLoja.objects.none()
     else:
         pedidos = pedidos.filter(user=request.user)
-    return render(request, 'ecommerce/pedidos_list.html', {'pedidos': pedidos})
+
+    data_ini = (request.GET.get('data_ini') or '').strip()
+    data_fim = (request.GET.get('data_fim') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    ordem = (request.GET.get('ordem') or '').strip()
+    dir_atual = (request.GET.get('dir') or '').strip().lower()
+
+    if status in {
+        PedidoLoja.Status.PENDENTE,
+        PedidoLoja.Status.AUTORIZADO,
+        PedidoLoja.Status.REJEITADO,
+    }:
+        pedidos = pedidos.filter(status=status)
+    else:
+        status = ''
+
+    if data_ini:
+        try:
+            pedidos = pedidos.filter(criado_em__date__gte=date.fromisoformat(data_ini))
+        except ValueError:
+            data_ini = ''
+    if data_fim:
+        try:
+            pedidos = pedidos.filter(criado_em__date__lte=date.fromisoformat(data_fim))
+        except ValueError:
+            data_fim = ''
+
+    sort_fields = {
+        'pedido': 'id',
+        'data': 'criado_em',
+        'valor_total': 'valor_total',
+    }
+    if ordem in sort_fields:
+        if dir_atual not in {'asc', 'desc'}:
+            dir_atual = 'asc'
+        order_field = sort_fields[ordem]
+        if dir_atual == 'desc':
+            order_field = f'-{order_field}'
+        pedidos = pedidos.order_by(order_field, '-id')
+    else:
+        ordem = ''
+        dir_atual = ''
+        pedidos = pedidos.order_by('-criado_em', '-id')
+
+    tem_filtros = bool(data_ini or data_fim or status)
+    return render(
+        request,
+        'ecommerce/pedidos_list.html',
+        {
+            'pedidos': pedidos,
+            'filtro_data_ini': data_ini,
+            'filtro_data_fim': data_fim,
+            'filtro_status': status,
+            'ordem_atual': ordem,
+            'dir_atual': dir_atual,
+            'tem_filtros': tem_filtros,
+            'sort_link_pedido': _pedidos_list_sort_link(request, 'pedido', ordem, dir_atual),
+            'sort_link_data': _pedidos_list_sort_link(request, 'data', ordem, dir_atual),
+            'sort_link_valor_total': _pedidos_list_sort_link(request, 'valor_total', ordem, dir_atual),
+            'limpar_filtros_url': _pedidos_list_query(
+                request,
+                data_ini='',
+                data_fim='',
+                status='',
+                ordem='',
+                dir_param='',
+            ),
+        },
+    )
 
 
 @login_required

@@ -152,6 +152,59 @@
         .navbar-ecommerce .dropdown-menu {
             min-width: 16rem;
         }
+        @media (max-width: 991.98px) {
+            .navbar-ecommerce .container-fluid {
+                position: relative;
+            }
+            .navbar-ecommerce .navbar-collapse {
+                position: absolute;
+                top: 100%;
+                left: 0;
+                right: 0;
+                z-index: 10;
+                background-color: rgba(0, 0, 0, 0.88);
+                padding: 0.75rem 1rem 1rem;
+                box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+                max-height: calc(100vh - var(--navbar-height));
+                overflow-y: auto;
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-menu {
+                position: static !important;
+                transform: none !important;
+                float: none;
+                min-width: 0;
+                width: 100%;
+                margin-top: 0.35rem;
+                margin-bottom: 0.5rem;
+                background-color: rgba(0, 0, 0, 0.45);
+                border: 1px solid rgba(255, 255, 255, 0.15);
+                box-shadow: none;
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-header,
+            .navbar-ecommerce .navbar-collapse .dropdown-item,
+            .navbar-ecommerce .navbar-collapse .dropdown-item-text {
+                color: rgba(255, 255, 255, 0.95);
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-item.text-muted,
+            .navbar-ecommerce .navbar-collapse .dropdown-item-text.text-muted {
+                color: rgba(255, 255, 255, 0.72) !important;
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-item.text-danger {
+                color: #ffb4b4 !important;
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-item:hover,
+            .navbar-ecommerce .navbar-collapse .dropdown-item:focus {
+                background-color: rgba(255, 255, 255, 0.12);
+                color: #fff;
+            }
+            .navbar-ecommerce .navbar-collapse .dropdown-divider {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+            .navbar-ecommerce .navbar-collapse .nav-link,
+            .navbar-ecommerce .navbar-collapse .nav-link i {
+                color: rgba(255, 255, 255, 0.95) !important;
+            }
+        }
         .navbar-ecommerce .navbar-cart-badge {
             font-size: 0.65rem;
             min-width: 1.15rem;
@@ -222,12 +275,14 @@
                         <a class="nav-link py-2" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-1"></i>Meus pedidos</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link py-2 position-relative d-inline-flex align-items-center gap-1" href="{% url 'ecommerce_notificacoes' %}" title="Notificações">
-                            <i class="bi bi-bell fs-5"></i>
-                            <span class="d-none d-lg-inline">Notificações</span>
-                            {% if ecommerce_notificacoes_nao_lidas %}
-                            <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">{{ ecommerce_notificacoes_nao_lidas }}</span>
-                            {% endif %}
+                        <a class="nav-link py-2 d-flex align-items-center gap-1" href="{% url 'ecommerce_notificacoes' %}" title="Notificações">
+                            <span class="position-relative d-inline-flex">
+                                <i class="bi bi-bell fs-5"></i>
+                                {% if ecommerce_notificacoes_nao_lidas %}
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">{{ ecommerce_notificacoes_nao_lidas }}</span>
+                                {% endif %}
+                            </span>
+                            Notificações
                         </a>
                     </li>
                     <li class="nav-item">

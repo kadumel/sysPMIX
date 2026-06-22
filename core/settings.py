@@ -312,17 +312,38 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Progressive Web App (django-pwa) — vitrine / loja em /ecommerce/
 PWA_APP_NAME = 'PMIX Shop'
 PWA_APP_DESCRIPTION = 'Loja online responsiva e instalável (PWA).'
-PWA_APP_THEME_COLOR = '#0ea5e9'
-PWA_APP_BACKGROUND_COLOR = '#ffffff'
+PWA_APP_THEME_COLOR = '#004A8D'
+PWA_APP_BACKGROUND_COLOR = '#004A8D'
 PWA_APP_DISPLAY = 'standalone'
 PWA_APP_SCOPE = '/'
 PWA_APP_ORIENTATION = 'portrait-primary'
 PWA_APP_START_URL = '/ecommerce/'
 PWA_APP_FETCH_URL = '/ecommerce/'
 PWA_APP_DEBUG_MODE = DEBUG
+_PWA_ICON_SIZES = (72, 96, 128, 144, 152, 180, 192, 384, 512)
 PWA_APP_ICONS = [
-    {'src': '/static/ecommerce/icons/icon-192.png', 'sizes': '192x192', 'type': 'image/png'},
-    {'src': '/static/ecommerce/icons/icon-512.png', 'sizes': '512x512', 'type': 'image/png'},
+    {
+        'src': f'/static/img/pwa/icon-{size}.png',
+        'sizes': f'{size}x{size}',
+        'type': 'image/png',
+        'purpose': 'any',
+    }
+    for size in _PWA_ICON_SIZES
+] + [
+    {
+        'src': '/static/img/pwa/icon-512.png',
+        'sizes': '512x512',
+        'type': 'image/png',
+        'purpose': 'maskable',
+    },
+]
+PWA_APP_ICONS_APPLE = [
+    {
+        'src': f'/static/img/pwa/icon-{size}.png',
+        'sizes': f'{size}x{size}',
+        'type': 'image/png',
+    }
+    for size in (152, 180, 192)
 ]
 PWA_APP_SPLASH_SCREEN = []
 
