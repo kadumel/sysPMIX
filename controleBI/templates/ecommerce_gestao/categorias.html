@@ -17,6 +17,8 @@
                     <p class="text-muted small mb-3">
                         Marque as categorias que devem aparecer no menu do e-commerce. Apenas grupos <strong>ativos</strong> são listados.
                         A loja usa só as marcadas; se o pai não estiver marcado, um filho marcado aparece como categoria de primeiro nível.
+                        Se marcar só o grupo de nível superior e desmarcar os filhos, o pai aparece sozinho no menu, mas a listagem inclui os produtos de toda a hierarquia abaixo dele.
+                        Defina também o tipo <strong>Mercadoria</strong> ou <strong>Revenda</strong> de cada categoria para o filtro da loja.
                     </p>
                     <form method="get" action="{% url 'gestao_categorias_ecommerce' %}" class="row g-2 align-items-end mb-3">
                         <div class="col-md-6 col-lg-5">
@@ -46,13 +48,16 @@
                             <table class="table table-hover align-middle mb-0">
                                 <thead class="table-light">
                                     <tr>
+                                        <th>Na loja</th>
                                         <th>Categoria</th>
+                                        <th class="text-center" style="width: 7rem;">Mercadoria</th>
+                                        <th class="text-center" style="width: 7rem;">Revenda</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% if filtro_sem_resultado %}
                                     <tr>
-                                        <td class="text-center text-muted py-4">
+                                        <td colspan="4" class="text-center text-muted py-4">
                                             Nenhuma categoria encontrada para «{{ current_search }}».
                                         </td>
                                     </tr>
@@ -61,7 +66,7 @@
                                         {% include 'ecommerce_gestao/categorias_node.html' with node=node depth=0 %}
                                     {% empty %}
                                     <tr>
-                                        <td class="text-center text-muted py-4">Nenhum grupo de produto ativo encontrado.</td>
+                                        <td colspan="4" class="text-center text-muted py-4">Nenhum grupo de produto ativo encontrado.</td>
                                     </tr>
                                     {% endfor %}
                                     {% endif %}
@@ -88,4 +93,33 @@
         </div>
     </div>
 </div>
+<script>
+(function () {
+    function syncHidden(grupo) {
+        var hidden = document.querySelector('input.tipo-loja-hidden[data-grupo="' + grupo + '"]');
+        if (!hidden) return;
+        var merc = document.getElementById('tipo_merc_' + grupo);
+        var rev = document.getElementById('tipo_rev_' + grupo);
+        if (merc && merc.checked) {
+            hidden.value = 'mercadoria';
+        } else if (rev && rev.checked) {
+            hidden.value = 'revenda';
+        } else {
+            hidden.value = '';
+        }
+    }
+    document.querySelectorAll('.tipo-loja-check').forEach(function (el) {
+        el.addEventListener('change', function () {
+            var grupo = this.dataset.grupo;
+            var tipo = this.dataset.tipo;
+            if (this.checked) {
+                document.querySelectorAll('.tipo-loja-check[data-grupo="' + grupo + '"]').forEach(function (other) {
+                    if (other !== el) other.checked = false;
+                });
+            }
+            syncHidden(grupo);
+        });
+    });
+})();
+</script>
 {% endblock %}

@@ -144,11 +144,21 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function bindAddButtons() {
+        if (window.ecommerceInitQtySteppers) {
+            window.ecommerceInitQtySteppers(sugestoesEl);
+        }
         sugestoesEl.querySelectorAll('.js-analise-add-cart').forEach(function (b) {
             b.addEventListener('click', function () {
                 var row = b.closest('.js-analise-add-row');
                 var qtyInput = row ? row.querySelector('.js-analise-qty') : null;
-                var qty = qtyInput ? qtyInput.value.trim() : '1';
+                var qtyRaw = qtyInput ? qtyInput.value.trim() : '1';
+                var qtyNum = parseInt(qtyRaw, 10);
+                if (!qtyRaw || isNaN(qtyNum) || qtyNum < 1) {
+                    alert('Informe uma quantidade inteira maior ou igual a 1.');
+                    if (qtyInput) qtyInput.focus();
+                    return;
+                }
+                var qty = String(qtyNum);
                 var codigo = b.getAttribute('data-codigo');
                 b.disabled = true;
                 var fd = new FormData();

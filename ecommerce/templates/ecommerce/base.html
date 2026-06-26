@@ -14,7 +14,7 @@
         :root {
             --primary-color: #004A8D;
             --secondary-color: #F7941D;
-            --navbar-height: 60px;
+            --navbar-height: 64px;
         }
         body {
             min-height: 100vh;
@@ -49,7 +49,7 @@
         }
         .logo-container {
             background-color: white;
-            padding: 5px;
+            padding: 4px;
             border-radius: 5px;
             border: 2px solid var(--secondary-color);
             display: flex;
@@ -57,7 +57,7 @@
             justify-content: center;
         }
         .logo-container img {
-            max-height: 36px;
+            max-height: 52px;
             width: auto;
         }
         .ecommerce-main {
@@ -210,6 +210,20 @@
             min-width: 1.15rem;
             padding: 0.2em 0.45em;
         }
+        .navbar-ecommerce .ecommerce-cart-mobile {
+            color: #fff !important;
+            padding: 0.35rem 0.5rem;
+            border-radius: 0.375rem;
+            position: relative;
+        }
+        .navbar-ecommerce .ecommerce-cart-mobile:hover,
+        .navbar-ecommerce .ecommerce-cart-mobile:focus {
+            color: #fff !important;
+            background-color: rgba(255, 255, 255, 0.12);
+        }
+        .navbar-ecommerce .ecommerce-cart-mobile .bi-cart3 {
+            font-size: 1.35rem;
+        }
         .ecommerce-toast-wrap {
             z-index: 1090;
             margin-top: calc(var(--navbar-height) + 0.5rem);
@@ -254,15 +268,20 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="{% url 'ecommerce_home' %}" title="{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja Pannemix{% endif %}">
                 <span class="logo-container">
-                    <picture>
-                        <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
-                        <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
-                    </picture>
+                    <img src="{% static 'img/LogoNovaSemFundo.png' %}" alt="Pannemix" loading="lazy">
                 </span>
             </a>
-            <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#ecommerceNav" aria-controls="ecommerceNav" aria-expanded="false" aria-label="Menu">
-                <i class="bi bi-list text-white fs-3"></i>
-            </button>
+            <div class="d-flex align-items-center ms-auto d-lg-none">
+                <a class="nav-link ecommerce-cart-mobile d-flex align-items-center" href="{% url 'ecommerce_cart' %}" title="Carrinho" aria-label="Carrinho">
+                    <span class="position-relative d-inline-flex">
+                        <i class="bi bi-cart3"></i>
+                        <span id="ecommerceCartBadgeMobile" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-white text-danger border navbar-cart-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
+                    </span>
+                </a>
+                <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#ecommerceNav" aria-controls="ecommerceNav" aria-expanded="false" aria-label="Menu">
+                    <i class="bi bi-list text-white fs-3"></i>
+                </button>
+            </div>
             <div class="collapse navbar-collapse" id="ecommerceNav">
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-stretch align-items-start flex-column flex-lg-row flex-lg-wrap gap-lg-1">
                     <li class="nav-item">
@@ -285,7 +304,7 @@
                             Notificações
                         </a>
                     </li>
-                    <li class="nav-item">
+                    <li class="nav-item d-none d-lg-block">
                         <a class="nav-link py-2 d-flex align-items-center gap-1" href="{% url 'ecommerce_cart' %}">
                             <span class="position-relative d-inline-flex">
                                 <i class="bi bi-cart3 fs-5"></i>
@@ -382,15 +401,26 @@
                     {% csrf_token %}
                     <input type="hidden" name="codigo_produto" value="">
                     <input type="hidden" name="next" value="">
+                    <input type="hidden" name="tipo" id="ecommerceAddCartTipo" value="{{ ecommerce_tipo_loja_ativo }}">
                     <div class="modal-header border-0 pb-0">
                         <h5 class="modal-title" id="ecommerceModalAddCartLabel">Adicionar ao carrinho</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
                     </div>
                     <div class="modal-body pt-2">
                         <p class="fw-medium text-dark mb-1 ecommerce-modal-product-name"></p>
-                        <p class="small text-muted mb-3">Informe a quantidade (inteiro ou decimal — ex.: <strong>1,5</strong> kg, <strong>0,25</strong> kg). Use vírgula ou ponto.</p>
+                        <p class="small text-muted mb-3">Informe a quantidade em <strong>unidades inteiras</strong> (mínimo 1).</p>
                         <label class="form-label" for="ecommerceQtyInput">Quantidade</label>
-                        <input type="text" class="form-control form-control-lg" id="ecommerceQtyInput" name="qty" value="1" required inputmode="decimal" autocomplete="off" placeholder="ex.: 1,5 ou 0,25">
+                        <div class="input-group input-group-lg">
+                            <button type="button" class="btn btn-outline-secondary" id="ecommerceQtyMinus" aria-label="Diminuir quantidade">
+                                <i class="bi bi-dash-lg"></i>
+                            </button>
+                            <input type="number" class="form-control text-center" id="ecommerceQtyInput" name="qty"
+                                   value="1" min="1" max="99999" step="1" required inputmode="numeric" pattern="[0-9]*"
+                                   autocomplete="off" placeholder="1">
+                            <button type="button" class="btn btn-outline-secondary" id="ecommerceQtyPlus" aria-label="Aumentar quantidade">
+                                <i class="bi bi-plus-lg"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="modal-footer border-0 pt-0">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -410,10 +440,87 @@
             const nameEl = modalEl.querySelector('.ecommerce-modal-product-name');
             const inputCodigo = form.querySelector('input[name="codigo_produto"]');
             const inputNext = form.querySelector('input[name="next"]');
+            const inputTipo = form.querySelector('input[name="tipo"]');
             const inputQty = document.getElementById('ecommerceQtyInput');
+            const btnQtyMinus = document.getElementById('ecommerceQtyMinus');
+            const btnQtyPlus = document.getElementById('ecommerceQtyPlus');
             const submitBtn = form.querySelector('button[type="submit"]');
             const addUrl = form.getAttribute('data-add-cart-url') || form.getAttribute('action');
             const toastEl = document.getElementById('ecommerceToast');
+            const QTY_MIN = 1;
+            const QTY_MAX = 99999;
+
+            function clampQty(n) {
+                n = parseInt(String(n), 10);
+                if (isNaN(n) || n < QTY_MIN) return QTY_MIN;
+                if (n > QTY_MAX) return QTY_MAX;
+                return n;
+            }
+
+            function readQty() {
+                return clampQty(inputQty.value);
+            }
+
+            function writeQty(n) {
+                inputQty.value = String(clampQty(n));
+            }
+
+            if (btnQtyMinus) {
+                btnQtyMinus.addEventListener('click', function () {
+                    writeQty(readQty() - 1);
+                    inputQty.focus();
+                });
+            }
+            if (btnQtyPlus) {
+                btnQtyPlus.addEventListener('click', function () {
+                    writeQty(readQty() + 1);
+                    inputQty.focus();
+                });
+            }
+            if (inputQty) {
+                inputQty.addEventListener('input', function () {
+                    var digits = String(this.value).replace(/\D/g, '');
+                    if (!digits) {
+                        this.value = '';
+                        return;
+                    }
+                    this.value = String(clampQty(digits));
+                });
+                inputQty.addEventListener('blur', function () {
+                    if (!String(this.value).trim()) {
+                        writeQty(QTY_MIN);
+                    }
+                });
+            }
+
+            window.ecommerceInitQtySteppers = function (root) {
+                var scope = root || document;
+                scope.querySelectorAll('.js-qty-stepper').forEach(function (group) {
+                    if (group.dataset.qtyStepperInit === '1') return;
+                    group.dataset.qtyStepperInit = '1';
+                    var input = group.querySelector('.js-qty-input');
+                    var minus = group.querySelector('.js-qty-minus');
+                    var plus = group.querySelector('.js-qty-plus');
+                    if (!input) return;
+                    function clamp(n) {
+                        n = parseInt(String(n), 10);
+                        if (isNaN(n) || n < QTY_MIN) return QTY_MIN;
+                        if (n > QTY_MAX) return QTY_MAX;
+                        return n;
+                    }
+                    function read() { return clamp(input.value); }
+                    function write(n) { input.value = String(clamp(n)); }
+                    if (minus) minus.addEventListener('click', function () { write(read() - 1); input.focus(); });
+                    if (plus) plus.addEventListener('click', function () { write(read() + 1); input.focus(); });
+                    input.addEventListener('input', function () {
+                        var digits = String(this.value).replace(/\D/g, '');
+                        this.value = digits ? String(clamp(digits)) : '';
+                    });
+                    input.addEventListener('blur', function () {
+                        if (!String(this.value).trim()) write(QTY_MIN);
+                    });
+                });
+            };
 
             function getCookie(name) {
                 var m = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
@@ -429,7 +536,7 @@
                 var count = parseInt(String(n), 10);
                 if (isNaN(count) || count < 0) count = 0;
                 var s = String(count);
-                var ids = ['ecommerceCartBadgeNav', 'ecommerceCartBadgeMenu'];
+                var ids = ['ecommerceCartBadgeNav', 'ecommerceCartBadgeMenu', 'ecommerceCartBadgeMobile'];
                 ids.forEach(function (id) {
                     var el = document.getElementById(id);
                     if (el) {
@@ -453,6 +560,15 @@
                 t.show();
             }
 
+            function tipoFromUrl(url) {
+                try {
+                    var u = new URL(url, window.location.origin);
+                    return u.searchParams.get('tipo') || '';
+                } catch (e) {
+                    return '';
+                }
+            }
+
             modalEl.addEventListener('show.bs.modal', function (event) {
                 const btn = event.relatedTarget;
                 if (!btn || !btn.dataset) return;
@@ -460,6 +576,13 @@
                 inputNext.value = btn.dataset.next || '/ecommerce/';
                 nameEl.textContent = btn.dataset.productNome || '';
                 inputQty.value = 1;
+                if (inputTipo) {
+                    var t = tipoFromUrl(btn.dataset.next || window.location.href)
+                        || tipoFromUrl(window.location.href)
+                        || inputTipo.value
+                        || 'mercadoria';
+                    inputTipo.value = t;
+                }
             });
 
             /* Foco após o modal estar visível (transição terminada) — mais confiável que timeout no show */
@@ -473,16 +596,13 @@
 
             form.addEventListener('submit', function (e) {
                 e.preventDefault();
-                var raw = String(inputQty.value).trim().replace(',', '.');
-                var v = parseFloat(raw);
-                if (isNaN(v) || v < 0.001) {
-                    showEcommerceToast('Informe uma quantidade maior ou igual a 0,001.', true);
+                var v = readQty();
+                if (!String(inputQty.value).trim() || isNaN(v) || v < QTY_MIN) {
+                    showEcommerceToast('Informe uma quantidade inteira maior ou igual a 1.', true);
                     inputQty.focus();
                     return;
                 }
-                if (v > 99999) v = 99999;
-                v = Math.round(v * 10000) / 10000;
-                inputQty.value = String(v);
+                writeQty(v);
 
                 var fd = new FormData(form);
                 submitBtn.disabled = true;

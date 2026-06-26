@@ -68,12 +68,8 @@
             justify-content: center;
         }
 
-        .logo-container picture {
-            display: contents;
-        }
-
         .logo-container img {
-            max-height: 40px;
+            max-height: 72px;
             width: auto;
         }
     </style>
@@ -86,10 +82,7 @@
                     <div class="card-body p-5">
                         <div class="text-center mb-4">
                             <div class="logo-container mb-3">
-                                <picture>
-                                    <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
-                                    <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
-                                </picture>
+                                <img src="{% static 'img/LogoNovaSemFundo.png' %}" alt="Pannemix" loading="lazy">
                             </div>
                             <h4 class="text-primary">Bem-vindo ao SysPMIX</h4>
                             <p class="text-muted">Faça login para acessar o sistema</p>

@@ -16,7 +16,6 @@ from controleBI.models import PERFIS_PAINEL_BI_LOJA, UsuarioClienteSankhya
 from . import catalog
 from .cart_session import (
     adjust_product_quantity,
-    add_product,
     cart_line_count,
     cart_total_units,
     clear_cart,
@@ -134,7 +133,13 @@ def _render_cart_snapshots_html(request) -> dict[str, str]:
 
 def index(request):
     by_id, by_pai, raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
+    by_id_full, by_pai_hierarquia, _ = catalog.grupos_ativos_map(apenas_visiveis_loja=False)
+    tipo_efetivo = catalog.sincronizar_catalog_tipo_sessao(request)
+    tipos_loja = {tipo_efetivo}
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_grupo_loja = catalog.codigos_grupo_filtrados_tipo_loja(
+        codigos_grupo_loja, tipos_loja, by_id_full
+    )
     codtab_cliente = catalog.get_cliente_codtab(request)
     codigos_grupo_com_produtos = catalog.codigos_grupo_com_produtos_precificados(
         codtab_cliente, codigos_grupo_loja
@@ -143,14 +148,21 @@ def index(request):
         catalog.arvore_grupos_nested(raizes, by_pai),
         codigos_grupo_com_produtos,
         by_pai,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     grupos_flat = catalog.grupos_flat_com_produtos_precificados(
-        raizes, by_pai, codigos_grupo_com_produtos
+        raizes,
+        by_pai,
+        codigos_grupo_com_produtos,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     grupo_atual = by_id.get(grupo_id) if grupo_id is not None else None
     if grupo_atual and not catalog.grupo_tem_produtos_precificados(
-        grupo_atual.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai
+        grupo_atual.codigo_grupo_produto,
+        codigos_grupo_com_produtos,
+        by_pai,
+        by_pai_hierarquia=by_pai_hierarquia,
     ):
         grupo_atual = None
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
@@ -161,6 +173,7 @@ def index(request):
         by_pai,
         codigos_grupo_loja,
         codtab_cliente,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
@@ -183,6 +196,8 @@ def index(request):
         'produtos': page,
         'paginator': paginator,
         'codtab_cliente': codtab_cliente,
+        'tipos_loja_ativos': tipos_loja,
+        'tipo_loja_ativo': tipo_efetivo,
     }
     return render(request, 'ecommerce/index.html', context)
 
@@ -190,12 +205,23 @@ def index(request):
 def partial_destaque(request):
     """Mais produtos (mesmo filtro de grupo e busca), próxima página após a primeira."""
     by_id, by_pai, _raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
+    by_id_full, by_pai_hierarquia, _ = catalog.grupos_ativos_map(apenas_visiveis_loja=False)
+    catalog.sincronizar_catalog_tipo_sessao(request)
+    tipos_loja = {catalog.tipo_loja_ativo_efetivo(request)}
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_grupo_loja = catalog.codigos_grupo_filtrados_tipo_loja(
+        codigos_grupo_loja, tipos_loja, by_id_full
+    )
     codtab_cliente = catalog.get_cliente_codtab(request)
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
     qs = catalog.produtos_queryset(
-        grupo_id, by_id, by_pai, codigos_grupo_loja, codtab_cliente
+        grupo_id,
+        by_id,
+        by_pai,
+        codigos_grupo_loja,
+        codtab_cliente,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
@@ -264,13 +290,19 @@ def add_to_cart(request):
     raw_qty = request.POST.get('qty', '1')
     qty = parse_quantity(raw_qty)
     if qty is None:
-        err = 'Quantidade inválida. Use um número maior que zero (ex.: 1,5 ou 0,25 para kg).'
+        err = 'Quantidade inválida. Informe um número inteiro maior que zero (ex.: 1, 2, 10).'
         if wants_json:
             return json_err(err)
         messages.warning(request, err)
         return redirect(next_url)
 
-    add_product(request, produto.codigo_produto, nome, qty=qty)
+    ok, err = catalog.validar_e_adicionar_ao_carrinho(request, produto, qty=qty, nome=nome)
+    if not ok:
+        if wants_json:
+            return json_err(err, status=403)
+        messages.warning(request, err)
+        return redirect(next_url)
+
     qty_txt = format_qty_display(qty)
 
     if wants_json:
@@ -484,13 +516,31 @@ def pedido_reenviar_carrinho(request, pk: int):
         messages.warning(request, 'Este pedido não possui itens para reenviar.')
         return redirect('ecommerce_pedido_detail', pk=pedido.pk)
 
+    primeiro = Produto.objects.filter(
+        codigo_produto=itens[0].codigo_produto, ativo=True
+    ).first()
+    tipo_reenvio = catalog.tipo_loja_do_produto(primeiro) if primeiro else None
+
     for item in itens:
-        add_product(
+        produto = Produto.objects.filter(codigo_produto=item.codigo_produto, ativo=True).first()
+        if not produto:
+            clear_cart(request)
+            messages.error(
+                request,
+                f'Produto {item.codigo_produto} não está mais disponível para reenviar ao carrinho.',
+            )
+            return redirect('ecommerce_pedido_detail', pk=pedido.pk)
+        ok, err = catalog.validar_e_adicionar_ao_carrinho(
             request,
-            codigo_produto=item.codigo_produto,
+            produto,
+            float(item.quantidade),
             nome=item.nome_produto,
-            qty=float(item.quantidade),
+            tipo_catalogo=tipo_reenvio,
         )
+        if not ok:
+            clear_cart(request)
+            messages.error(request, err)
+            return redirect('ecommerce_pedido_detail', pk=pedido.pk)
     messages.success(
         request,
         'Itens do pedido rejeitado enviados ao carrinho. Ajuste conforme a mensagem do comercial e finalize novamente.',
@@ -600,7 +650,12 @@ def checkout_analise_adicionar(request):
     qty = parse_quantity(request.POST.get('qty'))
     if qty is None:
         return JsonResponse({'ok': False, 'erro': 'Quantidade inválida.'}, status=400)
-    add_product(request, codigo, (produto.nome or '').strip(), qty)
+    ok, err = catalog.validar_e_adicionar_ao_carrinho(
+        request, produto, qty, nome=(produto.nome or '').strip()
+    )
+    if not ok:
+        return JsonResponse({'ok': False, 'erro': err}, status=403)
+
     remover_sugestao_do_snapshot(snapshot, codigo)
     request.session[SESSION_ANALISE_KEY] = snapshot
     request.session.modified = True

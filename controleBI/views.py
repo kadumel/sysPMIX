@@ -1952,6 +1952,21 @@ def _collect_codigos_arvore_grupos(nodes: list[dict]) -> list[int]:
     return out
 
 
+def _salvar_tipos_loja_categorias(request, codigos_escopo: set[int]) -> None:
+    """Atualiza tipo Mercadoria/Revenda dos grupos presentes no POST (escopo da tela)."""
+    validos = {
+        GrupoProduto.TipoLoja.MERCADORIA,
+        GrupoProduto.TipoLoja.REVENDA,
+    }
+    for codigo in codigos_escopo:
+        raw = (request.POST.get(f'tipo_loja_{codigo}') or '').strip().lower()
+        tipo = raw if raw in validos else ''
+        GrupoProduto.objects.filter(
+            ativo=True,
+            codigo_grupo_produto=codigo,
+        ).exclude(tipo_loja=tipo).update(tipo_loja=tipo)
+
+
 class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
     """Hierarquia sankhya_grupo_produto: define quais categorias aparecem na loja."""
 
@@ -2022,6 +2037,7 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
                         ativo=True,
                         codigo_grupo_produto__in=marcados_set,
                     ).update(mostrar_no_ecommerce=True)
+                _salvar_tipos_loja_categorias(request, visiveis_tela)
             messages.success(request, 'Categorias visíveis na loja foram atualizadas (apenas itens do filtro).')
         elif search and not visiveis_tela:
             messages.warning(
@@ -2029,6 +2045,11 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
                 'Com o filtro atual não há categorias na tela; nenhuma alteração foi salva. Limpe o filtro para editar tudo.',
             )
         else:
+            todos_codigos = set(
+                GrupoProduto.objects.filter(ativo=True).values_list(
+                    'codigo_grupo_produto', flat=True
+                )
+            )
             with transaction.atomic():
                 GrupoProduto.objects.filter(ativo=True).update(mostrar_no_ecommerce=False)
                 if codigos_marcados:
@@ -2036,6 +2057,7 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
                         ativo=True,
                         codigo_grupo_produto__in=codigos_marcados,
                     ).update(mostrar_no_ecommerce=True)
+                _salvar_tipos_loja_categorias(request, todos_codigos)
             messages.success(request, 'Categorias visíveis na loja foram atualizadas.')
 
         redir = reverse('gestao_categorias_ecommerce')
