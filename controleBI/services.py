@@ -1,6 +1,8 @@
+import re
 import requests
 import json
 from datetime import datetime
+from django.utils import timezone
 from .models import Funcionario, Veiculo, Pedido, ItemPedido, ClienteERP, EnderecoCliente, Auditoria
 from dotenv import load_dotenv
 import os
@@ -250,16 +252,90 @@ class PedidoService:
         return dados
 
     @staticmethod
+    def parse_resposta_envio(response_text):
+        """Extrai e parseia o JSON da resposta SOAP saveEntregaServico."""
+        match = re.search(r'<resParam[^>]*>(.*?)</resParam>', response_text, re.DOTALL)
+        if not match:
+            return None
+        try:
+            return json.loads(match.group(1).strip())
+        except json.JSONDecodeError:
+            return None
+
+    @staticmethod
+    def _registrar_erro_envio(pedidos, retorno):
+        """Registra falha de envio para todos os pedidos informados."""
+        data_envio = timezone.now()
+        for pedido in pedidos:
+            Pedido.objects.filter(pk=pedido.pk).update(
+                sincronizado='erro',
+                data_envio=data_envio,
+                retorno=retorno,
+            )
+        return {
+            'sucesso': [],
+            'erros': [{'pedido': p.pedido_erp, 'descricao': retorno} for p in pedidos],
+        }
+
+    @staticmethod
+    def processar_resultado_envio(pedidos, response_text):
+        """Processa a resposta do webservice e atualiza cada pedido."""
+        data_envio = timezone.now()
+        resultado = PedidoService.parse_resposta_envio(response_text)
+
+        if resultado is None:
+            return PedidoService._registrar_erro_envio(
+                pedidos, 'Resposta inválida do webservice'
+            )
+
+        sucesso_list = resultado.get('success') or []
+        erro_detalhes = resultado.get('erro_detalhes') or resultado.get('errors') or []
+
+        erros_map = {}
+        for erro in erro_detalhes:
+            if isinstance(erro, dict):
+                cod = erro.get('pedido', '')
+                erros_map[cod] = erro.get('descricao', str(erro))
+
+        sucesso_set = set(sucesso_list)
+        erros_retorno = []
+        sucesso_retorno = []
+
+        for pedido in pedidos:
+            cod = pedido.pedido_erp
+            if cod in erros_map:
+                Pedido.objects.filter(pk=pedido.pk).update(
+                    sincronizado='erro',
+                    data_envio=data_envio,
+                    retorno=erros_map[cod],
+                )
+                erros_retorno.append({'pedido': cod, 'descricao': erros_map[cod]})
+            elif cod in sucesso_set:
+                Pedido.objects.filter(pk=pedido.pk).update(
+                    sincronizado='sim',
+                    data_envio=data_envio,
+                    retorno='Sucesso',
+                )
+                sucesso_retorno.append(cod)
+            else:
+                msg = 'Pedido não retornado pelo webservice'
+                Pedido.objects.filter(pk=pedido.pk).update(
+                    sincronizado='erro',
+                    data_envio=data_envio,
+                    retorno=msg,
+                )
+                erros_retorno.append({'pedido': cod, 'descricao': msg})
+
+        return {'sucesso': sucesso_retorno, 'erros': erros_retorno}
+
+    @staticmethod
     def enviar_dados(pedidos):
         """Envia os dados dos pedidos para o web service"""
+        pedidos = list(pedidos)
         try:
-          
-            # Formatar dados
             pedidos_formatados = PedidoService.formatar_dados(pedidos)
-           
             json_data = json.dumps(pedidos_formatados, ensure_ascii=False)
-            
-            # Construir envelope SOAP
+
             soap_envelope = f"""<?xml version="1.0" encoding="UTF-8"?>
             <soapenv:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                             xmlns:xsd="http://www.w3.org/2001/XMLSchema"
@@ -274,51 +350,59 @@ class PedidoService:
                 </urn:saveEntregaServico>
             </soapenv:Body>
             </soapenv:Envelope>"""
-            
-            # Enviar requisição
+
             headers = {
                 'Content-Type': 'text/xml; charset=utf-8',
                 'SOAPAction': 'urn:saveEntregaServico'
             }
 
-            # print(soap_envelope)
-            
-            print(soap_envelope)
             response = requests.post(
                 BASE_URL,
                 data=soap_envelope.encode('utf-8'),
                 headers=headers,
                 timeout=30
             )
-            
-            
-            print(response.text)
-            # Verificar resposta
+
             if response.status_code == 200:
-                # Verificar se a resposta contém erro
                 if 'Error' in response.text:
                     error_msg = response.text.split('<Error>')[1].split('</Error>')[0]
                     logger.error(soap_envelope)
                     logger.error(f"Erro no web service: {error_msg}")
-                    return False, error_msg
-                return True, "Pedidos enviados com sucesso"
-            else:
-                error_msg = f"Erro HTTP {response.status_code}: {response.text}"
-                logger.error(error_msg)
-                return False, error_msg
-                
+                    resultados = PedidoService._registrar_erro_envio(pedidos, error_msg)
+                    return False, error_msg, resultados
+
+                resultados = PedidoService.processar_resultado_envio(pedidos, response.text)
+                total_sucesso = len(resultados['sucesso'])
+                total_erros = len(resultados['erros'])
+
+                if total_erros and not total_sucesso:
+                    return False, f'{total_erros} pedido(s) com erro', resultados
+                if total_erros:
+                    return True, (
+                        f'{total_sucesso} pedido(s) enviado(s), {total_erros} com erro'
+                    ), resultados
+                return True, 'Pedidos enviados com sucesso', resultados
+
+            error_msg = f"Erro HTTP {response.status_code}: {response.text}"
+            logger.error(error_msg)
+            resultados = PedidoService._registrar_erro_envio(pedidos, error_msg)
+            return False, error_msg, resultados
+
         except requests.exceptions.Timeout:
             error_msg = "Timeout ao conectar com o web service"
             logger.error(error_msg)
-            return False, error_msg
+            resultados = PedidoService._registrar_erro_envio(pedidos, error_msg)
+            return False, error_msg, resultados
         except requests.exceptions.ConnectionError:
             error_msg = "Erro de conexão com o web service"
             logger.error(error_msg)
-            return False, error_msg
+            resultados = PedidoService._registrar_erro_envio(pedidos, error_msg)
+            return False, error_msg, resultados
         except Exception as e:
             error_msg = f"Erro ao enviar pedidos: {str(e)}"
             logger.error(error_msg)
-            return False, error_msg
+            resultados = PedidoService._registrar_erro_envio(pedidos, error_msg)
+            return False, error_msg, resultados
 
 class ClienteService:
     

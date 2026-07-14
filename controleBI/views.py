@@ -196,7 +196,7 @@ class DashboardView(PerfilBIAccessMixin, View):
         pedidos_aprovados = Pedido.objects.filter(status='1').count()
         pedidos_faturados = Pedido.objects.filter(status='4').count()
         pedidos_cancelados = Pedido.objects.filter(status='9').count()
-        pedidos_enviados = Pedido.objects.filter(sincronizado=True).count()
+        pedidos_enviados = Pedido.objects.filter(sincronizado='sim').count()
         
         # Últimos pedidos
         ultimos_pedidos = Pedido.objects.order_by('-data_pedido')[:10]
@@ -525,7 +525,12 @@ class ListPedidoView(PerfilBIAccessMixin, View):
             pedidos = pedidos.filter(data_pedido__lte=data_fim)
 
         if sincronizado:
-            pedidos = pedidos.filter(sincronizado=sincronizado == 'True')
+            if sincronizado == Pedido.STATUS_ENVIO_NAO:
+                pedidos = pedidos.filter(sincronizado__in=['nao', '0', 'False', 'false'])
+            elif sincronizado == Pedido.STATUS_ENVIO_SIM:
+                pedidos = pedidos.filter(sincronizado__in=['sim', '1', 'True', 'true'])
+            else:
+                pedidos = pedidos.filter(sincronizado=sincronizado)
         
         # Ordenar por data mais recente e ID para garantir ordem consistente
         pedidos = pedidos.order_by('-data_pedido', '-id')
@@ -624,7 +629,7 @@ def edit_pedido(request, pedido_id):
         try:
             # Atualizar o pedido
             pedido.podeformarcarga = request.POST.get('podeformarcarga')
-            pedido.sincronizado = False  # Marca como não sincronizado para ser enviado novamente
+            pedido.sincronizado = 'nao'  # Marca como não sincronizado para ser enviado novamente
             pedido.save()
 
             messages.success(request, 'Pedido atualizado com sucesso!')
@@ -749,20 +754,15 @@ def add_pedido(request):
 @login_required
 @requer_acesso_bi
 @require_POST
-def sync_pedido(request, pk):
+def sync_pedido(request, pedido_id):
     try:
-        pedido = Pedido.objects.get(pk=pk)
-        
-        # Aqui você pode adicionar a lógica de sincronização com o ERP
-        # Por exemplo, chamar um serviço que envia os dados para o ERP
-        
-        # Atualizar o status de sincronização
-        pedido.sincronizado = True
-        pedido.save()
-        
+        pedido = Pedido.objects.get(pk=pedido_id)
+        success, message, resultados = PedidoService.enviar_dados([pedido])
+
         return JsonResponse({
-            'success': True,
-            'message': 'Pedido sincronizado com sucesso'
+            'success': success,
+            'message': message,
+            'resultados': resultados,
         })
     except Pedido.DoesNotExist:
         return JsonResponse({
@@ -794,20 +794,20 @@ def sync_pedido_batch(request):
                 return JsonResponse({'success': False, 'message': 'Nenhum pedido válido para sincronização'})
             
             # Enviar pedidos usando o serviço
-            success, message = PedidoService.enviar_dados(pedidos)
-            
+            success, message, resultados = PedidoService.enviar_dados(pedidos)
+
             if success:
-                # Atualizar status de sincronização
-                pedidos.update(sincronizado=True)
                 return JsonResponse({
                     'success': True,
-                    'message': f'{pedidos.count()} pedido(s) sincronizado(s) com sucesso'
+                    'message': f'{len(resultados["sucesso"])} pedido(s) sincronizado(s) com sucesso',
+                    'resultados': resultados,
                 })
-            else:
-                return JsonResponse({
-                    'success': False,
-                    'message': f'Erro ao sincronizar pedidos: {message}'
-                })
+
+            return JsonResponse({
+                'success': False,
+                'message': f'Erro ao sincronizar pedidos: {message}',
+                'resultados': resultados,
+            })
             
         except json.JSONDecodeError:
             return JsonResponse({'success': False, 'message': 'Dados inválidos'}, status=400)
@@ -837,11 +837,16 @@ class RelatorioPedidoView(PerfilBIAccessMixin, View):
             pedidos = pedidos.filter(status=status)
         
         if sincronizado:
-            pedidos = pedidos.filter(sincronizado=sincronizado == 'True')
+            if sincronizado == Pedido.STATUS_ENVIO_NAO:
+                pedidos = pedidos.filter(sincronizado__in=['nao', '0', 'False', 'false'])
+            elif sincronizado == Pedido.STATUS_ENVIO_SIM:
+                pedidos = pedidos.filter(sincronizado__in=['sim', '1', 'True', 'true'])
+            else:
+                pedidos = pedidos.filter(sincronizado=sincronizado)
         
         # Calcular totais
         total_pedidos = pedidos.count()
-        pedidos_sincronizados = pedidos.filter(sincronizado=True).count()
+        pedidos_sincronizados = pedidos.filter(sincronizado='sim').count()
         valor_total = pedidos.aggregate(total=Sum('valor'))['total'] or 0
         peso_total = pedidos.aggregate(total=Sum('peso'))['total'] or 0
         
@@ -1122,6 +1127,8 @@ def import_pedidos(request):
                 # Fechar a conexão explicitamente
                 cursor.close()
                 connection.close()
+
+                Pedido.normalizar_status_envio_em_lote()
                 
                 # Registrar sucesso na auditoria
                 Auditoria.objects.create(
@@ -1550,8 +1557,8 @@ def atualizar_nf_pedidos(request=None):
                 obs=f"Atualização de Nota Fiscal do Pedido realizada com sucesso via SP_ATUALIZA_NF_PEDIDO. {rowcount} pedido(s) afetado(s)."
             )
 
-            pedidos = Pedido.objects.filter(tipo=3, sincronizado=True)
-            enviados, msg = PedidoService.enviar_dados(pedidos)
+            pedidos = Pedido.objects.filter(tipo=3, sincronizado='sim')
+            enviados, msg, resultados = PedidoService.enviar_dados(pedidos)
 
             if enviados:
                 # Atualizar o tipo para null nos pedidos que foram enviados
