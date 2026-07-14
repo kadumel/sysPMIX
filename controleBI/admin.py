@@ -144,7 +144,7 @@ class PedidoAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Informações da Nota Fiscal', {
-            'fields': ('nf', 'chave_nfe', 'serie', 'tipo', 'ent_ou_serv','prioridade','sincronizado')
+            'fields': ('nf', 'chave_nfe', 'serie', 'tipo', 'ent_ou_serv', 'prioridade', 'sincronizado', 'data_envio', 'retorno')
         }),
         ('Informações do Pedido', {
             'fields': ('data_pedido','pedido_erp',  'vendedor_erp', 'forma_pgto', 'status', 'obs', 'num_ped_conf', 'carga')
@@ -183,13 +183,16 @@ class PedidoAdmin(admin.ModelAdmin):
     def enviar_pedidos_webservice(self, request, queryset):
         total = 0
         for pedido in queryset:
-            if not pedido.sincronizado:
-                sucesso, mensagem = PedidoService.enviar_dados([pedido])
+            if pedido.sincronizado == 'nao':
+                sucesso, mensagem, resultados = PedidoService.enviar_dados([pedido])
                 if sucesso:
-                    Pedido.objects.filter(pk=pedido.pk).update(sincronizado=True)
                     total += 1
                 else:
-                    self.message_user(request, f'Erro ao enviar {pedido.pedido_erp}: {mensagem}', level=messages.ERROR)
+                    self.message_user(
+                        request,
+                        f'Erro ao enviar {pedido.pedido_erp}: {mensagem}',
+                        level=messages.ERROR,
+                    )
         
         if total > 0:
             self.message_user(request, f'{total} pedido(s) enviado(s) com sucesso!', level=messages.SUCCESS)

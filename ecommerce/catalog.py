@@ -16,6 +16,8 @@ from ecommerce.models import ProdutoImagem
 PAGE_SIZE = 24
 BUSCA_MAX_LEN = 120
 ECOMMERCE_TZ = ZoneInfo('America/Sao_Paulo')
+TIPOS_LOJA_VALIDOS = frozenset({GrupoProduto.TipoLoja.MERCADORIA, GrupoProduto.TipoLoja.REVENDA})
+SESSION_CATALOG_TIPO_KEY = 'ecommerce_catalog_tipo_loja'
 
 
 def normalizar_codtab(codtab) -> int | None:
@@ -217,28 +219,48 @@ def codigos_grupo_com_produtos_precificados(
 
 
 def grupo_tem_produtos_precificados(
-    codigo_grupo: int, codigos_grupo_com_produtos: set[int], by_pai: dict
+    codigo_grupo: int,
+    codigos_grupo_com_produtos: set[int],
+    by_pai: dict,
+    *,
+    by_pai_hierarquia: dict | None = None,
 ) -> bool:
-    """True se o grupo ou algum descendente tem produto com preço na tabela do cliente."""
+    """True se o grupo ou algum descendente tem produto com preço na tabela do cliente.
+
+    by_pai_hierarquia: mapa pai→filhos com todos os grupos ativos (Sankhya). Use quando a
+    navegação da loja lista só categorias visíveis, mas o filtro deve incluir produtos de
+    filhos não exibidos no menu.
+    """
     if not codigos_grupo_com_produtos:
         return False
+    hier = by_pai_hierarquia if by_pai_hierarquia is not None else by_pai
     return bool(
-        codigos_grupo_e_descendentes(codigo_grupo, by_pai) & codigos_grupo_com_produtos
+        codigos_grupo_e_descendentes(codigo_grupo, hier) & codigos_grupo_com_produtos
     )
 
 
 def filtrar_arvore_grupos_com_produtos_precificados(
-    arvore: list[dict], codigos_grupo_com_produtos: set[int], by_pai: dict
+    arvore: list[dict],
+    codigos_grupo_com_produtos: set[int],
+    by_pai: dict,
+    *,
+    by_pai_hierarquia: dict | None = None,
 ) -> list[dict]:
     out: list[dict] = []
     for node in arvore:
         g = node['grupo']
         if not grupo_tem_produtos_precificados(
-            g.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai
+            g.codigo_grupo_produto,
+            codigos_grupo_com_produtos,
+            by_pai,
+            by_pai_hierarquia=by_pai_hierarquia,
         ):
             continue
         filhos_f = filtrar_arvore_grupos_com_produtos_precificados(
-            node['filhos'], codigos_grupo_com_produtos, by_pai
+            node['filhos'],
+            codigos_grupo_com_produtos,
+            by_pai,
+            by_pai_hierarquia=by_pai_hierarquia,
         )
         out.append({'grupo': g, 'filhos': filhos_f})
     return out
@@ -248,11 +270,18 @@ def grupos_flat_com_produtos_precificados(
     raizes: list[GrupoProduto],
     by_pai: dict,
     codigos_grupo_com_produtos: set[int],
+    *,
+    by_pai_hierarquia: dict | None = None,
 ) -> list[tuple[GrupoProduto, int]]:
     return [
         (g, depth)
         for g, depth in grupos_flat_indent(raizes, by_pai)
-        if grupo_tem_produtos_precificados(g.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai)
+        if grupo_tem_produtos_precificados(
+            g.codigo_grupo_produto,
+            codigos_grupo_com_produtos,
+            by_pai,
+            by_pai_hierarquia=by_pai_hierarquia,
+        )
     ]
 
 
@@ -262,6 +291,8 @@ def produtos_queryset(
     by_pai: dict,
     codigos_grupo_permitidos: set[int],
     codtab: int | None = None,
+    *,
+    by_pai_hierarquia: dict | None = None,
 ) -> QuerySet[Produto]:
     """Produtos ativos nas categorias da loja, com preço > 0 na tabela do cliente."""
     qs = Produto.objects.filter(ativo=True).order_by('nome', 'codigo_produto')
@@ -273,7 +304,8 @@ def produtos_queryset(
         return qs
     if codigo_grupo not in by_id:
         return qs.none()
-    codigos = codigos_grupo_e_descendentes(codigo_grupo, by_pai)
+    hier = by_pai_hierarquia if by_pai_hierarquia is not None else by_pai
+    codigos = codigos_grupo_e_descendentes(codigo_grupo, hier)
     codigos &= codigos_grupo_permitidos
     if not codigos:
         return qs.none()
@@ -287,6 +319,185 @@ def parse_grupo_get(value: str | None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def parse_tipos_loja_get(values: list[str] | None) -> set[str]:
+    """Tipos Mercadoria/Revenda explícitos na query string (sem aplicar padrão)."""
+    if not values:
+        return set()
+    out: set[str] = set()
+    for raw in values:
+        v = (raw or '').strip().lower()
+        if v in TIPOS_LOJA_VALIDOS:
+            out.add(v)
+    return out
+
+
+def tipo_loja_padrao() -> str:
+    return GrupoProduto.TipoLoja.MERCADORIA
+
+
+def _tipo_loja_de_querydict(qd) -> str | None:
+    if qd is None:
+        return None
+    for raw in qd.getlist('tipo'):
+        v = (raw or '').strip().lower()
+        if v in TIPOS_LOJA_VALIDOS:
+            return v
+    return None
+
+
+def salvar_catalog_tipo_sessao(request, tipo: str) -> None:
+    if tipo in TIPOS_LOJA_VALIDOS:
+        request.session[SESSION_CATALOG_TIPO_KEY] = tipo
+        request.session.modified = True
+
+
+def tipo_loja_ativo_from_request(request) -> str:
+    """Tipo do catálogo: GET, POST (ex.: adicionar ao carrinho), sessão ou mercadoria."""
+    for qd in (request.GET, request.POST):
+        t = _tipo_loja_de_querydict(qd)
+        if t:
+            return t
+    stored = request.session.get(SESSION_CATALOG_TIPO_KEY)
+    if stored in TIPOS_LOJA_VALIDOS:
+        return stored
+    return tipo_loja_padrao()
+
+
+def sincronizar_catalog_tipo_sessao(request) -> str:
+    """Persiste o tipo ativo na sessão (exceto quando o carrinho trava o tipo)."""
+    from .cart_session import cart_tipo_loja_bloqueado
+
+    tipo = tipo_loja_ativo_efetivo(request)
+    if not cart_tipo_loja_bloqueado(request):
+        salvar_catalog_tipo_sessao(request, tipo)
+    return tipo
+
+
+def tipo_loja_do_codigo_grupo(codigo_grupo: int | None) -> str | None:
+    if codigo_grupo is None:
+        return None
+    tipo = (
+        GrupoProduto.objects.filter(
+            ativo=True,
+            codigo_grupo_produto=codigo_grupo,
+        )
+        .values_list('tipo_loja', flat=True)
+        .first()
+    )
+    if tipo in TIPOS_LOJA_VALIDOS:
+        return tipo
+    return None
+
+
+def tipo_loja_do_produto(produto: Produto) -> str | None:
+    return tipo_loja_do_codigo_grupo(produto.codigo_grupo_produto)
+
+
+def infer_tipo_loja_carrinho(request) -> str | None:
+    """Infere o tipo a partir dos grupos dos produtos no carrinho (carrinhos antigos sem sessão)."""
+    from .cart_session import get_cart
+
+    cart = get_cart(request)
+    codigos = []
+    for item in cart:
+        try:
+            codigos.append(int(item.get('codigo_produto')))
+        except (TypeError, ValueError):
+            continue
+    if not codigos:
+        return None
+    grupos = set(
+        filter(
+            None,
+            Produto.objects.filter(codigo_produto__in=codigos).values_list(
+                'codigo_grupo_produto', flat=True
+            ),
+        )
+    )
+    if not grupos:
+        return tipo_loja_padrao()
+    tipos = set(
+        GrupoProduto.objects.filter(
+            codigo_grupo_produto__in=grupos,
+            tipo_loja__in=TIPOS_LOJA_VALIDOS,
+        ).values_list('tipo_loja', flat=True)
+    )
+    if len(tipos) == 1:
+        return next(iter(tipos))
+    return tipo_loja_padrao()
+
+
+def tipo_loja_ativo_efetivo(request) -> str:
+    """Tipo usado no catálogo: trava no do carrinho enquanto houver itens."""
+    from .cart_session import cart_line_count, get_cart_tipo_loja, lock_cart_tipo_loja
+
+    if cart_line_count(request) > 0:
+        locked = get_cart_tipo_loja(request)
+        if not locked:
+            locked = infer_tipo_loja_carrinho(request)
+            if locked:
+                lock_cart_tipo_loja(request, locked)
+        if locked:
+            return locked
+    return tipo_loja_ativo_from_request(request)
+
+
+def validar_e_adicionar_ao_carrinho(
+    request,
+    produto: Produto,
+    qty: float,
+    nome: str | None = None,
+    *,
+    tipo_catalogo: str | None = None,
+) -> tuple[bool, str]:
+    """Valida tipo Mercadoria/Revenda e adiciona ao carrinho. Retorna (ok, mensagem_erro)."""
+    from .cart_session import (
+        add_product,
+        cart_line_count,
+        get_cart_tipo_loja,
+        lock_cart_tipo_loja,
+    )
+
+    tipo_ativo = tipo_loja_ativo_efetivo(request)
+    if tipo_catalogo in TIPOS_LOJA_VALIDOS and not cart_line_count(request):
+        tipo_ativo = tipo_catalogo
+    tipo_produto = tipo_loja_do_produto(produto)
+    if not tipo_produto:
+        return False, 'Este produto não possui tipo configurado (Mercadoria ou Revenda).'
+
+    if tipo_produto != tipo_ativo:
+        label = 'Revenda' if tipo_produto == GrupoProduto.TipoLoja.REVENDA else 'Mercadoria'
+        ativo = 'Revenda' if tipo_ativo == GrupoProduto.TipoLoja.REVENDA else 'Mercadoria'
+        return False, f'Este produto é de {label}, mas o catálogo está em modo {ativo}.'
+
+    cart_tipo = get_cart_tipo_loja(request)
+    if cart_tipo and cart_tipo != tipo_produto:
+        return False, 'Não é possível misturar Mercadoria e Revenda no mesmo carrinho.'
+
+    if not cart_line_count(request):
+        lock_cart_tipo_loja(request, tipo_ativo)
+
+    rotulo = nome or (produto.nome or '').strip() or f'Cód. {produto.codigo_produto}'
+    add_product(request, produto.codigo_produto, rotulo, qty=qty)
+    salvar_catalog_tipo_sessao(request, tipo_ativo)
+    return True, ''
+
+
+def codigos_grupo_filtrados_tipo_loja(
+    codigos: set[int],
+    tipos_loja: set[str],
+    by_id: dict[int, GrupoProduto],
+) -> set[int]:
+    """Restringe códigos de grupo aos tipos Mercadoria/Revenda configurados."""
+    if not tipos_loja:
+        return codigos
+    return {
+        c
+        for c in codigos
+        if (g := by_id.get(c)) is not None and g.tipo_loja in tipos_loja
+    }
 
 
 def normalizar_busca(value: str | None) -> str:

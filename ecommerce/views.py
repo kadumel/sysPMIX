@@ -1,3 +1,6 @@
+from datetime import date
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
@@ -13,7 +16,6 @@ from controleBI.models import PERFIS_PAINEL_BI_LOJA, UsuarioClienteSankhya
 from . import catalog
 from .cart_session import (
     adjust_product_quantity,
-    add_product,
     cart_line_count,
     cart_total_units,
     clear_cart,
@@ -131,7 +133,13 @@ def _render_cart_snapshots_html(request) -> dict[str, str]:
 
 def index(request):
     by_id, by_pai, raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
+    by_id_full, by_pai_hierarquia, _ = catalog.grupos_ativos_map(apenas_visiveis_loja=False)
+    tipo_efetivo = catalog.sincronizar_catalog_tipo_sessao(request)
+    tipos_loja = {tipo_efetivo}
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_grupo_loja = catalog.codigos_grupo_filtrados_tipo_loja(
+        codigos_grupo_loja, tipos_loja, by_id_full
+    )
     codtab_cliente = catalog.get_cliente_codtab(request)
     codigos_grupo_com_produtos = catalog.codigos_grupo_com_produtos_precificados(
         codtab_cliente, codigos_grupo_loja
@@ -140,14 +148,21 @@ def index(request):
         catalog.arvore_grupos_nested(raizes, by_pai),
         codigos_grupo_com_produtos,
         by_pai,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     grupos_flat = catalog.grupos_flat_com_produtos_precificados(
-        raizes, by_pai, codigos_grupo_com_produtos
+        raizes,
+        by_pai,
+        codigos_grupo_com_produtos,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     grupo_atual = by_id.get(grupo_id) if grupo_id is not None else None
     if grupo_atual and not catalog.grupo_tem_produtos_precificados(
-        grupo_atual.codigo_grupo_produto, codigos_grupo_com_produtos, by_pai
+        grupo_atual.codigo_grupo_produto,
+        codigos_grupo_com_produtos,
+        by_pai,
+        by_pai_hierarquia=by_pai_hierarquia,
     ):
         grupo_atual = None
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
@@ -158,6 +173,7 @@ def index(request):
         by_pai,
         codigos_grupo_loja,
         codtab_cliente,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
@@ -180,6 +196,8 @@ def index(request):
         'produtos': page,
         'paginator': paginator,
         'codtab_cliente': codtab_cliente,
+        'tipos_loja_ativos': tipos_loja,
+        'tipo_loja_ativo': tipo_efetivo,
     }
     return render(request, 'ecommerce/index.html', context)
 
@@ -187,12 +205,23 @@ def index(request):
 def partial_destaque(request):
     """Mais produtos (mesmo filtro de grupo e busca), próxima página após a primeira."""
     by_id, by_pai, _raizes = catalog.grupos_ativos_map(apenas_visiveis_loja=True)
+    by_id_full, by_pai_hierarquia, _ = catalog.grupos_ativos_map(apenas_visiveis_loja=False)
+    catalog.sincronizar_catalog_tipo_sessao(request)
+    tipos_loja = {catalog.tipo_loja_ativo_efetivo(request)}
     codigos_grupo_loja = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_grupo_loja = catalog.codigos_grupo_filtrados_tipo_loja(
+        codigos_grupo_loja, tipos_loja, by_id_full
+    )
     codtab_cliente = catalog.get_cliente_codtab(request)
     grupo_id = catalog.parse_grupo_get(request.GET.get('grupo'))
     termo_busca = catalog.normalizar_busca(request.GET.get('q'))
     qs = catalog.produtos_queryset(
-        grupo_id, by_id, by_pai, codigos_grupo_loja, codtab_cliente
+        grupo_id,
+        by_id,
+        by_pai,
+        codigos_grupo_loja,
+        codtab_cliente,
+        by_pai_hierarquia=by_pai_hierarquia,
     )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
@@ -261,13 +290,19 @@ def add_to_cart(request):
     raw_qty = request.POST.get('qty', '1')
     qty = parse_quantity(raw_qty)
     if qty is None:
-        err = 'Quantidade inválida. Use um número maior que zero (ex.: 1,5 ou 0,25 para kg).'
+        err = 'Quantidade inválida. Informe um número inteiro maior que zero (ex.: 1, 2, 10).'
         if wants_json:
             return json_err(err)
         messages.warning(request, err)
         return redirect(next_url)
 
-    add_product(request, produto.codigo_produto, nome, qty=qty)
+    ok, err = catalog.validar_e_adicionar_ao_carrinho(request, produto, qty=qty, nome=nome)
+    if not ok:
+        if wants_json:
+            return json_err(err, status=403)
+        messages.warning(request, err)
+        return redirect(next_url)
+
     qty_txt = format_qty_display(qty)
 
     if wants_json:
@@ -329,11 +364,34 @@ def _safe_ecommerce_redirect_path(url: str | None, default: str = '/ecommerce/no
     return default
 
 
+def _pedidos_list_query(request, *, ordem=None, dir_param=None, data_ini=None, data_fim=None, status=None):
+    params = {}
+    for key, value in (
+        ('data_ini', data_ini if data_ini is not None else request.GET.get('data_ini', '')),
+        ('data_fim', data_fim if data_fim is not None else request.GET.get('data_fim', '')),
+        ('status', status if status is not None else request.GET.get('status', '')),
+        ('ordem', ordem if ordem is not None else request.GET.get('ordem', '')),
+        ('dir', dir_param if dir_param is not None else request.GET.get('dir', '')),
+    ):
+        value = (value or '').strip()
+        if value:
+            params[key] = value
+    return '?' + urlencode(params) if params else '?'
+
+
+def _pedidos_list_sort_link(request, column, ordem_atual, dir_atual):
+    if ordem_atual == column:
+        next_dir = 'desc' if dir_atual == 'asc' else 'asc'
+    else:
+        next_dir = 'asc'
+    return _pedidos_list_query(request, ordem=column, dir_param=next_dir)
+
+
 @login_required
 def pedidos_list(request):
     perfil = getattr(getattr(request.user, 'perfil_usuario', None), 'perfil', None)
     cliente_ctx = catalog.get_cliente_context(request)
-    pedidos = PedidoLoja.objects.select_related('cliente').prefetch_related('itens')
+    pedidos = PedidoLoja.objects.select_related('cliente')
     if perfil in PERFIS_PAINEL_BI_LOJA:
         if cliente_ctx:
             pedidos = pedidos.filter(cliente=cliente_ctx)
@@ -341,7 +399,75 @@ def pedidos_list(request):
             pedidos = PedidoLoja.objects.none()
     else:
         pedidos = pedidos.filter(user=request.user)
-    return render(request, 'ecommerce/pedidos_list.html', {'pedidos': pedidos})
+
+    data_ini = (request.GET.get('data_ini') or '').strip()
+    data_fim = (request.GET.get('data_fim') or '').strip()
+    status = (request.GET.get('status') or '').strip()
+    ordem = (request.GET.get('ordem') or '').strip()
+    dir_atual = (request.GET.get('dir') or '').strip().lower()
+
+    if status in {
+        PedidoLoja.Status.PENDENTE,
+        PedidoLoja.Status.AUTORIZADO,
+        PedidoLoja.Status.REJEITADO,
+    }:
+        pedidos = pedidos.filter(status=status)
+    else:
+        status = ''
+
+    if data_ini:
+        try:
+            pedidos = pedidos.filter(criado_em__date__gte=date.fromisoformat(data_ini))
+        except ValueError:
+            data_ini = ''
+    if data_fim:
+        try:
+            pedidos = pedidos.filter(criado_em__date__lte=date.fromisoformat(data_fim))
+        except ValueError:
+            data_fim = ''
+
+    sort_fields = {
+        'pedido': 'id',
+        'data': 'criado_em',
+        'valor_total': 'valor_total',
+    }
+    if ordem in sort_fields:
+        if dir_atual not in {'asc', 'desc'}:
+            dir_atual = 'asc'
+        order_field = sort_fields[ordem]
+        if dir_atual == 'desc':
+            order_field = f'-{order_field}'
+        pedidos = pedidos.order_by(order_field, '-id')
+    else:
+        ordem = ''
+        dir_atual = ''
+        pedidos = pedidos.order_by('-criado_em', '-id')
+
+    tem_filtros = bool(data_ini or data_fim or status)
+    return render(
+        request,
+        'ecommerce/pedidos_list.html',
+        {
+            'pedidos': pedidos,
+            'filtro_data_ini': data_ini,
+            'filtro_data_fim': data_fim,
+            'filtro_status': status,
+            'ordem_atual': ordem,
+            'dir_atual': dir_atual,
+            'tem_filtros': tem_filtros,
+            'sort_link_pedido': _pedidos_list_sort_link(request, 'pedido', ordem, dir_atual),
+            'sort_link_data': _pedidos_list_sort_link(request, 'data', ordem, dir_atual),
+            'sort_link_valor_total': _pedidos_list_sort_link(request, 'valor_total', ordem, dir_atual),
+            'limpar_filtros_url': _pedidos_list_query(
+                request,
+                data_ini='',
+                data_fim='',
+                status='',
+                ordem='',
+                dir_param='',
+            ),
+        },
+    )
 
 
 @login_required
@@ -390,13 +516,31 @@ def pedido_reenviar_carrinho(request, pk: int):
         messages.warning(request, 'Este pedido não possui itens para reenviar.')
         return redirect('ecommerce_pedido_detail', pk=pedido.pk)
 
+    primeiro = Produto.objects.filter(
+        codigo_produto=itens[0].codigo_produto, ativo=True
+    ).first()
+    tipo_reenvio = catalog.tipo_loja_do_produto(primeiro) if primeiro else None
+
     for item in itens:
-        add_product(
+        produto = Produto.objects.filter(codigo_produto=item.codigo_produto, ativo=True).first()
+        if not produto:
+            clear_cart(request)
+            messages.error(
+                request,
+                f'Produto {item.codigo_produto} não está mais disponível para reenviar ao carrinho.',
+            )
+            return redirect('ecommerce_pedido_detail', pk=pedido.pk)
+        ok, err = catalog.validar_e_adicionar_ao_carrinho(
             request,
-            codigo_produto=item.codigo_produto,
+            produto,
+            float(item.quantidade),
             nome=item.nome_produto,
-            qty=float(item.quantidade),
+            tipo_catalogo=tipo_reenvio,
         )
+        if not ok:
+            clear_cart(request)
+            messages.error(request, err)
+            return redirect('ecommerce_pedido_detail', pk=pedido.pk)
     messages.success(
         request,
         'Itens do pedido rejeitado enviados ao carrinho. Ajuste conforme a mensagem do comercial e finalize novamente.',
@@ -506,7 +650,12 @@ def checkout_analise_adicionar(request):
     qty = parse_quantity(request.POST.get('qty'))
     if qty is None:
         return JsonResponse({'ok': False, 'erro': 'Quantidade inválida.'}, status=400)
-    add_product(request, codigo, (produto.nome or '').strip(), qty)
+    ok, err = catalog.validar_e_adicionar_ao_carrinho(
+        request, produto, qty, nome=(produto.nome or '').strip()
+    )
+    if not ok:
+        return JsonResponse({'ok': False, 'erro': err}, status=403)
+
     remover_sugestao_do_snapshot(snapshot, codigo)
     request.session[SESSION_ANALISE_KEY] = snapshot
     request.session.modified = True

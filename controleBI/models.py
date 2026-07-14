@@ -324,7 +324,47 @@ class Pedido(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    sincronizado = models.BooleanField(default=False)
+    STATUS_ENVIO_NAO = 'nao'
+    STATUS_ENVIO_SIM = 'sim'
+    STATUS_ENVIO_ERRO = 'erro'
+    STATUS_ENVIO_CHOICES = [
+        (STATUS_ENVIO_NAO, 'Não'),
+        (STATUS_ENVIO_SIM, 'Sim'),
+        (STATUS_ENVIO_ERRO, 'Erro'),
+    ]
+    sincronizado = models.CharField(
+        'Status Envio',
+        max_length=10,
+        choices=STATUS_ENVIO_CHOICES,
+        default=STATUS_ENVIO_NAO,
+    )
+    data_envio = models.DateTimeField('Data de Envio', null=True, blank=True)
+    retorno = models.TextField('Retorno do Envio', null=True, blank=True)
+
+    @classmethod
+    def normalizar_valor_status_envio(cls, valor):
+        """Converte valores legados (0/1/boolean) para nao/sim/erro."""
+        if valor is None:
+            return cls.STATUS_ENVIO_NAO
+        valor_str = str(valor).strip().lower()
+        if valor_str in ('sim', '1', 'true'):
+            return cls.STATUS_ENVIO_SIM
+        if valor_str == cls.STATUS_ENVIO_ERRO:
+            return cls.STATUS_ENVIO_ERRO
+        return cls.STATUS_ENVIO_NAO
+
+    @classmethod
+    def normalizar_status_envio_em_lote(cls):
+        """Corrige valores legados gravados diretamente pelo banco (ex.: SP_PEDIDOS_SANKHYA)."""
+        cls.objects.filter(sincronizado__in=['0', 'False', 'false']).update(sincronizado=cls.STATUS_ENVIO_NAO)
+        cls.objects.filter(sincronizado__in=['1', 'True', 'true']).update(sincronizado=cls.STATUS_ENVIO_SIM)
+
+    @property
+    def status_envio_normalizado(self):
+        return self.normalizar_valor_status_envio(self.sincronizado)
+
+    def get_status_envio_display(self):
+        return dict(self.STATUS_ENVIO_CHOICES).get(self.status_envio_normalizado, 'Não')
     
     class Meta:
         verbose_name = 'Pedido'

@@ -1,15 +1,39 @@
 {% with g=node.grupo %}
 <tr>
-    <td class="align-middle" style="padding-left: calc({{ depth }} * 1.35rem + 0.75rem)">
-        <div class="form-check mb-0 py-1">
+    <td class="align-middle text-center">
+        <div class="form-check d-inline-block mb-0">
             <input class="form-check-input" type="checkbox" name="mostrar_ecommerce"
                    value="{{ g.codigo_grupo_produto }}"
                    id="grupo_{{ g.codigo_grupo_produto }}"
-                   {% if g.mostrar_no_ecommerce %}checked{% endif %}>
-            <label class="form-check-label" for="grupo_{{ g.codigo_grupo_produto }}">
-                <span class="fw-medium">{{ g.nome|default:"(sem nome)" }}</span>
-                <span class="text-muted small ms-1">#{{ g.codigo_grupo_produto }}</span>
-            </label>
+                   {% if g.mostrar_no_ecommerce %}checked{% endif %}
+                   aria-label="Mostrar {{ g.nome|default:'categoria' }} na loja">
+        </div>
+    </td>
+    <td class="align-middle" style="padding-left: calc({{ depth }} * 1.35rem + 0.25rem)">
+        <label class="mb-0 py-1" for="grupo_{{ g.codigo_grupo_produto }}">
+            <span class="fw-medium">{{ g.nome|default:"(sem nome)" }}</span>
+            <span class="text-muted small ms-1">#{{ g.codigo_grupo_produto }}</span>
+        </label>
+        <input type="hidden" name="tipo_loja_{{ g.codigo_grupo_produto }}" value="{{ g.tipo_loja|default:'' }}" class="tipo-loja-hidden" data-grupo="{{ g.codigo_grupo_produto }}">
+    </td>
+    <td class="align-middle text-center">
+        <div class="form-check d-inline-block mb-0">
+            <input class="form-check-input tipo-loja-check" type="checkbox"
+                   data-grupo="{{ g.codigo_grupo_produto }}"
+                   data-tipo="mercadoria"
+                   id="tipo_merc_{{ g.codigo_grupo_produto }}"
+                   {% if g.tipo_loja == 'mercadoria' %}checked{% endif %}
+                   aria-label="Mercadoria — {{ g.nome|default:'categoria' }}">
+        </div>
+    </td>
+    <td class="align-middle text-center">
+        <div class="form-check d-inline-block mb-0">
+            <input class="form-check-input tipo-loja-check" type="checkbox"
+                   data-grupo="{{ g.codigo_grupo_produto }}"
+                   data-tipo="revenda"
+                   id="tipo_rev_{{ g.codigo_grupo_produto }}"
+                   {% if g.tipo_loja == 'revenda' %}checked{% endif %}
+                   aria-label="Revenda — {{ g.nome|default:'categoria' }}">
         </div>
     </td>
 </tr>

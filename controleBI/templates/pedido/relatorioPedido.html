@@ -40,11 +40,12 @@
                     </select>
                 </div>
                 <div class="col-md-2">
-                    <label for="sincronizado" class="form-label">Sincronizado</label>
+                    <label for="sincronizado" class="form-label">Enviado</label>
                     <select class="form-select" id="sincronizado" name="sincronizado">
                         <option value="">Todos</option>
-                        <option value="True" {% if request.GET.sincronizado == 'True' %}selected{% endif %}>Sim</option>
-                        <option value="False" {% if request.GET.sincronizado == 'False' %}selected{% endif %}>Não</option>
+                        <option value="sim" {% if request.GET.sincronizado == 'sim' %}selected{% endif %}>Sim</option>
+                        <option value="nao" {% if request.GET.sincronizado == 'nao' %}selected{% endif %}>Não</option>
+                        <option value="erro" {% if request.GET.sincronizado == 'erro' %}selected{% endif %}>Erro</option>
                     </select>
                 </div>
                 <div class="col-12 d-flex justify-content-end gap-2">
@@ -145,8 +146,8 @@
                             <td>R$ {{ pedido.valor|floatformat:2 }}</td>
                             <td>{{ pedido.peso|floatformat:2 }} kg</td>
                             <td>
-                                <span class="badge {% if pedido.sincronizado %}bg-success{% else %}bg-danger{% endif %}">
-                                    {{ pedido.sincronizado|yesno:"Sim,Não" }}
+                                <span class="badge {% if pedido.status_envio_normalizado == 'sim' %}bg-success{% elif pedido.status_envio_normalizado == 'erro' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+                                    {{ pedido.get_status_envio_display }}
                                 </span>
                             </td>
                         </tr>

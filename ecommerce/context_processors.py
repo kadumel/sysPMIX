@@ -2,8 +2,9 @@ from controleBI.models import PERFIS_PAINEL_BI_LOJA, UsuarioClienteSankhya
 from django.urls import reverse
 
 from . import catalog
-from .cart_session import cart_line_count, cart_total_units, format_qty_display
+from .cart_session import cart_line_count, cart_total_units, cart_tipo_loja_bloqueado, format_qty_display
 from .models import NotificacaoLoja
+from api_sankhya.models import GrupoProduto
 
 
 def ecommerce_nav(request):
@@ -13,6 +14,10 @@ def ecommerce_nav(request):
         'ecommerce_cart_units': units,
         'ecommerce_cart_units_label': format_qty_display(units),
         'ecommerce_busca': catalog.normalizar_busca(request.GET.get('q')),
+        'ecommerce_tipo_loja_ativo': catalog.tipo_loja_ativo_efetivo(request),
+        'ecommerce_tipo_loja_bloqueado': cart_tipo_loja_bloqueado(request),
+        'ecommerce_tipo_mercadoria': GrupoProduto.TipoLoja.MERCADORIA,
+        'ecommerce_tipo_revenda': GrupoProduto.TipoLoja.REVENDA,
         'ecommerce_cliente_nome': None,
         'ecommerce_usuario_exibicao': None,
         'ecommerce_notificacoes_nao_lidas': 0,

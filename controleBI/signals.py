@@ -32,12 +32,9 @@ def enviar_dados_veiculo_ao_salvar(sender, instance, created, **kwargs):
 
 @receiver(post_save, sender=Pedido)
 def enviar_dados_pedido_ao_salvar(sender, instance, created, **kwargs):
-    if not instance.sincronizado:  # Só envia se ainda não foi sincronizado
-        print(100*'*','\n', instance, '\n', '*'*100)
-        sucesso, mensagem = PedidoService.enviar_dados([instance])
-        instance.sincronizado = True
-        Pedido.objects.filter(id=instance.id).update(sincronizado=True)
-        if not sucesso:
-            print(f"Erro ao sincronizar pedido {instance.pedido_erp}: {mensagem}")
-    else:
-        print(f"Pedido {instance.pedido_erp} não sincronizado por coluna 'sincronizado' estar como TRUES")
+    if instance.status_envio_normalizado != Pedido.STATUS_ENVIO_NAO:
+        return
+
+    sucesso, mensagem, resultados = PedidoService.enviar_dados([instance])
+    if not sucesso:
+        print(f"Erro ao sincronizar pedido {instance.pedido_erp}: {mensagem}")

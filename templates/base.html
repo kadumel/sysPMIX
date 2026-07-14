@@ -14,7 +14,7 @@
             --primary-color: #004A8D;    /* Azul Pannemix */
             --secondary-color: #F7941D;   /* Laranja Pannemix */
             --sidebar-width: 250px;
-            --navbar-height: 60px;
+            --navbar-height: 64px;
         }
 
         /* Layout principal: evitar z-index aqui — o backdrop do modal fica no body (1050) e
@@ -186,7 +186,7 @@
         /* Logo Styles */
         .logo-container {
             background-color: white;
-            padding: 5px;
+            padding: 4px;
             border-radius: 5px;
             border: 2px solid var(--secondary-color);
             display: flex;
@@ -195,7 +195,7 @@
         }
 
         .logo-container img {
-            max-height: 40px;
+            max-height: 52px;
             width: auto;
         }
 
@@ -240,10 +240,7 @@
             </button>
             <a class="navbar-brand ms-2" href="#">
                 <div class="logo-container">
-                    <picture>
-                        <source srcset="{% static 'img/logo.png.avif' %}" type="image/avif">
-                        <img src="{% static 'img/logo.png' %}" alt="Pannemix" loading="lazy">
-                    </picture>
+                    <img src="{% static 'img/LogoNovaSemFundo.png' %}" alt="Pannemix" loading="lazy">
                 </div>
                 
             </a>

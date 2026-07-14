@@ -1,4 +1,5 @@
 {% extends "ecommerce/base.html" %}
+{% load ecommerce_catalog %}
 
 {% block title %}Início — Loja Pannemix{% endblock %}
 
@@ -87,10 +88,10 @@
 
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb mb-0">
-            <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}{% if ecommerce_busca %}?q={{ ecommerce_busca|urlencode }}{% endif %}">Todas as categorias</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs %}">Todas as categorias</a></li>
             {% for g in grupo_ancestrais %}
                 {% if not forloop.last %}
-                <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}?grupo={{ g.codigo_grupo_produto }}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">{{ g.nome }}</a></li>
+                <li class="breadcrumb-item"><a href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs grupo=g.codigo_grupo_produto %}">{{ g.nome }}</a></li>
                 {% else %}
                 <li class="breadcrumb-item active" aria-current="page">{{ g.nome }}</li>
                 {% endif %}
@@ -102,6 +103,43 @@
         <aside class="col-lg-3">
             <div class="card mb-4">
                 <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-sliders me-2" style="color: var(--secondary-color);"></i>
+                    <span class="fw-semibold">Tipo</span>
+                </div>
+                <div class="card-body py-3">
+                    <form method="get" id="ecommerce-tipo-form">
+                        {% if grupo_atual %}
+                        <input type="hidden" name="grupo" value="{{ grupo_atual.codigo_grupo_produto }}">
+                        {% endif %}
+                        {% if ecommerce_busca %}
+                        <input type="hidden" name="q" value="{{ ecommerce_busca }}">
+                        {% endif %}
+                        {% if ecommerce_tipo_loja_bloqueado %}
+                        <p class="small text-muted mb-2">
+                            Tipo fixo enquanto houver itens no carrinho. Esvazie o carrinho ou finalize o pedido para alterar.
+                        </p>
+                        {% endif %}
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="tipo" value="{{ ecommerce_tipo_mercadoria }}"
+                                   id="tipo-loja-mercadoria"
+                                   {% if ecommerce_tipo_loja_ativo == ecommerce_tipo_mercadoria %}checked{% endif %}
+                                   {% if ecommerce_tipo_loja_bloqueado %}disabled{% endif %}
+                                   onchange="this.form.submit()">
+                            <label class="form-check-label{% if ecommerce_tipo_loja_bloqueado %} text-muted{% endif %}" for="tipo-loja-mercadoria">Mercadoria</label>
+                        </div>
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="radio" name="tipo" value="{{ ecommerce_tipo_revenda }}"
+                                   id="tipo-loja-revenda"
+                                   {% if ecommerce_tipo_loja_ativo == ecommerce_tipo_revenda %}checked{% endif %}
+                                   {% if ecommerce_tipo_loja_bloqueado %}disabled{% endif %}
+                                   onchange="this.form.submit()">
+                            <label class="form-check-label{% if ecommerce_tipo_loja_bloqueado %} text-muted{% endif %}" for="tipo-loja-revenda">Revenda</label>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <div class="card mb-4">
+                <div class="card-header d-flex align-items-center">
                     <i class="bi bi-folder2-open me-2" style="color: var(--secondary-color);"></i>
                     <span class="fw-semibold">Categorias</span>
                 </div>
@@ -110,6 +148,7 @@
                         {% if ecommerce_busca %}
                         <input type="hidden" name="q" value="{{ ecommerce_busca }}">
                         {% endif %}
+                        <input type="hidden" name="tipo" value="{{ ecommerce_tipo_loja_ativo }}">
                         <label for="grupo-select" class="form-label small text-muted mb-1">Grupo</label>
                         <select id="grupo-select" name="grupo" class="form-select form-select-sm" onchange="this.form.submit()">
                             <option value="">Todas</option>
@@ -120,7 +159,7 @@
                     </form>
                     <ul class="ecommerce-grupo-tree list-unstyled mb-0 d-none d-lg-block small">
                         <li class="mb-2">
-                            <a href="{% url 'ecommerce_home' %}{% if ecommerce_busca %}?q={{ ecommerce_busca|urlencode }}{% endif %}" class="text-decoration-none {% if not grupo_atual %}fw-bold{% else %}text-muted{% endif %}">Todas</a>
+                            <a href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs %}" class="text-decoration-none {% if not grupo_atual %}fw-bold{% else %}text-muted{% endif %}">Todas</a>
                         </li>
                         {% for branch in arvore_grupos %}
                             {% include "ecommerce/partials/grupo_branch.html" %}
@@ -137,6 +176,7 @@
                         {% if grupo_atual %}
                         <input type="hidden" name="grupo" value="{{ grupo_atual.codigo_grupo_produto }}">
                         {% endif %}
+                        <input type="hidden" name="tipo" value="{{ ecommerce_tipo_loja_ativo }}">
                         <div class="col">
                             <label for="catalogBusca" class="form-label small text-muted mb-1">Buscar no catálogo</label>
                             <input type="search" id="catalogBusca" name="q" class="form-control" placeholder="Nome, referência, código…" value="{{ ecommerce_busca }}" maxlength="120" autocomplete="off">
@@ -144,7 +184,7 @@
                         <div class="col-auto d-flex flex-wrap gap-1">
                             <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>Buscar</button>
                             {% if ecommerce_busca %}
-                            <a href="{% url 'ecommerce_home' %}{% if grupo_atual %}?grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}" class="btn btn-outline-secondary">Limpar</a>
+                            <a href="{% url 'ecommerce_home' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto q='' %}{% else %}{% ecommerce_catalog_qs q='' %}{% endif %}" class="btn btn-outline-secondary">Limpar</a>
                             {% endif %}
                         </div>
                     </form>
@@ -173,11 +213,11 @@
             {% if produtos.paginator.num_pages > 1 %}
             <div class="btn-group mt-4" role="group" aria-label="Paginação">
                 {% if produtos.has_previous %}
-                <a class="btn btn-outline-primary" href="?page={{ produtos.previous_page_number }}{% if grupo_atual %}&grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">Anterior</a>
+                <a class="btn btn-outline-primary" href="{% url 'ecommerce_home' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto page=produtos.previous_page_number %}{% else %}{% ecommerce_catalog_qs page=produtos.previous_page_number %}{% endif %}">Anterior</a>
                 {% endif %}
                 <button type="button" class="btn btn-primary disabled" disabled>{{ produtos.number }} / {{ produtos.paginator.num_pages }}</button>
                 {% if produtos.has_next %}
-                <a class="btn btn-outline-primary" href="?page={{ produtos.next_page_number }}{% if grupo_atual %}&grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if ecommerce_busca %}&q={{ ecommerce_busca|urlencode }}{% endif %}">Próxima</a>
+                <a class="btn btn-outline-primary" href="{% url 'ecommerce_home' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto page=produtos.next_page_number %}{% else %}{% ecommerce_catalog_qs page=produtos.next_page_number %}{% endif %}">Próxima</a>
                 {% endif %}
             </div>
             {% endif %}
@@ -187,7 +227,7 @@
                 <button
                     type="button"
                     class="btn btn-outline-secondary"
-                    hx-get="{% url 'ecommerce_htmx_destaque' %}{% if grupo_atual or ecommerce_busca %}?{% endif %}{% if grupo_atual %}grupo={{ grupo_atual.codigo_grupo_produto }}{% endif %}{% if grupo_atual and ecommerce_busca %}&{% endif %}{% if ecommerce_busca %}q={{ ecommerce_busca|urlencode }}{% endif %}"
+                    hx-get="{% url 'ecommerce_htmx_destaque' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto %}{% else %}{% ecommerce_catalog_qs %}{% endif %}"
                     hx-target="#destaque-htmx"
                     hx-swap="innerHTML"
                 >

@@ -7,13 +7,67 @@
         <h1 class="h3 mb-3"><i class="bi bi-receipt me-2" style="color: var(--secondary-color);"></i>Meus pedidos</h1>
         <p class="text-muted small mb-4">Acompanhe o status de cada pedido. Pedidos novos ficam pendentes até o comercial analisar e autorizar.</p>
 
+        <form method="get" class="card border-0 shadow-sm mb-4">
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1" for="filtroDataIni">Data inicial</label>
+                        <input type="date" class="form-control form-control-sm" id="filtroDataIni" name="data_ini" value="{{ filtro_data_ini }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1" for="filtroDataFim">Data final</label>
+                        <input type="date" class="form-control form-control-sm" id="filtroDataFim" name="data_fim" value="{{ filtro_data_fim }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small mb-1" for="filtroStatus">Status</label>
+                        <select class="form-select form-select-sm" id="filtroStatus" name="status">
+                            <option value="">Todos</option>
+                            <option value="pendente" {% if filtro_status == 'pendente' %}selected{% endif %}>Pendente</option>
+                            <option value="autorizado" {% if filtro_status == 'autorizado' %}selected{% endif %}>Autorizado</option>
+                            <option value="rejeitado" {% if filtro_status == 'rejeitado' %}selected{% endif %}>Rejeitado</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex gap-2">
+                        {% if ordem_atual %}<input type="hidden" name="ordem" value="{{ ordem_atual }}">{% endif %}
+                        {% if dir_atual %}<input type="hidden" name="dir" value="{{ dir_atual }}">{% endif %}
+                        <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-funnel me-1"></i>Filtrar</button>
+                        {% if tem_filtros or ordem_atual %}
+                        <a href="{{ limpar_filtros_url }}" class="btn btn-outline-secondary btn-sm">Limpar</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </form>
+
         {% if pedidos %}
         <div class="table-responsive card ecommerce-cart-card border-0 shadow-sm">
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>Pedido</th>
-                        <th>Data</th>
+                        <th>
+                            <a href="{{ sort_link_pedido }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                                Pedido
+                                {% if ordem_atual == 'pedido' %}
+                                <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ sort_link_data }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                                Data
+                                {% if ordem_atual == 'data' %}
+                                <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
+                                {% endif %}
+                            </a>
+                        </th>
+                        <th>
+                            <a href="{{ sort_link_valor_total }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                                Valor total
+                                {% if ordem_atual == 'valor_total' %}
+                                <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
+                                {% endif %}
+                            </a>
+                        </th>
                         <th>Status</th>
                         <th>Pedido Sankhya</th>
                         <th></th>
@@ -24,6 +78,7 @@
                     <tr>
                         <td class="fw-medium">#{{ p.pk }}</td>
                         <td class="small text-muted">{{ p.criado_em|date:"d/m/Y H:i" }}</td>
+                        <td class="small fw-semibold">R$ {{ p.valor_total|floatformat:2 }}</td>
                         <td>
                             {% if p.status == 'pendente' %}
                             <span class="badge text-bg-warning text-dark">Pendente</span>
@@ -56,8 +111,13 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body text-center py-5 text-muted">
                 <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                {% if tem_filtros %}
+                <p class="mb-0">Nenhum pedido encontrado com os filtros selecionados.</p>
+                <a href="{{ limpar_filtros_url }}" class="btn btn-outline-secondary btn-sm mt-3">Limpar filtros</a>
+                {% else %}
                 <p class="mb-0">Você ainda não possui pedidos.</p>
                 <a href="{% url 'ecommerce_home' %}#catalogo" class="btn btn-primary btn-sm mt-3">Ir ao catálogo</a>
+                {% endif %}
             </div>
         </div>
         {% endif %}

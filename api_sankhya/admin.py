@@ -323,9 +323,10 @@ class GrupoProdutoAdmin(admin.ModelAdmin):
         'analitico',
         'ativo',
         'mostrar_no_ecommerce',
+        'tipo_loja',
         'updated_at',
     )
-    list_filter = ('ativo', 'analitico', 'mostrar_no_ecommerce', 'grau', 'grupo_icms')
+    list_filter = ('ativo', 'analitico', 'mostrar_no_ecommerce', 'tipo_loja', 'grau', 'grupo_icms')
     search_fields = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
@@ -335,7 +336,7 @@ class GrupoProdutoAdmin(admin.ModelAdmin):
             'fields': ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau')
         }),
         ('Configurações', {
-            'fields': ('grupo_icms', 'analitico', 'ativo', 'mostrar_no_ecommerce')
+            'fields': ('grupo_icms', 'analitico', 'ativo', 'mostrar_no_ecommerce', 'tipo_loja')
         }),
         ('Auditoria', {
             'fields': ('created_at', 'updated_at'),

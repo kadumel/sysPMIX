@@ -416,6 +416,10 @@ class GrupoProduto(models.Model):
     """
     Modelo para armazenar dados de grupos de produtos da API Sankhya
     """
+    class TipoLoja(models.TextChoices):
+        MERCADORIA = 'mercadoria', 'Mercadoria'
+        REVENDA = 'revenda', 'Revenda'
+
     codigo_grupo_produto = models.IntegerField(unique=True, verbose_name="Código do Grupo Produto")
     nome = models.CharField(max_length=200, verbose_name="Nome")
     codigo_grupo_produto_pai = models.IntegerField(null=True, blank=True, verbose_name="Código Grupo Produto Pai")
@@ -427,6 +431,14 @@ class GrupoProduto(models.Model):
         default=False,
         verbose_name='Mostrar no e-commerce',
         help_text='Se marcado, a categoria aparece na navegação da loja (respeitando a hierarquia).',
+    )
+    tipo_loja = models.CharField(
+        max_length=20,
+        choices=TipoLoja.choices,
+        blank=True,
+        default='',
+        verbose_name='Tipo na loja',
+        help_text='Classificação Mercadoria ou Revenda para filtro no e-commerce.',
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
@@ -443,6 +455,7 @@ class GrupoProduto(models.Model):
             models.Index(fields=['ativo']),
             models.Index(fields=['grupo_icms']),
             models.Index(fields=['ativo', 'mostrar_no_ecommerce']),
+            models.Index(fields=['tipo_loja']),
         ]
     
     def __str__(self):
