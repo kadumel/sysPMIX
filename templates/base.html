@@ -186,17 +186,20 @@
         /* Logo Styles */
         .logo-container {
             background-color: white;
-            padding: 4px;
+            padding: 2px 4px;
             border-radius: 5px;
             border: 2px solid var(--secondary-color);
             display: flex;
             align-items: center;
             justify-content: center;
+            max-height: calc(var(--navbar-height) - 12px);
+            overflow: hidden;
         }
 
         .logo-container img {
-            max-height: 52px;
+            max-height: 40px;
             width: auto;
+            object-fit: contain;
         }
 
         /* Active Link Indicator */
@@ -240,7 +243,7 @@
             </button>
             <a class="navbar-brand ms-2" href="#">
                 <div class="logo-container">
-                    <img src="{% static 'img/LogoNovaSemFundo.png' %}" alt="Pannemix" loading="lazy">
+                    <img src="{% static 'img/pannemix_cortado_transparente.png' %}" alt="Pannemix" loading="lazy">
                 </div>
                 
             </a>
