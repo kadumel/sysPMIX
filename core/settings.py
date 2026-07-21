@@ -310,8 +310,8 @@ else:
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Progressive Web App (django-pwa) — vitrine / loja em /ecommerce/
-PWA_APP_NAME = 'PMIX Shop'
-PWA_APP_DESCRIPTION = 'Loja online responsiva e instalável (PWA).'
+PWA_APP_NAME = 'Pannemix'
+PWA_APP_DESCRIPTION = 'Loja online (PWA).'
 PWA_APP_THEME_COLOR = '#004A8D'
 PWA_APP_BACKGROUND_COLOR = '#F7F7F7'
 PWA_APP_DISPLAY = 'standalone'
