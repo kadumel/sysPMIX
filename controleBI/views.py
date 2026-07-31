@@ -1974,6 +1974,57 @@ def _salvar_tipos_loja_categorias(request, codigos_escopo: set[int]) -> None:
         ).exclude(tipo_loja=tipo).update(tipo_loja=tipo)
 
 
+def _salvar_ordens_categorias(request, codigos_escopo: set[int]) -> str | None:
+    """Atualiza o campo ordem dos grupos no escopo. Retorna mensagem de erro ou None."""
+    novas: dict[int, int] = {}
+    for codigo in codigos_escopo:
+        raw = (request.POST.get(f'ordem_{codigo}') or '').strip()
+        if raw == '':
+            continue
+        try:
+            valor = int(raw)
+        except (TypeError, ValueError):
+            return f'Ordem inválida para a categoria #{codigo}. Use um número inteiro.'
+        if valor < 0:
+            return f'Ordem da categoria #{codigo} não pode ser negativa.'
+        if valor in novas.values():
+            return f'A ordem {valor} está duplicada na tela. Cada categoria precisa de uma ordem única.'
+        novas[codigo] = valor
+
+    if not novas:
+        return None
+
+    existentes = {
+        row['codigo_grupo_produto']: row['ordem']
+        for row in GrupoProduto.objects.values('codigo_grupo_produto', 'ordem')
+    }
+    # Ordens finais após o save (mantém as que não estão no escopo)
+    finais = dict(existentes)
+    finais.update(novas)
+
+    if len(list(finais.values())) != len(set(finais.values())):
+        # Descobre o primeiro conflito com categoria fora do escopo
+        usados: dict[int, int] = {}
+        for codigo, ordem in finais.items():
+            if ordem in usados and usados[ordem] != codigo:
+                outro = usados[ordem]
+                return (
+                    f'A ordem {ordem} já está em uso (categorias #{codigo} e #{outro}). '
+                    'Escolha um valor único.'
+                )
+            usados[ordem] = codigo
+        return 'Há ordens duplicadas. Cada categoria precisa de um valor único.'
+
+    # Troca em duas fases para evitar violação temporária de UNIQUE
+    max_ordem = max(finais.values()) if finais else 0
+    offset = max_ordem + 1000
+    for i, codigo in enumerate(novas):
+        GrupoProduto.objects.filter(codigo_grupo_produto=codigo).update(ordem=offset + i)
+    for codigo, valor in novas.items():
+        GrupoProduto.objects.filter(codigo_grupo_produto=codigo).update(ordem=valor)
+    return None
+
+
 class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
     """Hierarquia sankhya_grupo_produto: define quais categorias aparecem na loja."""
 
@@ -2032,9 +2083,17 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
             except (TypeError, ValueError):
                 continue
 
+        redir = reverse('gestao_categorias_ecommerce')
+        if search:
+            redir = f'{redir}?{urlencode({"search": search})}'
+
         if search and visiveis_tela:
             marcados_set = set(codigos_marcados) & visiveis_tela
             with transaction.atomic():
+                erro_ordem = _salvar_ordens_categorias(request, visiveis_tela)
+                if erro_ordem:
+                    messages.error(request, erro_ordem)
+                    return redirect(redir)
                 GrupoProduto.objects.filter(
                     ativo=True,
                     codigo_grupo_produto__in=visiveis_tela,
@@ -2058,6 +2117,10 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
                 )
             )
             with transaction.atomic():
+                erro_ordem = _salvar_ordens_categorias(request, todos_codigos)
+                if erro_ordem:
+                    messages.error(request, erro_ordem)
+                    return redirect(redir)
                 GrupoProduto.objects.filter(ativo=True).update(mostrar_no_ecommerce=False)
                 if codigos_marcados:
                     GrupoProduto.objects.filter(
@@ -2067,9 +2130,6 @@ class GestaoCategoriasEcommerceView(PerfilBIAccessMixin, View):
                 _salvar_tipos_loja_categorias(request, todos_codigos)
             messages.success(request, 'Categorias visíveis na loja foram atualizadas.')
 
-        redir = reverse('gestao_categorias_ecommerce')
-        if search:
-            redir = f'{redir}?{urlencode({"search": search})}'
         return redirect(redir)
 
 

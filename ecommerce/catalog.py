@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet
+from django.db.models import Exists, OuterRef, Prefetch, Q, QuerySet, Subquery
 
 from api_sankhya.models import Cliente, GrupoProduto, Preco, Produto
 from controleBI.models import PERFIS_PAINEL_BI_LOJA, PerfilUsuario, UsuarioClienteSankhya
@@ -45,7 +45,7 @@ def grupos_ativos_map(apenas_visiveis_loja: bool = False):
     qs = GrupoProduto.objects.filter(ativo=True)
     if apenas_visiveis_loja:
         qs = qs.filter(mostrar_no_ecommerce=True)
-    grupos = list(qs.order_by('grau', 'nome'))
+    grupos = list(qs.order_by('ordem', 'grau', 'nome'))
     by_id = {g.codigo_grupo_produto: g for g in grupos}
     by_pai: dict[int | None, list[GrupoProduto]] = {}
     raizes: list[GrupoProduto] = []
@@ -56,8 +56,8 @@ def grupos_ativos_map(apenas_visiveis_loja: bool = False):
         else:
             by_pai.setdefault(pai, []).append(g)
     for k in list(by_pai.keys()):
-        by_pai[k].sort(key=lambda x: ((x.grau or 0), (x.nome or '').lower()))
-    raizes.sort(key=lambda x: (x.nome or '').lower())
+        by_pai[k].sort(key=lambda x: (x.ordem, (x.grau or 0), (x.nome or '').lower()))
+    raizes.sort(key=lambda x: (x.ordem, (x.nome or '').lower()))
     return by_id, by_pai, raizes
 
 
@@ -294,8 +294,20 @@ def produtos_queryset(
     *,
     by_pai_hierarquia: dict | None = None,
 ) -> QuerySet[Produto]:
-    """Produtos ativos nas categorias da loja, com preço > 0 na tabela do cliente."""
-    qs = Produto.objects.filter(ativo=True).order_by('nome', 'codigo_produto')
+    """Produtos ativos nas categorias da loja, com preço > 0 na tabela do cliente.
+
+    Ordenação: ordem da categoria, depois nome/código do produto.
+    """
+    ordem_grupo = Subquery(
+        GrupoProduto.objects.filter(
+            codigo_grupo_produto=OuterRef('codigo_grupo_produto')
+        ).values('ordem')[:1]
+    )
+    qs = (
+        Produto.objects.filter(ativo=True)
+        .annotate(_grupo_ordem=ordem_grupo)
+        .order_by('_grupo_ordem', 'nome', 'codigo_produto')
+    )
     if not codigos_grupo_permitidos:
         return qs.none()
     qs = qs.filter(codigo_grupo_produto__in=codigos_grupo_permitidos)

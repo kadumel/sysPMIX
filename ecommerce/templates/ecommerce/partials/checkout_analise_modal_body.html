@@ -23,11 +23,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in analise.esquecidos %}
                     <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                        <div>
-                            <div class="fw-medium">{{ item.nome }}</div>
-                            <div class="small text-muted">Cód. {{ item.codigo_produto }}{% if item.detalhe %} · {{ item.detalhe }}{% endif %}</div>
-                            {% if item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
-                        </div>
+                        {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
                         {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
                     </div>
                     {% endfor %}
@@ -56,11 +52,7 @@
                 <div class="list-group list-group-flush">
                     {% for item in analise.novidades %}
                     <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                        <div>
-                            <div class="fw-medium">{{ item.nome }}</div>
-                            <div class="small text-muted">Cód. {{ item.codigo_produto }}{% if item.detalhe %} · {{ item.detalhe }}{% endif %}</div>
-                            {% if item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
-                        </div>
+                        {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
                         {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
                     </div>
                     {% endfor %}
@@ -92,13 +84,7 @@
                     <div class="list-group list-group-flush border rounded">
                         {% for item in itens_grupo %}
                         <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                            <div>
-                                <div class="fw-medium">{{ item.nome }}</div>
-                                <div class="small text-muted">
-                                    Cód. {{ item.codigo_produto }}{% if item.detalhe %} · {{ item.detalhe }}{% endif %}
-                                </div>
-                                {% if item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
-                            </div>
+                            {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
                             {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
                         </div>
                         {% endfor %}

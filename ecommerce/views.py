@@ -27,6 +27,7 @@ from .cart_session import (
 from .analise_pedido import (
     SESSION_ANALISE_KEY,
     ResultadoAnalise,
+    anexar_imagens_sugestoes,
     calcular_analise_pedido,
     diagnosticar_novidades_campanha,
     remover_sugestao_do_snapshot,
@@ -660,7 +661,7 @@ def checkout_analise_adicionar(request):
     request.session[SESSION_ANALISE_KEY] = snapshot
     request.session.modified = True
 
-    resultado = ResultadoAnalise.from_session_dict(snapshot)
+    resultado = anexar_imagens_sugestoes(ResultadoAnalise.from_session_dict(snapshot))
     analise_html = render(
         request,
         'ecommerce/partials/checkout_analise_modal_body.html',

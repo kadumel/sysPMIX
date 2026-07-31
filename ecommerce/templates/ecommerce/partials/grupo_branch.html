@@ -2,7 +2,7 @@
 <li class="mb-1">
     <a
         href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs grupo=branch.grupo.codigo_grupo_produto %}"
-        class="text-decoration-none {% if grupo_atual and grupo_atual.codigo_grupo_produto == branch.grupo.codigo_grupo_produto %}fw-bold{% else %}text-body-secondary{% endif %}"
+        class="ecommerce-grupo-link text-decoration-none {% if grupo_atual and grupo_atual.codigo_grupo_produto == branch.grupo.codigo_grupo_produto %}fw-bold active{% else %}text-body-secondary{% endif %}"
     >{{ branch.grupo.nome }}</a>
     {% if branch.filhos %}
     <ul>

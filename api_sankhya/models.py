@@ -440,13 +440,18 @@ class GrupoProduto(models.Model):
         verbose_name='Tipo na loja',
         help_text='Classificação Mercadoria ou Revenda para filtro no e-commerce.',
     )
+    ordem = models.PositiveIntegerField(
+        unique=True,
+        verbose_name='Ordem na loja',
+        help_text='Define a ordem de exibição das categorias (e dos produtos) no e-commerce. Deve ser único.',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
     
     class Meta:
         verbose_name = 'Grupo Produto Sankhya'
         verbose_name_plural = 'Grupos Produto Sankhya'
-        ordering = ['nome', 'codigo_grupo_produto']
+        ordering = ['ordem', 'nome', 'codigo_grupo_produto']
         db_table = 'sankhya_grupo_produto'
         indexes = [
             models.Index(fields=['codigo_grupo_produto']),
@@ -456,11 +461,26 @@ class GrupoProduto(models.Model):
             models.Index(fields=['grupo_icms']),
             models.Index(fields=['ativo', 'mostrar_no_ecommerce']),
             models.Index(fields=['tipo_loja']),
+            models.Index(fields=['ordem']),
         ]
     
     def __str__(self):
         return f"{self.nome or 'N/A'} - {self.codigo_grupo_produto}"
 
+    @classmethod
+    def proxima_ordem_disponivel(cls, preferido: int | None = None) -> int:
+        """Retorna um valor de ordem único; usa preferido se estiver livre."""
+        from django.db.models import Max
+
+        if preferido is not None and not cls.objects.filter(ordem=preferido).exists():
+            return preferido
+        mx = cls.objects.aggregate(m=Max('ordem'))['m']
+        return (mx or 0) + 1
+
+    def save(self, *args, **kwargs):
+        if getattr(self, 'ordem', None) is None:
+            self.ordem = self.proxima_ordem_disponivel(self.codigo_grupo_produto)
+        super().save(*args, **kwargs)
 
 class Pedido(models.Model):
     """

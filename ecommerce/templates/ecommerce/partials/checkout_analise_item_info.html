@@ -1,0 +1,16 @@
+<div class="d-flex align-items-center gap-2 min-w-0 flex-grow-1">
+    <div class="analise-sugestao-thumb flex-shrink-0" aria-hidden="true">
+        {% if item.imagem_url %}
+        <img src="{{ item.imagem_url }}" alt="" width="56" height="56" loading="lazy" decoding="async"
+             onerror="this.style.display='none'; this.nextElementSibling && (this.nextElementSibling.hidden=false);">
+        <span class="analise-sugestao-thumb-fallback" hidden>{{ item.nome|default:"?"|first|upper }}</span>
+        {% else %}
+        <span class="analise-sugestao-thumb-fallback">{{ item.nome|default:"?"|first|upper }}</span>
+        {% endif %}
+    </div>
+    <div class="min-w-0">
+        <div class="fw-medium text-truncate" title="{{ item.nome }}">{{ item.nome }}</div>
+        <div class="small text-muted">Cód. {{ item.codigo_produto }}{% if item.detalhe %} · {{ item.detalhe }}{% endif %}</div>
+        {% if item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
+    </div>
+</div>

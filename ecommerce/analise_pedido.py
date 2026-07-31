@@ -52,6 +52,7 @@ class SugestaoAnalise:
     detalhe: str = ''
     preco_unitario: Decimal | None = None
     ordem: int = 0
+    imagem_url: str = ''
 
 
 @dataclass
@@ -87,6 +88,7 @@ class ResultadoAnalise:
                     'preco_unitario': (
                         None if s.preco_unitario is None else str(s.preco_unitario)
                     ),
+                    'imagem_url': s.imagem_url or '',
                 }
                 for s in items
             ]
@@ -119,6 +121,7 @@ class ResultadoAnalise:
                             if preco_raw not in (None, '')
                             else None
                         ),
+                        imagem_url=(row.get('imagem_url') or ''),
                     )
                 )
             return out
@@ -141,6 +144,45 @@ def remover_sugestao_do_snapshot(snapshot: dict, codigo_produto: int) -> None:
             for row in snapshot.get(sec, [])
             if int(row['codigo_produto']) != codigo_produto
         ]
+
+
+def map_imagens_produtos_analise(codigos: list[int] | set[int]) -> dict[int, str]:
+    """Primeira imagem ativa de cada produto (codigo_produto → URL pública)."""
+    from ecommerce.models import ProdutoImagem
+
+    if not codigos:
+        return {}
+    out: dict[int, str] = {}
+    qs = (
+        ProdutoImagem.objects.filter(
+            produto__codigo_produto__in=codigos,
+            ativo=True,
+        )
+        .exclude(imagem='')
+        .order_by('produto__codigo_produto', 'id')
+        .values_list('produto__codigo_produto', 'imagem')
+    )
+    for codigo, caminho in qs:
+        codigo = int(codigo)
+        if codigo in out or not caminho:
+            continue
+        try:
+            out[codigo] = ProdutoImagem.imagem.field.storage.url(caminho)
+        except Exception:
+            from ecommerce.media_paths import url_publica_imagem_produto
+
+            out[codigo] = url_publica_imagem_produto(str(caminho))
+    return out
+
+
+def anexar_imagens_sugestoes(resultado: ResultadoAnalise) -> ResultadoAnalise:
+    """Preenche imagem_url nas sugestões (mutável in-place)."""
+    urls = map_imagens_produtos_analise(
+        [s.codigo_produto for s in resultado.todas_sugestoes()]
+    )
+    for sugestao in resultado.todas_sugestoes():
+        sugestao.imagem_url = urls.get(sugestao.codigo_produto, '') or ''
+    return resultado
 
 
 def _data_meses_atras(ref: date, meses: int) -> date:
@@ -708,13 +750,15 @@ def calcular_analise_pedido(
 
     curva_a = _itens_curva_a(cliente, cart_codigos, usados, desde, ate, codtab, codigos_permitidos)
 
-    return ResultadoAnalise(
-        tempo_analise_meses=meses,
-        data_inicio_periodo=desde,
-        data_fim_periodo=ate,
-        esquecidos=esquecidos,
-        novidades=novidades,
-        curva_a=curva_a,
+    return anexar_imagens_sugestoes(
+        ResultadoAnalise(
+            tempo_analise_meses=meses,
+            data_inicio_periodo=desde,
+            data_fim_periodo=ate,
+            esquecidos=esquecidos,
+            novidades=novidades,
+            curva_a=curva_a,
+        )
     )
 
 
