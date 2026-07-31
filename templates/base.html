@@ -1,20 +1,63 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sistema Pannemix{% endblock %}</title>
     {% load static %}
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('syspmix-theme');
+                if (theme !== 'dark' && theme !== 'light') theme = 'light';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <style>
-        :root {
+        :root,
+        [data-bs-theme="light"] {
             --primary-color: #004A8D;    /* Azul Pannemix */
             --secondary-color: #F7941D;   /* Laranja Pannemix */
             --sidebar-width: 250px;
             --navbar-height: 64px;
+            --sidebar-bg: #ffffff;
+            --sidebar-text: #333333;
+            --sidebar-hover-bg: #fff5e6;
+            --sidebar-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+            --main-bg: #f8f9fa;
+            --card-bg: #ffffff;
+            --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            --card-hover-shadow: 0 5px 15px rgba(247, 148, 29, 0.2);
+            --dropdown-hover-bg: #fff5e6;
+            --logo-bg: #ffffff;
+            --body-bg: #ffffff;
+            --body-color: #212529;
+            --table-striped-bg: rgba(0, 0, 0, 0.02);
+            --border-subtle: #dee2e6;
+        }
+
+        [data-bs-theme="dark"] {
+            --primary-color: #1a6bb5;
+            --secondary-color: #F7941D;
+            --sidebar-bg: #1a1d21;
+            --sidebar-text: #e9ecef;
+            --sidebar-hover-bg: rgba(247, 148, 29, 0.12);
+            --sidebar-shadow: 2px 0 8px rgba(0, 0, 0, 0.45);
+            --main-bg: #121416;
+            --card-bg: #1e2126;
+            --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            --card-hover-shadow: 0 5px 18px rgba(247, 148, 29, 0.25);
+            --dropdown-hover-bg: rgba(247, 148, 29, 0.18);
+            --logo-bg: #ffffff;
+            --body-bg: #121416;
+            --body-color: #e9ecef;
+            --table-striped-bg: rgba(255, 255, 255, 0.03);
+            --border-subtle: #343a40;
         }
 
         /* Layout principal: evitar z-index aqui — o backdrop do modal fica no body (1050) e
@@ -46,6 +89,9 @@
             margin: 0;
             padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--body-bg);
+            color: var(--body-color);
+            transition: background-color 0.25s ease, color 0.25s ease;
         }
 
         /* Navbar Styles */
@@ -72,18 +118,18 @@
         /* Sidebar Styles */
         .sidebar {
             width: var(--sidebar-width);
-            background-color: #fff;
+            background-color: var(--sidebar-bg);
             height: calc(100vh - var(--navbar-height));
             position: fixed;
             top: var(--navbar-height);
             left: 0;
-            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
-            transition: all 0.3s ease;
+            box-shadow: var(--sidebar-shadow);
+            transition: background-color 0.25s ease, box-shadow 0.25s ease, transform 0.3s ease;
             z-index: 1000;
         }
 
         .sidebar .nav-link {
-            color: #333;
+            color: var(--sidebar-text);
             padding: 0.8rem 1rem;
             display: flex;
             align-items: center;
@@ -93,7 +139,7 @@
         }
 
         .sidebar .nav-link:hover {
-            background-color: #fff5e6;
+            background-color: var(--sidebar-hover-bg);
             color: var(--secondary-color);
             border-left: 3px solid var(--secondary-color);
         }
@@ -109,8 +155,8 @@
             margin-left: var(--sidebar-width);
             margin-top: var(--navbar-height);
             padding: 20px;
-            transition: all 0.3s ease;
-            background-color: #f8f9fa;
+            transition: margin-left 0.3s ease, background-color 0.25s ease;
+            background-color: var(--main-bg);
             min-height: calc(100vh - var(--navbar-height));
         }
 
@@ -118,14 +164,16 @@
         .card {
             border: none;
             border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background-color: var(--card-bg);
+            box-shadow: var(--card-shadow);
             transition: all 0.3s ease;
             border-top: 3px solid var(--secondary-color);
+            color: var(--body-color);
         }
 
         .card:hover {
             transform: translateY(-5px);
-            box-shadow: 0 5px 15px rgba(247, 148, 29, 0.2);
+            box-shadow: var(--card-hover-shadow);
         }
 
         .card-title {
@@ -161,13 +209,75 @@
 
         /* Dropdown Styles */
         .dropdown-item:hover {
-            background-color: #fff5e6;
+            background-color: var(--dropdown-hover-bg);
             color: var(--secondary-color);
+        }
+
+        .dropdown-item.active-theme {
+            background-color: var(--dropdown-hover-bg);
+            color: var(--secondary-color);
+            font-weight: 600;
+        }
+
+        /* Submenu Tema (abre à esquerda — menu do usuário fica à direita) */
+        .navbar .dropdown-menu .dropstart > .dropdown-toggle::before {
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+
+        .navbar .dropdown-menu .dropstart > .dropdown-toggle::after {
+            display: none;
+        }
+
+        .navbar .dropdown-menu .dropstart > .dropdown-menu {
+            margin-right: 0.125rem;
         }
 
         /* Dropdown do navbar acima da sidebar (z-index 1000) e do conteúdo */
         .navbar .dropdown-menu {
             z-index: 1056;
+        }
+
+        /* Tabelas e listas em dark mode */
+        [data-bs-theme="dark"] .table {
+            --bs-table-bg: var(--card-bg);
+            --bs-table-color: var(--body-color);
+            --bs-table-striped-bg: var(--table-striped-bg);
+            --bs-table-border-color: var(--border-subtle);
+        }
+
+        [data-bs-theme="dark"] .bg-light {
+            background-color: #2a2e33 !important;
+            color: var(--body-color);
+        }
+
+        [data-bs-theme="dark"] .border,
+        [data-bs-theme="dark"] .border-bottom,
+        [data-bs-theme="dark"] .border-top {
+            border-color: var(--border-subtle) !important;
+        }
+
+        [data-bs-theme="dark"] .text-muted {
+            color: #adb5bd !important;
+        }
+
+        [data-bs-theme="dark"] .form-control,
+        [data-bs-theme="dark"] .form-select {
+            background-color: #1e2126;
+            border-color: var(--border-subtle);
+            color: var(--body-color);
+        }
+
+        [data-bs-theme="dark"] .form-control:focus,
+        [data-bs-theme="dark"] .form-select:focus {
+            background-color: #1e2126;
+            color: var(--body-color);
+        }
+
+        [data-bs-theme="dark"] .list-group-item {
+            background-color: var(--card-bg);
+            color: var(--body-color);
+            border-color: var(--border-subtle);
         }
 
         /* Responsive */
@@ -181,11 +291,19 @@
             .main-content {
                 margin-left: 0;
             }
+
+            .navbar .dropdown-menu .dropstart > .dropdown-menu {
+                position: static;
+                margin-right: 0;
+                box-shadow: none;
+                border: none;
+                padding-left: 0.75rem;
+            }
         }
 
         /* Logo Styles */
         .logo-container {
-            background-color: white;
+            background-color: var(--logo-bg);
             padding: 2px 4px;
             border-radius: 5px;
             border: 2px solid var(--secondary-color);
@@ -255,7 +373,7 @@
                     </span>
                 </a>
                 <div class="dropdown">
-                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                         <i class="bi bi-person-circle me-2"></i>
                         {{ request.user.username }}
                     </button>
@@ -267,6 +385,25 @@
                                     <i class="bi bi-gear me-2"></i>Configurações
                                 </button>
                             </form>
+                        </li>
+                        <li class="dropstart">
+                            <a class="dropdown-item dropdown-toggle d-flex align-items-center" href="#" id="themeSubmenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-palette me-2"></i>Tema
+                            </a>
+                            <ul class="dropdown-menu" aria-labelledby="themeSubmenu">
+                                <li>
+                                    <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="light">
+                                        <i class="bi bi-sun me-2"></i>Whitemode
+                                        <i class="bi bi-check2 ms-auto theme-check d-none"></i>
+                                    </button>
+                                </li>
+                                <li>
+                                    <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="dark">
+                                        <i class="bi bi-moon-stars me-2"></i>Darkmode
+                                        <i class="bi bi-check2 ms-auto theme-check d-none"></i>
+                                    </button>
+                                </li>
+                            </ul>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
@@ -457,6 +594,42 @@
     {% block extra_js %}{% endblock %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // Tema (Whitemode / Darkmode)
+            const THEME_KEY = 'syspmix-theme';
+
+            function getStoredTheme() {
+                try {
+                    var theme = localStorage.getItem(THEME_KEY);
+                    return (theme === 'dark' || theme === 'light') ? theme : 'light';
+                } catch (e) {
+                    return 'light';
+                }
+            }
+
+            function applyTheme(theme) {
+                if (theme !== 'dark' && theme !== 'light') theme = 'light';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                try {
+                    localStorage.setItem(THEME_KEY, theme);
+                } catch (e) {}
+                document.querySelectorAll('.theme-option').forEach(function (btn) {
+                    var isActive = btn.getAttribute('data-theme') === theme;
+                    btn.classList.toggle('active-theme', isActive);
+                    var check = btn.querySelector('.theme-check');
+                    if (check) check.classList.toggle('d-none', !isActive);
+                });
+            }
+
+            applyTheme(getStoredTheme());
+
+            document.querySelectorAll('.theme-option').forEach(function (btn) {
+                btn.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyTheme(btn.getAttribute('data-theme'));
+                });
+            });
+
             // Inicializar tooltips
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             tooltipTriggerList.map(function (tooltipTriggerEl) {

@@ -1749,11 +1749,20 @@ def getGruposProduto():
                 # Mantém apenas campos com valores válidos
                 dados_grupo = {k: v for k, v in dados_grupo.items() if v is not None}
                 
-                # Faz merge: atualiza se existir, cria se não existir
-                grupo, created = GrupoProduto.objects.update_or_create(
-                    codigo_grupo_produto=codigo_grupo_produto,
-                    defaults=dados_grupo
-                )
+                # Faz merge: atualiza se existir, cria se não existir (ordem local não vem da Sankhya)
+                grupo = GrupoProduto.objects.filter(codigo_grupo_produto=codigo_grupo_produto).first()
+                if grupo is None:
+                    grupo = GrupoProduto.objects.create(
+                        codigo_grupo_produto=codigo_grupo_produto,
+                        ordem=GrupoProduto.proxima_ordem_disponivel(codigo_grupo_produto),
+                        **dados_grupo,
+                    )
+                    created = True
+                else:
+                    for key, value in dados_grupo.items():
+                        setattr(grupo, key, value)
+                    grupo.save(update_fields=[*dados_grupo.keys(), 'updated_at'])
+                    created = False
                 
                 if created:
                     total_inseridos += 1

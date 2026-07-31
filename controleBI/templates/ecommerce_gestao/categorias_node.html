@@ -17,6 +17,14 @@
         <input type="hidden" name="tipo_loja_{{ g.codigo_grupo_produto }}" value="{{ g.tipo_loja|default:'' }}" class="tipo-loja-hidden" data-grupo="{{ g.codigo_grupo_produto }}">
     </td>
     <td class="align-middle text-center">
+        <input type="number" class="form-control form-control-sm text-center mx-auto"
+               name="ordem_{{ g.codigo_grupo_produto }}"
+               value="{{ g.ordem }}"
+               min="0" step="1" required
+               style="max-width: 5.5rem;"
+               aria-label="Ordem — {{ g.nome|default:'categoria' }}">
+    </td>
+    <td class="align-middle text-center">
         <div class="form-check d-inline-block mb-0">
             <input class="form-check-input tipo-loja-check" type="checkbox"
                    data-grupo="{{ g.codigo_grupo_produto }}"

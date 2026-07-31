@@ -31,18 +31,18 @@
                     {% endif %}
                     {% if banner.titulo or banner.descricao_curta or banner.descricao_longa or banner.call_to_action %}
                     <div class="carousel-caption text-start start-0 end-auto top-0 bottom-0 d-flex align-items-center">
-                        <div class="p-3 p-md-4 rounded-3 bg-dark bg-opacity-50 ms-2 ms-md-4 mb-3 mb-md-4" style="max-width: min(78vw, 680px);">
+                        <div class="ecommerce-banner-caption p-3 p-md-4 rounded-3 bg-dark bg-opacity-50 ms-2 ms-md-4 mb-3 mb-md-4" style="max-width: min(78vw, 680px);">
                             {% if banner.titulo %}
-                            <h5 class="mb-2">{{ banner.titulo }}</h5>
+                            <h5 class="ecommerce-banner-title mb-2">{{ banner.titulo }}</h5>
                             {% endif %}
                             {% if banner.descricao_curta %}
-                            <p class="mb-2 fw-semibold">{{ banner.descricao_curta }}</p>
+                            <p class="ecommerce-banner-subtitle mb-2 fw-semibold">{{ banner.descricao_curta }}</p>
                             {% endif %}
                             {% if banner.descricao_longa %}
-                            <p class="mb-2 small">{{ banner.descricao_longa|truncatewords:32 }}</p>
+                            <p class="ecommerce-banner-desc mb-2 small">{{ banner.descricao_longa|truncatewords:32 }}</p>
                             {% endif %}
                             {% if banner.call_to_action %}
-                            <span class="btn btn-sm btn-light text-dark">{{ banner.call_to_action }}</span>
+                            <span class="btn btn-sm btn-light ecommerce-banner-cta">{{ banner.call_to_action }}</span>
                             {% endif %}
                         </div>
                     </div>
@@ -159,7 +159,7 @@
                     </form>
                     <ul class="ecommerce-grupo-tree list-unstyled mb-0 d-none d-lg-block small">
                         <li class="mb-2">
-                            <a href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs %}" class="text-decoration-none {% if not grupo_atual %}fw-bold{% else %}text-muted{% endif %}">Todas</a>
+                            <a href="{% url 'ecommerce_home' %}{% ecommerce_catalog_qs %}" class="ecommerce-grupo-link text-decoration-none {% if not grupo_atual %}fw-bold{% else %}text-muted{% endif %}">Todas</a>
                         </li>
                         {% for branch in arvore_grupos %}
                             {% include "ecommerce/partials/grupo_branch.html" %}

@@ -453,8 +453,18 @@ def sync_grupos_produto() -> dict[str, int]:
             "codigo_grupo_produto_pai": _to_int(v.get("codigoGrupoProdutoPai")),
             "ativo": bool(v.get("ativo", True)),
         }
-        obj, created = GrupoProduto.objects.update_or_create(codigo_grupo_produto=codigo, defaults=defaults)
-        return created, bool(obj)
+        obj = GrupoProduto.objects.filter(codigo_grupo_produto=codigo).first()
+        if obj is None:
+            GrupoProduto.objects.create(
+                codigo_grupo_produto=codigo,
+                ordem=GrupoProduto.proxima_ordem_disponivel(codigo),
+                **defaults,
+            )
+            return True, True
+        for key, value in defaults.items():
+            setattr(obj, key, value)
+        obj.save(update_fields=[*defaults.keys(), "updated_at"])
+        return False, True
 
     return _sync_paginated(
         url="https://api.sankhya.com.br/v1/grupos-produto",

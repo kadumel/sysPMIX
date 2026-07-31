@@ -315,6 +315,7 @@ class ProdutoAdmin(admin.ModelAdmin):
 @admin.register(GrupoProduto)
 class GrupoProdutoAdmin(admin.ModelAdmin):
     list_display = (
+        'ordem',
         'codigo_grupo_produto',
         'nome',
         'codigo_grupo_produto_pai',
@@ -326,14 +327,17 @@ class GrupoProdutoAdmin(admin.ModelAdmin):
         'tipo_loja',
         'updated_at',
     )
+    list_display_links = ('codigo_grupo_produto', 'nome')
+    list_editable = ('ordem', 'mostrar_no_ecommerce', 'tipo_loja')
     list_filter = ('ativo', 'analitico', 'mostrar_no_ecommerce', 'tipo_loja', 'grau', 'grupo_icms')
     search_fields = ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai')
     readonly_fields = ('created_at', 'updated_at')
     list_per_page = 50
+    ordering = ('ordem', 'nome', 'codigo_grupo_produto')
     
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau')
+            'fields': ('codigo_grupo_produto', 'nome', 'codigo_grupo_produto_pai', 'grau', 'ordem')
         }),
         ('Configurações', {
             'fields': ('grupo_icms', 'analitico', 'ativo', 'mostrar_no_ecommerce', 'tipo_loja')

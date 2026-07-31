@@ -272,8 +272,8 @@ Q_CLUSTER = {
 #   MEDIA_PRODUCT_IMAGES_UPLOAD_TO — subpasta relativa a MEDIA_ROOT para imagens de produto
 #   MEDIA_PUBLIC_BASE_URL  — base absoluta do site (ex.: https://app.exemplo.com) para montar URLs completas
 RAILWAY_VOLUME_MOUNT_PATH = os.getenv('RAILWAY_VOLUME_MOUNT_PATH')
-MEDIA_URL = os.getenv('MEDIA_URL')
-if MEDIA_URL and not MEDIA_URL.endswith('/'):
+MEDIA_URL = os.getenv('MEDIA_URL') or '/media/'
+if not MEDIA_URL.endswith('/'):
     MEDIA_URL = MEDIA_URL + '/'
 
 MEDIA_ROOT = (
@@ -284,6 +284,10 @@ MEDIA_ROOT = (
         else os.path.join(BASE_DIR, 'media')
     )
 )
+# Em desenvolvimento local o volume Railway do .env pode não existir — usa media/ do projeto.
+_local_media_root = os.path.join(BASE_DIR, 'media')
+if DEBUG and not os.path.isdir(MEDIA_ROOT) and os.path.isdir(_local_media_root):
+    MEDIA_ROOT = _local_media_root
 
 # Caminho relativo dentro de MEDIA_ROOT (ImageField upload_to + scripts de download)
 MEDIA_PRODUCT_IMAGES_UPLOAD_TO = os.getenv('MEDIA_PRODUCT_IMAGES_UPLOAD_TO')

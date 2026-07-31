@@ -1,26 +1,70 @@
 {% load static %}
 {% load pwa %}
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Loja Pannemix{% endblock %}</title>
     {% progressive_web_app_meta %}
+    <script>
+        (function () {
+            try {
+                var theme = localStorage.getItem('syspmix-theme');
+                if (theme !== 'dark' && theme !== 'light') theme = 'light';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+            } catch (e) {}
+        })();
+    </script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
     <style>
-        :root {
+        :root,
+        [data-bs-theme="light"] {
             --primary-color: #004A8D;
             --secondary-color: #F7941D;
             --navbar-height: 64px;
+            --body-bg: #f8f9fa;
+            --body-color: #212529;
+            --card-bg: #ffffff;
+            --card-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            --card-hover-shadow: 0 5px 15px rgba(247, 148, 29, 0.2);
+            --logo-bg: #ffffff;
+            --footer-bg: #ffffff;
+            --footer-border: #dee2e6;
+            --dropdown-hover-bg: #fff5e6;
+            --border-subtle: #dee2e6;
+            --product-thumb-bg: linear-gradient(135deg, rgba(0, 74, 141, 0.12), rgba(247, 148, 29, 0.18));
+            --product-thumb-color: rgba(0, 74, 141, 0.35);
+            --outline-secondary-border: #adb5bd;
         }
+
+        [data-bs-theme="dark"] {
+            --primary-color: #1a6bb5;
+            --secondary-color: #F7941D;
+            --body-bg: #121416;
+            --body-color: #e9ecef;
+            --card-bg: #1e2126;
+            --card-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            --card-hover-shadow: 0 5px 18px rgba(247, 148, 29, 0.25);
+            --logo-bg: #ffffff;
+            --footer-bg: #1a1d21;
+            --footer-border: #343a40;
+            --dropdown-hover-bg: rgba(247, 148, 29, 0.18);
+            --border-subtle: #343a40;
+            --product-thumb-bg: linear-gradient(135deg, rgba(26, 107, 181, 0.22), rgba(247, 148, 29, 0.18));
+            --product-thumb-color: rgba(233, 236, 239, 0.45);
+            --outline-secondary-border: #6c757d;
+        }
+
         body {
             min-height: 100vh;
             margin: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f8f9fa;
+            background-color: var(--body-bg);
+            color: var(--body-color);
+            transition: background-color 0.25s ease, color 0.25s ease;
         }
         .navbar-ecommerce {
             height: var(--navbar-height);
@@ -48,7 +92,7 @@
             color: #fff !important;
         }
         .logo-container {
-            background-color: white;
+            background-color: var(--logo-bg);
             padding: 2px 4px;
             border-radius: 5px;
             border: 2px solid var(--secondary-color);
@@ -67,6 +111,8 @@
             margin-top: var(--navbar-height);
             min-height: calc(100vh - var(--navbar-height));
             padding: 1.25rem 0 2rem;
+            background-color: var(--body-bg);
+            transition: background-color 0.25s ease;
         }
         .ecommerce-main > .container,
         .ecommerce-main > .container-fluid {
@@ -76,13 +122,15 @@
         .card {
             border: none;
             border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background-color: var(--card-bg);
+            color: var(--body-color);
+            box-shadow: var(--card-shadow);
             transition: all 0.3s ease;
             border-top: 3px solid var(--secondary-color);
         }
         .card:hover {
             transform: translateY(-3px);
-            box-shadow: 0 5px 15px rgba(247, 148, 29, 0.2);
+            box-shadow: var(--card-hover-shadow);
         }
         .card-title {
             color: var(--secondary-color);
@@ -106,7 +154,7 @@
             color: #fff;
         }
         .btn-outline-secondary {
-            border-color: #adb5bd;
+            border-color: var(--outline-secondary-border);
         }
         .badge {
             background-color: var(--secondary-color);
@@ -116,13 +164,13 @@
         }
         .ecommerce-product-thumb {
             height: 14rem;
-            background: linear-gradient(135deg, rgba(0, 74, 141, 0.12), rgba(247, 148, 29, 0.18));
+            background: var(--product-thumb-bg);
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 2rem;
             font-weight: 600;
-            color: rgba(0, 74, 141, 0.35);
+            color: var(--product-thumb-color);
         }
         .ecommerce-product-thumb:has(.ecommerce-product-thumb-img) {
             display: block;
@@ -135,17 +183,130 @@
             object-fit: cover;
             display: block;
         }
+        .ecommerce-grupo-tree {
+            max-height: min(55vh, 28rem);
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 0.35rem;
+            margin-right: -0.15rem;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: transparent transparent;
+            transition: scrollbar-color 0.2s ease;
+        }
+        .ecommerce-grupo-tree:hover,
+        .ecommerce-grupo-tree:focus-within {
+            scrollbar-color: rgba(247, 148, 29, 0.55) transparent;
+        }
+        .ecommerce-grupo-tree::-webkit-scrollbar {
+            width: 6px;
+        }
+        .ecommerce-grupo-tree::-webkit-scrollbar-track {
+            background: transparent;
+            border-radius: 999px;
+        }
+        .ecommerce-grupo-tree::-webkit-scrollbar-thumb {
+            background: transparent;
+            border-radius: 999px;
+            transition: background 0.2s ease;
+        }
+        .ecommerce-grupo-tree:hover::-webkit-scrollbar-thumb,
+        .ecommerce-grupo-tree:focus-within::-webkit-scrollbar-thumb {
+            background: rgba(247, 148, 29, 0.55);
+        }
+        .ecommerce-grupo-tree:hover::-webkit-scrollbar-thumb:hover {
+            background: rgba(247, 148, 29, 0.85);
+        }
         .ecommerce-grupo-tree ul {
             list-style: none;
             padding-left: 0.75rem;
             margin: 0.25rem 0 0;
             border-left: 2px solid var(--secondary-color);
         }
+        .ecommerce-grupo-link {
+            display: block;
+            padding: 0.3rem 0.45rem;
+            border-radius: 0.375rem;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .ecommerce-grupo-link:hover {
+            background-color: var(--dropdown-hover-bg);
+            color: var(--secondary-color) !important;
+        }
+        .ecommerce-grupo-link.active {
+            color: var(--secondary-color) !important;
+            background-color: var(--dropdown-hover-bg);
+        }
         .ecommerce-footer {
-            border-top: 1px solid #dee2e6;
-            background: #fff;
+            border-top: 1px solid var(--footer-border);
+            background: var(--footer-bg);
             padding: 1.25rem 0;
             margin-top: auto;
+            transition: background-color 0.25s ease, border-color 0.25s ease;
+        }
+        .ecommerce-footer .text-dark {
+            color: var(--body-color) !important;
+        }
+        .dropdown-item:hover {
+            background-color: var(--dropdown-hover-bg);
+            color: var(--secondary-color);
+        }
+        .dropdown-item.active-theme {
+            background-color: var(--dropdown-hover-bg);
+            color: var(--secondary-color);
+            font-weight: 600;
+        }
+        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-toggle::before {
+            margin-right: 0.5rem;
+            vertical-align: middle;
+        }
+        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-toggle::after {
+            display: none;
+        }
+        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-menu {
+            margin-right: 0.125rem;
+        }
+        [data-bs-theme="dark"] .table {
+            --bs-table-bg: var(--card-bg);
+            --bs-table-color: var(--body-color);
+            --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+            --bs-table-border-color: var(--border-subtle);
+        }
+        [data-bs-theme="dark"] .bg-light,
+        [data-bs-theme="dark"] .bg-white {
+            background-color: #2a2e33 !important;
+            color: var(--body-color);
+        }
+        [data-bs-theme="dark"] .border,
+        [data-bs-theme="dark"] .border-bottom,
+        [data-bs-theme="dark"] .border-top {
+            border-color: var(--border-subtle) !important;
+        }
+        [data-bs-theme="dark"] .text-muted {
+            color: #adb5bd !important;
+        }
+        [data-bs-theme="dark"] .text-dark {
+            color: var(--body-color) !important;
+        }
+        [data-bs-theme="dark"] .form-control,
+        [data-bs-theme="dark"] .form-select {
+            background-color: #1e2126;
+            border-color: var(--border-subtle);
+            color: var(--body-color);
+        }
+        [data-bs-theme="dark"] .form-control:focus,
+        [data-bs-theme="dark"] .form-select:focus {
+            background-color: #1e2126;
+            color: var(--body-color);
+        }
+        [data-bs-theme="dark"] .list-group-item {
+            background-color: var(--card-bg);
+            color: var(--body-color);
+            border-color: var(--border-subtle);
+        }
+        [data-bs-theme="dark"] .modal-content {
+            background-color: var(--card-bg);
+            color: var(--body-color);
         }
         @media (min-width: 992px) {
             .ecommerce-nav-pwa-hint {
@@ -207,6 +368,10 @@
             .navbar-ecommerce .navbar-collapse .nav-link i {
                 color: rgba(255, 255, 255, 0.95) !important;
             }
+            .navbar-ecommerce .navbar-collapse .dropstart > .dropdown-menu {
+                margin-right: 0;
+                padding-left: 0.75rem;
+            }
         }
         .navbar-ecommerce .navbar-cart-badge {
             font-size: 0.65rem;
@@ -233,7 +398,29 @@
         }
         .ecommerce-cart-card:hover {
             transform: none;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
+        }
+        .analise-sugestao-thumb {
+            width: 56px;
+            height: 56px;
+            border-radius: 0.375rem;
+            overflow: hidden;
+            background: var(--product-thumb-bg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--product-thumb-color);
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        .analise-sugestao-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .analise-sugestao-thumb-fallback {
+            line-height: 1;
         }
         #ecommerceCarouselBanners .carousel-control-prev,
         #ecommerceCarouselBanners .carousel-control-next {
@@ -262,6 +449,28 @@
         #ecommerceCarouselBanners .carousel-control-prev:hover,
         #ecommerceCarouselBanners .carousel-control-next:hover {
             opacity: 1;
+        }
+        .ecommerce-banner-caption .ecommerce-banner-title,
+        .ecommerce-banner-caption .ecommerce-banner-subtitle,
+        .ecommerce-banner-caption .ecommerce-banner-desc {
+            color: #fff !important;
+        }
+        .ecommerce-banner-caption .ecommerce-banner-cta {
+            color: #212529 !important;
+            background-color: #f8f9fa !important;
+            border-color: #f8f9fa !important;
+        }
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-title,
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-subtitle,
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-desc {
+            color: #fff !important;
+        }
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-cta,
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-cta:hover,
+        [data-bs-theme="dark"] .ecommerce-banner-caption .ecommerce-banner-cta:focus {
+            color: #000 !important;
+            background-color: #fff !important;
+            border-color: #fff !important;
         }
     </style>
     {% block extra_head %}{% endblock %}
@@ -326,7 +535,7 @@
                         </span>
                     </li>
                     <li class="nav-item dropdown ms-lg-2">
-                        <a class="nav-link dropdown-toggle py-2 text-white text-start text-lg-end" href="#" id="ecommerceUserMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle py-2 text-white text-start text-lg-end" href="#" id="ecommerceUserMenu" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                             <i class="bi bi-person-circle me-1"></i><span class="fw-medium">{{ ecommerce_usuario_exibicao|default:user.username }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-lg-end shadow" aria-labelledby="ecommerceUserMenu">
@@ -341,6 +550,25 @@
                             <li><a class="dropdown-item" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-2"></i>Meus pedidos</a></li>
                             <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'ecommerce_notificacoes' %}"><span><i class="bi bi-bell me-2"></i>Notificações</span>{% if ecommerce_notificacoes_nao_lidas %}<span class="badge bg-danger rounded-pill">{{ ecommerce_notificacoes_nao_lidas }}</span>{% endif %}</a></li>
                             <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2"></i>Painel interno</a></li>
+                            <li class="dropstart">
+                                <a class="dropdown-item dropdown-toggle d-flex align-items-center" href="#" id="ecommerceThemeSubmenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="bi bi-palette me-2"></i>Tema
+                                </a>
+                                <ul class="dropdown-menu" aria-labelledby="ecommerceThemeSubmenu">
+                                    <li>
+                                        <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="light">
+                                            <i class="bi bi-sun me-2"></i>Whitemode
+                                            <i class="bi bi-check2 ms-auto theme-check d-none"></i>
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="dark">
+                                            <i class="bi bi-moon-stars me-2"></i>Darkmode
+                                            <i class="bi bi-check2 ms-auto theme-check d-none"></i>
+                                        </button>
+                                    </li>
+                                </ul>
+                            </li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="post" action="{% url 'logout' %}">
@@ -435,6 +663,44 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-geWF76RCwLtnZ8qwWowPQNguL3RmwHVBC9FhGdlKrxdiJJigb/j/68SIy3Te4Bkz" crossorigin="anonymous"></script>
+    <script>
+        (function () {
+            const THEME_KEY = 'syspmix-theme';
+
+            function getStoredTheme() {
+                try {
+                    var theme = localStorage.getItem(THEME_KEY);
+                    return (theme === 'dark' || theme === 'light') ? theme : 'light';
+                } catch (e) {
+                    return 'light';
+                }
+            }
+
+            function applyTheme(theme) {
+                if (theme !== 'dark' && theme !== 'light') theme = 'light';
+                document.documentElement.setAttribute('data-bs-theme', theme);
+                try {
+                    localStorage.setItem(THEME_KEY, theme);
+                } catch (e) {}
+                document.querySelectorAll('.theme-option').forEach(function (btn) {
+                    var isActive = btn.getAttribute('data-theme') === theme;
+                    btn.classList.toggle('active-theme', isActive);
+                    var check = btn.querySelector('.theme-check');
+                    if (check) check.classList.toggle('d-none', !isActive);
+                });
+            }
+
+            applyTheme(getStoredTheme());
+
+            document.querySelectorAll('.theme-option').forEach(function (btn) {
+                btn.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    applyTheme(btn.getAttribute('data-theme'));
+                });
+            });
+        })();
+    </script>
     <script>
         (function () {
             const modalEl = document.getElementById('ecommerceModalAddCart');

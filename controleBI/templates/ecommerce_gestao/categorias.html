@@ -19,6 +19,7 @@
                         A loja usa só as marcadas; se o pai não estiver marcado, um filho marcado aparece como categoria de primeiro nível.
                         Se marcar só o grupo de nível superior e desmarcar os filhos, o pai aparece sozinho no menu, mas a listagem inclui os produtos de toda a hierarquia abaixo dele.
                         Defina também o tipo <strong>Mercadoria</strong> ou <strong>Revenda</strong> de cada categoria para o filtro da loja.
+                        O campo <strong>Ordem</strong> deve ser único e define a sequência das categorias e dos produtos na loja (menor valor primeiro).
                     </p>
                     <form method="get" action="{% url 'gestao_categorias_ecommerce' %}" class="row g-2 align-items-end mb-3">
                         <div class="col-md-6 col-lg-5">
@@ -50,6 +51,7 @@
                                     <tr>
                                         <th>Na loja</th>
                                         <th>Categoria</th>
+                                        <th class="text-center" style="width: 6rem;">Ordem</th>
                                         <th class="text-center" style="width: 7rem;">Mercadoria</th>
                                         <th class="text-center" style="width: 7rem;">Revenda</th>
                                     </tr>
@@ -57,7 +59,7 @@
                                 <tbody>
                                     {% if filtro_sem_resultado %}
                                     <tr>
-                                        <td colspan="4" class="text-center text-muted py-4">
+                                        <td colspan="5" class="text-center text-muted py-4">
                                             Nenhuma categoria encontrada para «{{ current_search }}».
                                         </td>
                                     </tr>
@@ -66,7 +68,7 @@
                                         {% include 'ecommerce_gestao/categorias_node.html' with node=node depth=0 %}
                                     {% empty %}
                                     <tr>
-                                        <td colspan="4" class="text-center text-muted py-4">Nenhum grupo de produto ativo encontrado.</td>
+                                        <td colspan="5" class="text-center text-muted py-4">Nenhum grupo de produto ativo encontrado.</td>
                                     </tr>
                                     {% endfor %}
                                     {% endif %}
