@@ -113,6 +113,8 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            cursor: default;
+            pointer-events: none;
         }
 
         /* Sidebar Styles */
@@ -369,14 +371,13 @@
             <button class="btn btn-link text-light" id="sidebarToggle">
                 <i class="bi bi-list fs-4"></i>
             </button>
-            <a class="navbar-brand ms-2" href="#">
+            <div class="navbar-brand ms-2">
                 <div class="logo-container">
                     <img src="{% static 'img/pannemix_cortado_transparente.png' %}" alt="Pannemix" loading="lazy">
                 </div>
-            </a>
+            </div>
             <button type="button" class="btn btn-link text-white theme-toggle-btn ms-2" id="themeToggleBtn" title="Alterar tema" aria-label="Alterar tema">
                 <i class="bi bi-moon-stars theme-toggle-icon" aria-hidden="true"></i>
-                <span class="theme-toggle-label d-none d-sm-inline">Darkmode</span>
             </button>
             <div class="ms-auto d-flex align-items-center">
                 <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="btn btn-link text-light position-relative me-3" title="Gestão de notificações">
@@ -604,16 +605,12 @@
                 var btn = document.getElementById('themeToggleBtn');
                 if (!btn) return;
                 var icon = btn.querySelector('.theme-toggle-icon');
-                var label = btn.querySelector('.theme-toggle-label');
                 var nextIsDark = theme !== 'dark';
                 btn.setAttribute('data-theme-next', nextIsDark ? 'dark' : 'light');
                 btn.setAttribute('title', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
                 btn.setAttribute('aria-label', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
                 if (icon) {
                     icon.className = 'bi theme-toggle-icon ' + (nextIsDark ? 'bi-moon-stars' : 'bi-sun');
-                }
-                if (label) {
-                    label.textContent = nextIsDark ? 'Darkmode' : 'Whitemode';
                 }
             }
 

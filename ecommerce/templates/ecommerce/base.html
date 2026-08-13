@@ -84,6 +84,8 @@
             align-items: center;
             min-width: 0;
             max-width: 100%;
+            cursor: default;
+            pointer-events: none;
         }
         .navbar-ecommerce .nav-link {
             color: rgba(255,255,255,0.9) !important;
@@ -557,14 +559,13 @@
 <body class="d-flex flex-column">
     <nav class="navbar navbar-expand-lg navbar-ecommerce">
         <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'ecommerce_home' %}" title="{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja Pannemix{% endif %}">
+            <div class="navbar-brand" title="{% if ecommerce_cliente_nome %}{{ ecommerce_cliente_nome }}{% else %}Loja Pannemix{% endif %}">
                 <span class="logo-container">
                     <img src="{% static 'img/pannemix_cortado_transparente.png' %}" alt="Pannemix" loading="lazy">
                 </span>
-            </a>
+            </div>
             <button type="button" class="btn btn-link text-white theme-toggle-btn ms-2" id="themeToggleBtn" title="Alterar tema" aria-label="Alterar tema">
                 <i class="bi bi-moon-stars theme-toggle-icon" aria-hidden="true"></i>
-                <span class="theme-toggle-label d-none d-sm-inline">Darkmode</span>
             </button>
             <div class="d-flex align-items-center ms-auto d-lg-none">
                 <a class="nav-link ecommerce-cart-mobile d-flex align-items-center" href="{% url 'ecommerce_cart' %}" title="Carrinho" aria-label="Carrinho">
@@ -581,9 +582,6 @@
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-stretch align-items-start flex-column flex-lg-row flex-lg-wrap gap-lg-1">
                     <li class="nav-item">
                         <a class="nav-link py-2" href="{% url 'ecommerce_home' %}"><i class="bi bi-house-door me-1"></i>Início</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link py-2" href="{% url 'ecommerce_home' %}#catalogo"><i class="bi bi-grid me-1"></i>Catálogo</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link py-2" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-1"></i>Meus pedidos</a>
@@ -758,16 +756,12 @@
                 var btn = document.getElementById('themeToggleBtn');
                 if (!btn) return;
                 var icon = btn.querySelector('.theme-toggle-icon');
-                var label = btn.querySelector('.theme-toggle-label');
                 var nextIsDark = theme !== 'dark';
                 btn.setAttribute('data-theme-next', nextIsDark ? 'dark' : 'light');
                 btn.setAttribute('title', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
                 btn.setAttribute('aria-label', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
                 if (icon) {
                     icon.className = 'bi theme-toggle-icon ' + (nextIsDark ? 'bi-moon-stars' : 'bi-sun');
-                }
-                if (label) {
-                    label.textContent = nextIsDark ? 'Darkmode' : 'Whitemode';
                 }
             }
 
