@@ -12,7 +12,7 @@
     <div class="d-flex gap-2">
         <form method="post" action="{% url 'ecommerce_clear_cart' %}" class="m-0" onsubmit="return confirm('Esvaziar o carrinho?');">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary btn-sm">Esvaziar</button>
+            <button type="submit" class="btn btn-outline-secondary btn-sm btn-theme-outline">Esvaziar</button>
         </form>
         <button type="button" class="btn btn-primary btn-sm" id="btnCheckoutAnalise">
             <i class="bi bi-send me-1"></i>Finalizar pedido

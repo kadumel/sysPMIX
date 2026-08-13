@@ -207,30 +207,48 @@
             background-color: var(--secondary-color);
         }
 
+        .badge.bg-danger,
+        .navbar-count-badge {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border-color: #dc3545 !important;
+        }
+
+        [data-bs-theme="dark"] .badge.bg-danger,
+        [data-bs-theme="dark"] .navbar-count-badge {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border-color: #dc3545 !important;
+        }
+
         /* Dropdown Styles */
         .dropdown-item:hover {
             background-color: var(--dropdown-hover-bg);
             color: var(--secondary-color);
         }
 
-        .dropdown-item.active-theme {
-            background-color: var(--dropdown-hover-bg);
-            color: var(--secondary-color);
-            font-weight: 600;
+        /* Toggle de tema ao lado da logo */
+        .theme-toggle-btn {
+            text-decoration: none !important;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 0.375rem;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            transition: background-color 0.15s ease, color 0.15s ease;
         }
 
-        /* Submenu Tema (abre à esquerda — menu do usuário fica à direita) */
-        .navbar .dropdown-menu .dropstart > .dropdown-toggle::before {
-            margin-right: 0.5rem;
-            vertical-align: middle;
+        .theme-toggle-btn:hover,
+        .theme-toggle-btn:focus-visible {
+            background-color: rgba(255, 255, 255, 0.18);
+            color: #fff !important;
         }
 
-        .navbar .dropdown-menu .dropstart > .dropdown-toggle::after {
-            display: none;
-        }
-
-        .navbar .dropdown-menu .dropstart > .dropdown-menu {
-            margin-right: 0.125rem;
+        .theme-toggle-btn .theme-toggle-icon {
+            font-size: 1.1rem;
+            line-height: 1;
         }
 
         /* Dropdown do navbar acima da sidebar (z-index 1000) e do conteúdo */
@@ -290,14 +308,6 @@
             }
             .main-content {
                 margin-left: 0;
-            }
-
-            .navbar .dropdown-menu .dropstart > .dropdown-menu {
-                position: static;
-                margin-right: 0;
-                box-shadow: none;
-                border: none;
-                padding-left: 0.75rem;
             }
         }
 
@@ -363,17 +373,20 @@
                 <div class="logo-container">
                     <img src="{% static 'img/pannemix_cortado_transparente.png' %}" alt="Pannemix" loading="lazy">
                 </div>
-                
             </a>
+            <button type="button" class="btn btn-link text-white theme-toggle-btn ms-2" id="themeToggleBtn" title="Alterar tema" aria-label="Alterar tema">
+                <i class="bi bi-moon-stars theme-toggle-icon" aria-hidden="true"></i>
+                <span class="theme-toggle-label d-none d-sm-inline">Darkmode</span>
+            </button>
             <div class="ms-auto d-flex align-items-center">
                 <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="btn btn-link text-light position-relative me-3" title="Gestão de notificações">
                     <i class="bi bi-bell-fill fs-5"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-count-badge js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">
                         {{ bi_notificacoes_pendentes }}
                     </span>
                 </a>
                 <div class="dropdown">
-                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="bi bi-person-circle me-2"></i>
                         {{ request.user.username }}
                     </button>
@@ -385,25 +398,6 @@
                                     <i class="bi bi-gear me-2"></i>Configurações
                                 </button>
                             </form>
-                        </li>
-                        <li class="dropstart">
-                            <a class="dropdown-item dropdown-toggle d-flex align-items-center" href="#" id="themeSubmenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-palette me-2"></i>Tema
-                            </a>
-                            <ul class="dropdown-menu" aria-labelledby="themeSubmenu">
-                                <li>
-                                    <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="light">
-                                        <i class="bi bi-sun me-2"></i>Whitemode
-                                        <i class="bi bi-check2 ms-auto theme-check d-none"></i>
-                                    </button>
-                                </li>
-                                <li>
-                                    <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="dark">
-                                        <i class="bi bi-moon-stars me-2"></i>Darkmode
-                                        <i class="bi bi-check2 ms-auto theme-check d-none"></i>
-                                    </button>
-                                </li>
-                            </ul>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
@@ -478,7 +472,7 @@
                 </a>
                 {% endif %}
                 <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'gestao_notificacoes_ecommerce' %}active{% endif %}">
-                    <span class="d-flex align-items-center gap-2"><i class="bi bi-bell"></i> Notificações<span class="badge rounded-pill bg-danger js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">{{ bi_notificacoes_pendentes }}</span></span>
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-bell"></i> Notificações<span class="badge rounded-pill bg-danger text-white navbar-count-badge js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">{{ bi_notificacoes_pendentes }}</span></span>
                 </a>
                 {% if request.user.perfil_usuario.perfil == 'administrador' %}
                 <a href="{% url 'api_sankhya_gestao_integracoes' %}" class="nav-link d-flex align-items-center w-100 {% if u == 'api_sankhya_gestao_integracoes' or u == 'api_sankhya_atualizar_integracao' or u == 'api_sankhya_atualizar_todas_integracoes' %}active{% endif %}">
@@ -541,7 +535,7 @@
                 </a>
                 {% endif %}
                 <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="nav-link d-flex align-items-center w-100">
-                    <span class="d-flex align-items-center gap-2"><i class="bi bi-bell"></i> Notificações<span class="badge rounded-pill bg-danger js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">{{ bi_notificacoes_pendentes }}</span></span>
+                    <span class="d-flex align-items-center gap-2"><i class="bi bi-bell"></i> Notificações<span class="badge rounded-pill bg-danger text-white navbar-count-badge js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">{{ bi_notificacoes_pendentes }}</span></span>
                 </a>
                 {% if request.user.perfil_usuario.perfil == 'administrador' %}
                 <a href="{% url 'api_sankhya_gestao_integracoes' %}" class="nav-link d-flex align-items-center w-100">
@@ -594,7 +588,7 @@
     {% block extra_js %}{% endblock %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Tema (Whitemode / Darkmode)
+            // Tema (Whitemode / Darkmode) — botão ao lado da logo mostra a opção oposta
             const THEME_KEY = 'syspmix-theme';
 
             function getStoredTheme() {
@@ -606,29 +600,41 @@
                 }
             }
 
+            function syncThemeToggle(theme) {
+                var btn = document.getElementById('themeToggleBtn');
+                if (!btn) return;
+                var icon = btn.querySelector('.theme-toggle-icon');
+                var label = btn.querySelector('.theme-toggle-label');
+                var nextIsDark = theme !== 'dark';
+                btn.setAttribute('data-theme-next', nextIsDark ? 'dark' : 'light');
+                btn.setAttribute('title', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
+                btn.setAttribute('aria-label', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
+                if (icon) {
+                    icon.className = 'bi theme-toggle-icon ' + (nextIsDark ? 'bi-moon-stars' : 'bi-sun');
+                }
+                if (label) {
+                    label.textContent = nextIsDark ? 'Darkmode' : 'Whitemode';
+                }
+            }
+
             function applyTheme(theme) {
                 if (theme !== 'dark' && theme !== 'light') theme = 'light';
                 document.documentElement.setAttribute('data-bs-theme', theme);
                 try {
                     localStorage.setItem(THEME_KEY, theme);
                 } catch (e) {}
-                document.querySelectorAll('.theme-option').forEach(function (btn) {
-                    var isActive = btn.getAttribute('data-theme') === theme;
-                    btn.classList.toggle('active-theme', isActive);
-                    var check = btn.querySelector('.theme-check');
-                    if (check) check.classList.toggle('d-none', !isActive);
-                });
+                syncThemeToggle(theme);
             }
 
             applyTheme(getStoredTheme());
 
-            document.querySelectorAll('.theme-option').forEach(function (btn) {
-                btn.addEventListener('click', function (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    applyTheme(btn.getAttribute('data-theme'));
+            var themeToggleBtn = document.getElementById('themeToggleBtn');
+            if (themeToggleBtn) {
+                themeToggleBtn.addEventListener('click', function () {
+                    var next = themeToggleBtn.getAttribute('data-theme-next') || 'dark';
+                    applyTheme(next);
                 });
-            });
+            }
 
             // Inicializar tooltips
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));

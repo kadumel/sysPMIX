@@ -41,11 +41,11 @@
 
         {% if pedidos %}
         <div class="table-responsive card ecommerce-cart-card border-0 shadow-sm">
-            <table class="table table-hover align-middle mb-0">
-                <thead class="table-light">
+            <table class="table table-hover align-middle mb-0 ecommerce-pedidos-table">
+                <thead>
                     <tr>
                         <th>
-                            <a href="{{ sort_link_pedido }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                            <a href="{{ sort_link_pedido }}" class="ecommerce-sort-link text-decoration-none d-inline-flex align-items-center gap-1">
                                 Pedido
                                 {% if ordem_atual == 'pedido' %}
                                 <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
@@ -53,7 +53,7 @@
                             </a>
                         </th>
                         <th>
-                            <a href="{{ sort_link_data }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                            <a href="{{ sort_link_data }}" class="ecommerce-sort-link text-decoration-none d-inline-flex align-items-center gap-1">
                                 Data
                                 {% if ordem_atual == 'data' %}
                                 <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
@@ -61,7 +61,7 @@
                             </a>
                         </th>
                         <th>
-                            <a href="{{ sort_link_valor_total }}" class="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                            <a href="{{ sort_link_valor_total }}" class="ecommerce-sort-link text-decoration-none d-inline-flex align-items-center gap-1">
                                 Valor total
                                 {% if ordem_atual == 'valor_total' %}
                                 <i class="bi bi-caret-{% if dir_atual == 'asc' %}up{% else %}down{% endif %}-fill small"></i>
@@ -70,7 +70,7 @@
                         </th>
                         <th>Status</th>
                         <th>Pedido Sankhya</th>
-                        <th></th>
+                        <th class="text-end">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -91,7 +91,7 @@
                         <td class="small">{% if p.codigo_pedido_sankhya %}{{ p.codigo_pedido_sankhya }}{% else %}—{% endif %}</td>
                         <td class="text-end">
                             <div class="d-inline-flex gap-2">
-                                <a href="{% url 'ecommerce_pedido_detail' p.pk %}" class="btn btn-sm btn-outline-primary">Detalhes</a>
+                                <a href="{% url 'ecommerce_pedido_detail' p.pk %}" class="btn btn-sm btn-outline-primary btn-theme-outline">Detalhes</a>
                                 {% if p.status == 'rejeitado' %}
                                 <form method="post" action="{% url 'ecommerce_pedido_reenviar_carrinho' p.pk %}">
                                     {% csrf_token %}
