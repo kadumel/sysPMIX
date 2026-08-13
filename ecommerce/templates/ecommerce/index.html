@@ -191,10 +191,7 @@
                 </div>
             </div>
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 small text-muted">
-                <span>{{ paginator.count }} produto{{ paginator.count|pluralize }}</span>
-                {% if produtos.paginator.num_pages > 1 %}
-                <span>Página {{ produtos.number }} de {{ produtos.paginator.num_pages }}</span>
-                {% endif %}
+                <span>{{ produtos_count }} produto{{ produtos_count|pluralize }}</span>
             </div>
 
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
@@ -208,32 +205,6 @@
                     </div>
                 </div>
                 {% endfor %}
-            </div>
-
-            {% if produtos.paginator.num_pages > 1 %}
-            <div class="btn-group mt-4" role="group" aria-label="Paginação">
-                {% if produtos.has_previous %}
-                <a class="btn btn-outline-primary" href="{% url 'ecommerce_home' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto page=produtos.previous_page_number %}{% else %}{% ecommerce_catalog_qs page=produtos.previous_page_number %}{% endif %}">Anterior</a>
-                {% endif %}
-                <button type="button" class="btn btn-primary disabled" disabled>{{ produtos.number }} / {{ produtos.paginator.num_pages }}</button>
-                {% if produtos.has_next %}
-                <a class="btn btn-outline-primary" href="{% url 'ecommerce_home' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto page=produtos.next_page_number %}{% else %}{% ecommerce_catalog_qs page=produtos.next_page_number %}{% endif %}">Próxima</a>
-                {% endif %}
-            </div>
-            {% endif %}
-
-            <div id="destaque-htmx" class="mt-4">
-                {% if paginator.count > produtos.paginator.per_page %}
-                <button
-                    type="button"
-                    class="btn btn-outline-secondary"
-                    hx-get="{% url 'ecommerce_htmx_destaque' %}{% if grupo_atual %}{% ecommerce_catalog_qs grupo=grupo_atual.codigo_grupo_produto %}{% else %}{% ecommerce_catalog_qs %}{% endif %}"
-                    hx-target="#destaque-htmx"
-                    hx-swap="innerHTML"
-                >
-                    <i class="bi bi-plus-lg me-1"></i> Carregar mais (HTMX — 2ª página)
-                </button>
-                {% endif %}
             </div>
         </div>
     </div>

@@ -159,6 +159,20 @@
         .badge {
             background-color: var(--secondary-color);
         }
+        .badge.bg-danger,
+        .navbar-count-badge {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border-color: #dc3545 !important;
+        }
+        [data-bs-theme="dark"] .badge.bg-danger,
+        [data-bs-theme="dark"] .navbar-count-badge,
+        [data-bs-theme="dark"] .navbar-count-badge.bg-white,
+        [data-bs-theme="dark"] .navbar-count-badge.text-danger {
+            background-color: #dc3545 !important;
+            color: #fff !important;
+            border-color: #dc3545 !important;
+        }
         .ecommerce-hero-gradient {
             background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
         }
@@ -247,24 +261,71 @@
         .ecommerce-footer .text-dark {
             color: var(--body-color) !important;
         }
+        .breadcrumb-item a {
+            color: var(--body-color);
+            text-decoration: none;
+            opacity: 0.75;
+        }
+        .breadcrumb-item a:hover {
+            color: var(--secondary-color);
+            opacity: 1;
+            text-decoration: none;
+        }
+        .breadcrumb-item.active {
+            color: var(--body-color);
+            opacity: 1;
+        }
+        .breadcrumb-item + .breadcrumb-item::before {
+            color: var(--body-color);
+            opacity: 0.45;
+        }
+        .ecommerce-pedidos-table thead th {
+            background-color: #f1f3f5;
+            color: var(--body-color);
+            border-bottom-color: var(--border-subtle);
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .ecommerce-sort-link {
+            color: inherit !important;
+        }
+        .ecommerce-sort-link:hover {
+            color: var(--secondary-color) !important;
+        }
+        [data-bs-theme="dark"] .ecommerce-pedidos-table thead th {
+            background-color: #2a2e33;
+            color: var(--body-color);
+            border-bottom-color: var(--border-subtle);
+        }
+        [data-bs-theme="dark"] .ecommerce-pedidos-table {
+            --bs-table-bg: var(--card-bg);
+            --bs-table-color: var(--body-color);
+            --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+            --bs-table-border-color: var(--border-subtle);
+        }
         .dropdown-item:hover {
             background-color: var(--dropdown-hover-bg);
             color: var(--secondary-color);
         }
-        .dropdown-item.active-theme {
-            background-color: var(--dropdown-hover-bg);
-            color: var(--secondary-color);
-            font-weight: 600;
+        .theme-toggle-btn {
+            text-decoration: none !important;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.35rem 0.65rem;
+            border-radius: 0.375rem;
+            font-size: 0.9rem;
+            white-space: nowrap;
+            transition: background-color 0.15s ease, color 0.15s ease;
         }
-        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-toggle::before {
-            margin-right: 0.5rem;
-            vertical-align: middle;
+        .theme-toggle-btn:hover,
+        .theme-toggle-btn:focus-visible {
+            background-color: rgba(255, 255, 255, 0.18);
+            color: #fff !important;
         }
-        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-toggle::after {
-            display: none;
-        }
-        .navbar-ecommerce .dropdown-menu .dropstart > .dropdown-menu {
-            margin-right: 0.125rem;
+        .theme-toggle-btn .theme-toggle-icon {
+            font-size: 1.1rem;
+            line-height: 1;
         }
         [data-bs-theme="dark"] .table {
             --bs-table-bg: var(--card-bg);
@@ -368,15 +429,19 @@
             .navbar-ecommerce .navbar-collapse .nav-link i {
                 color: rgba(255, 255, 255, 0.95) !important;
             }
-            .navbar-ecommerce .navbar-collapse .dropstart > .dropdown-menu {
-                margin-right: 0;
-                padding-left: 0.75rem;
-            }
         }
-        .navbar-ecommerce .navbar-cart-badge {
+        .navbar-ecommerce .navbar-cart-badge,
+        .navbar-ecommerce .navbar-count-badge.navbar-cart-badge {
             font-size: 0.65rem;
             min-width: 1.15rem;
             padding: 0.2em 0.45em;
+            line-height: 1;
+        }
+        .navbar-ecommerce .dropdown-item .navbar-count-badge {
+            font-size: 0.65rem;
+            min-width: 1.15rem;
+            padding: 0.2em 0.45em;
+            line-height: 1;
         }
         .navbar-ecommerce .ecommerce-cart-mobile {
             color: #fff !important;
@@ -421,6 +486,20 @@
         }
         .analise-sugestao-thumb-fallback {
             line-height: 1;
+        }
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-primary,
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-secondary {
+            color: #fff !important;
+            border-color: #fff !important;
+            background-color: transparent !important;
+        }
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-primary:hover,
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-primary:focus,
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-secondary:hover,
+        [data-bs-theme="dark"] .btn-theme-outline.btn-outline-secondary:focus {
+            color: #121416 !important;
+            background-color: #fff !important;
+            border-color: #fff !important;
         }
         #ecommerceCarouselBanners .carousel-control-prev,
         #ecommerceCarouselBanners .carousel-control-next {
@@ -483,11 +562,15 @@
                     <img src="{% static 'img/pannemix_cortado_transparente.png' %}" alt="Pannemix" loading="lazy">
                 </span>
             </a>
+            <button type="button" class="btn btn-link text-white theme-toggle-btn ms-2" id="themeToggleBtn" title="Alterar tema" aria-label="Alterar tema">
+                <i class="bi bi-moon-stars theme-toggle-icon" aria-hidden="true"></i>
+                <span class="theme-toggle-label d-none d-sm-inline">Darkmode</span>
+            </button>
             <div class="d-flex align-items-center ms-auto d-lg-none">
                 <a class="nav-link ecommerce-cart-mobile d-flex align-items-center" href="{% url 'ecommerce_cart' %}" title="Carrinho" aria-label="Carrinho">
                     <span class="position-relative d-inline-flex">
                         <i class="bi bi-cart3"></i>
-                        <span id="ecommerceCartBadgeMobile" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-white text-danger border navbar-cart-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
+                        <span id="ecommerceCartBadgeMobile" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-cart-badge navbar-count-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
                     </span>
                 </a>
                 <button class="navbar-toggler border-0 shadow-none" type="button" data-bs-toggle="collapse" data-bs-target="#ecommerceNav" aria-controls="ecommerceNav" aria-expanded="false" aria-label="Menu">
@@ -510,7 +593,7 @@
                             <span class="position-relative d-inline-flex">
                                 <i class="bi bi-bell fs-5"></i>
                                 {% if ecommerce_notificacoes_nao_lidas %}
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" style="font-size: 0.6rem;">{{ ecommerce_notificacoes_nao_lidas }}</span>
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-count-badge" style="font-size: 0.6rem;">{{ ecommerce_notificacoes_nao_lidas }}</span>
                                 {% endif %}
                             </span>
                             Notificações
@@ -520,7 +603,7 @@
                         <a class="nav-link py-2 d-flex align-items-center gap-1" href="{% url 'ecommerce_cart' %}">
                             <span class="position-relative d-inline-flex">
                                 <i class="bi bi-cart3 fs-5"></i>
-                                <span id="ecommerceCartBadgeNav" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-white text-danger border navbar-cart-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
+                                <span id="ecommerceCartBadgeNav" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-cart-badge navbar-count-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
                             </span>
                             Carrinho
                         </a>
@@ -535,7 +618,7 @@
                         </span>
                     </li>
                     <li class="nav-item dropdown ms-lg-2">
-                        <a class="nav-link dropdown-toggle py-2 text-white text-start text-lg-end" href="#" id="ecommerceUserMenu" role="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle py-2 text-white text-start text-lg-end" href="#" id="ecommerceUserMenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="bi bi-person-circle me-1"></i><span class="fw-medium">{{ ecommerce_usuario_exibicao|default:user.username }}</span>
                         </a>
                         <ul class="dropdown-menu dropdown-menu-lg-end shadow" aria-labelledby="ecommerceUserMenu">
@@ -546,29 +629,26 @@
                             <li><span class="dropdown-item-text small text-muted text-wrap"><i class="bi bi-info-circle me-1"></i>Nenhum cliente Sankhya vinculado a este usuário.</span></li>
                             {% endif %}
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="{% url 'ecommerce_cart' %}"><i class="bi bi-cart3 me-2"></i>Carrinho <span id="ecommerceCartBadgeMenu" class="badge bg-secondary js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span></a></li>
-                            <li><a class="dropdown-item" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-2"></i>Meus pedidos</a></li>
-                            <li><a class="dropdown-item d-flex justify-content-between align-items-center" href="{% url 'ecommerce_notificacoes' %}"><span><i class="bi bi-bell me-2"></i>Notificações</span>{% if ecommerce_notificacoes_nao_lidas %}<span class="badge bg-danger rounded-pill">{{ ecommerce_notificacoes_nao_lidas }}</span>{% endif %}</a></li>
-                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2"></i>Painel interno</a></li>
-                            <li class="dropstart">
-                                <a class="dropdown-item dropdown-toggle d-flex align-items-center" href="#" id="ecommerceThemeSubmenu" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="bi bi-palette me-2"></i>Tema
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center" href="{% url 'ecommerce_cart' %}">
+                                    <span class="position-relative d-inline-flex me-2">
+                                        <i class="bi bi-cart3"></i>
+                                        <span id="ecommerceCartBadgeMenu" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-cart-badge navbar-count-badge js-ecommerce-cart-lines {% if ecommerce_cart_count == 0 %}d-none{% endif %}">{{ ecommerce_cart_count }}</span>
+                                    </span>
+                                    Carrinho
                                 </a>
-                                <ul class="dropdown-menu" aria-labelledby="ecommerceThemeSubmenu">
-                                    <li>
-                                        <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="light">
-                                            <i class="bi bi-sun me-2"></i>Whitemode
-                                            <i class="bi bi-check2 ms-auto theme-check d-none"></i>
-                                        </button>
-                                    </li>
-                                    <li>
-                                        <button type="button" class="dropdown-item theme-option d-flex align-items-center" data-theme="dark">
-                                            <i class="bi bi-moon-stars me-2"></i>Darkmode
-                                            <i class="bi bi-check2 ms-auto theme-check d-none"></i>
-                                        </button>
-                                    </li>
-                                </ul>
                             </li>
+                            <li><a class="dropdown-item" href="{% url 'ecommerce_pedidos' %}"><i class="bi bi-receipt me-2"></i>Meus pedidos</a></li>
+                            <li>
+                                <a class="dropdown-item d-flex align-items-center" href="{% url 'ecommerce_notificacoes' %}">
+                                    <span class="position-relative d-inline-flex me-2">
+                                        <i class="bi bi-bell"></i>
+                                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-cart-badge navbar-count-badge {% if not ecommerce_notificacoes_nao_lidas %}d-none{% endif %}">{{ ecommerce_notificacoes_nao_lidas|default:0 }}</span>
+                                    </span>
+                                    Notificações
+                                </a>
+                            </li>
+                            <li><a class="dropdown-item" href="{% url 'dashboard' %}"><i class="bi bi-speedometer2 me-2"></i>Painel interno</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <form method="post" action="{% url 'logout' %}">
@@ -609,8 +689,6 @@
                     <a href="{% url 'ecommerce_home' %}" class="text-decoration-none text-muted">Início</a>
                     <span class="mx-2">·</span>
                     <a href="{% url 'ecommerce_cart' %}" class="text-decoration-none text-muted">Carrinho</a>
-                    <span class="mx-2">·</span>
-                    <a href="/manifest.json" class="text-decoration-none text-muted">Manifest</a>
                 </div>
             </div>
         </div>
@@ -676,29 +754,41 @@
                 }
             }
 
+            function syncThemeToggle(theme) {
+                var btn = document.getElementById('themeToggleBtn');
+                if (!btn) return;
+                var icon = btn.querySelector('.theme-toggle-icon');
+                var label = btn.querySelector('.theme-toggle-label');
+                var nextIsDark = theme !== 'dark';
+                btn.setAttribute('data-theme-next', nextIsDark ? 'dark' : 'light');
+                btn.setAttribute('title', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
+                btn.setAttribute('aria-label', nextIsDark ? 'Ativar Darkmode' : 'Ativar Whitemode');
+                if (icon) {
+                    icon.className = 'bi theme-toggle-icon ' + (nextIsDark ? 'bi-moon-stars' : 'bi-sun');
+                }
+                if (label) {
+                    label.textContent = nextIsDark ? 'Darkmode' : 'Whitemode';
+                }
+            }
+
             function applyTheme(theme) {
                 if (theme !== 'dark' && theme !== 'light') theme = 'light';
                 document.documentElement.setAttribute('data-bs-theme', theme);
                 try {
                     localStorage.setItem(THEME_KEY, theme);
                 } catch (e) {}
-                document.querySelectorAll('.theme-option').forEach(function (btn) {
-                    var isActive = btn.getAttribute('data-theme') === theme;
-                    btn.classList.toggle('active-theme', isActive);
-                    var check = btn.querySelector('.theme-check');
-                    if (check) check.classList.toggle('d-none', !isActive);
-                });
+                syncThemeToggle(theme);
             }
 
             applyTheme(getStoredTheme());
 
-            document.querySelectorAll('.theme-option').forEach(function (btn) {
-                btn.addEventListener('click', function (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    applyTheme(btn.getAttribute('data-theme'));
+            var themeToggleBtn = document.getElementById('themeToggleBtn');
+            if (themeToggleBtn) {
+                themeToggleBtn.addEventListener('click', function () {
+                    var next = themeToggleBtn.getAttribute('data-theme-next') || 'dark';
+                    applyTheme(next);
                 });
-            });
+            }
         })();
     </script>
     <script>

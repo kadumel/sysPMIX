@@ -4,7 +4,6 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
-from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
@@ -178,12 +177,11 @@ def index(request):
     )
     qs = catalog.aplicar_busca_produtos(qs, termo_busca)
     qs = catalog.prefetch_imagens_produto_loja(qs)
-    paginator = Paginator(qs, catalog.PAGE_SIZE)
-    page = paginator.get_page(request.GET.get('page'))
+    produtos = list(qs)
     precos_por_produto = catalog.map_precos_por_codtab(
-        [p.codigo_produto for p in page.object_list], codtab_cliente
+        [p.codigo_produto for p in produtos], codtab_cliente
     )
-    for produto in page.object_list:
+    for produto in produtos:
         produto.preco_ecommerce = precos_por_produto.get(produto.codigo_produto)
 
     ancestrais = catalog.ancestrais(grupo_atual, by_id) if grupo_atual else []
@@ -194,8 +192,8 @@ def index(request):
         'grupos_flat': [{'grupo': g, 'depth': d} for g, d in grupos_flat],
         'grupo_atual': grupo_atual,
         'grupo_ancestrais': ancestrais,
-        'produtos': page,
-        'paginator': paginator,
+        'produtos': produtos,
+        'produtos_count': len(produtos),
         'codtab_cliente': codtab_cliente,
         'tipos_loja_ativos': tipos_loja,
         'tipo_loja_ativo': tipo_efetivo,
