@@ -91,6 +91,29 @@ class CriarUsuarioClienteSankhyaForm(forms.Form):
         return data
 
 
+class ImportarUsuariosClienteSankhyaForm(forms.Form):
+    planilha = forms.FileField(
+        label='Planilha',
+        help_text='Excel (.xlsx) ou CSV com as colunas Codigo_Cliente, Usuario, Nome, E-mail Gerado e Senha Gerada.',
+        error_messages={'required': 'Selecione a planilha para importar.'},
+        widget=forms.FileInput(
+            attrs={
+                'class': 'form-control',
+                'accept': '.xlsx,.xlsm,.csv',
+            }
+        ),
+    )
+
+    def clean_planilha(self):
+        arquivo = self.cleaned_data['planilha']
+        nome = (arquivo.name or '').lower()
+        if not nome.endswith(('.xlsx', '.xlsm', '.csv')):
+            raise forms.ValidationError('Envie um arquivo .xlsx ou .csv.')
+        if arquivo.size and arquivo.size > 10 * 1024 * 1024:
+            raise forms.ValidationError('Arquivo maior que 10 MB.')
+        return arquivo
+
+
 class AlterarSenhaUsuarioClienteForm(forms.Form):
     new_password = forms.CharField(
         label='Nova senha',

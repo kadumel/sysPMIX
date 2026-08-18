@@ -32,7 +32,9 @@ from .forms import (
     ClienteSankhyaConfigForm,
     CriarUsuarioClienteSankhyaForm,
     AlterarSenhaUsuarioClienteForm,
+    ImportarUsuariosClienteSankhyaForm,
 )
+from .import_usuarios_cliente import importar_usuarios_planilha
 from .services import FuncionarioService, PedidoService
 from django.db.models import Count, Prefetch, Sum, Q, Value
 from django.db.models import OuterRef, Subquery
@@ -1847,6 +1849,7 @@ class ListClienteSankhyaGestaoView(PerfilBIAccessMixin, ListView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['current_search'] = self.request.GET.get('search', '')
+        ctx['form_importar'] = ImportarUsuariosClienteSankhyaForm()
         return ctx
 
 
@@ -1872,6 +1875,7 @@ class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
             'form_config': extra.pop('form_config', ClienteSankhyaConfigForm(instance=cliente)),
             'form_criar': extra.pop('form_criar', CriarUsuarioClienteSankhyaForm()),
             'form_senha': extra.pop('form_senha', AlterarSenhaUsuarioClienteForm()),
+            'form_importar': extra.pop('form_importar', ImportarUsuariosClienteSankhyaForm()),
         }
         ctx.update(extra)
         return render(request, self.template_name, ctx)
@@ -1949,6 +1953,46 @@ class GestaoUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
             )
 
         return redirect('gestao_usuarios_cliente_sankhya', pk=pk)
+
+
+def _redirect_next_seguro(next_url: str | None, fallback: str) -> str:
+    if next_url and next_url.startswith('/') and not next_url.startswith('//'):
+        return next_url
+    return fallback
+
+
+class ImportarUsuariosClienteSankhyaView(PerfilBIAccessMixin, View):
+    """Importa usuários de planilha (Codigo_Cliente, Usuario, Nome, E-mail, Senha)."""
+
+    def post(self, request):
+        fallback = reverse('gestao_clientes_sankhya')
+        next_url = _redirect_next_seguro(request.POST.get('next'), fallback)
+        form = ImportarUsuariosClienteSankhyaForm(request.POST, request.FILES)
+        if not form.is_valid():
+            for campo, erros in form.errors.items():
+                for err in erros:
+                    messages.error(request, err)
+            return redirect(next_url)
+
+        resultado = importar_usuarios_planilha(form.cleaned_data['planilha'])
+        criados = resultado['criados']
+        ignorados = resultado['ignorados']
+        erros = resultado['erros']
+
+        if criados:
+            messages.success(request, f'{criados} usuário(s) importado(s) com sucesso.')
+        if ignorados:
+            messages.warning(
+                request,
+                f'{ignorados} login(s) já existiam e foram ignorados.',
+            )
+        if erros:
+            preview = erros[:15]
+            extra = f' (+{len(erros) - 15} mais)' if len(erros) > 15 else ''
+            messages.error(request, 'Erros na importação: ' + ' | '.join(preview) + extra)
+        if not criados and not ignorados and not erros:
+            messages.warning(request, 'Nenhum usuário importado.')
+        return redirect(next_url)
 
 
 def _collect_codigos_arvore_grupos(nodes: list[dict]) -> list[int]:

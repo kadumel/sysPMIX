@@ -106,6 +106,18 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
+        .navbar > .container-fluid {
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 0.25rem;
+            min-height: var(--navbar-height);
+        }
+
+        .navbar-actions {
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+
         .navbar-brand {
             color: white !important;
             font-weight: bold;
@@ -304,12 +316,80 @@
         @media (max-width: 768px) {
             .sidebar {
                 transform: translateX(-100%);
+                z-index: 1050;
+                box-shadow: 4px 0 20px rgba(0, 0, 0, 0.25);
             }
             .sidebar.show {
                 transform: translateX(0);
             }
+            .sidebar-backdrop {
+                display: none;
+                position: fixed;
+                top: var(--navbar-height);
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.45);
+                z-index: 1040;
+            }
+            .sidebar-backdrop.show {
+                display: block;
+            }
             .main-content {
-                margin-left: 0;
+                margin-left: 0 !important;
+            }
+            .navbar {
+                padding: 0 0.5rem;
+            }
+            .navbar > .container-fluid {
+                gap: 0;
+            }
+            .navbar-brand {
+                min-width: 0;
+                flex-shrink: 1;
+                margin-left: 0.25rem !important;
+            }
+            .logo-container img {
+                max-height: 32px;
+            }
+            #sidebarToggle {
+                padding: 0.25rem 0.35rem;
+                flex-shrink: 0;
+            }
+            .theme-toggle-btn {
+                padding: 0.25rem 0.35rem;
+                margin-left: 0.25rem !important;
+                flex-shrink: 0;
+            }
+            .navbar-actions {
+                gap: 0.15rem;
+            }
+            .navbar-actions .btn-link.me-3 {
+                margin-right: 0.25rem !important;
+                padding: 0.25rem 0.35rem;
+            }
+            .navbar .navbar-user-toggle {
+                padding: 0.25rem 0.35rem;
+            }
+            .navbar .navbar-user-toggle .username-label {
+                display: none;
+            }
+            .navbar .navbar-user-toggle i.bi-person-circle {
+                margin-right: 0 !important;
+            }
+            .navbar .navbar-user-toggle.dropdown-toggle::after {
+                display: none;
+            }
+            .username-dropdown-header,
+            .username-dropdown-divider {
+                display: block;
+            }
+        }
+
+        @media (min-width: 769px) {
+            .username-dropdown-header,
+            .username-dropdown-divider {
+                display: none;
             }
         }
 
@@ -379,7 +459,7 @@
             <button type="button" class="btn btn-link text-white theme-toggle-btn ms-2" id="themeToggleBtn" title="Alterar tema" aria-label="Alterar tema">
                 <i class="bi bi-moon-stars theme-toggle-icon" aria-hidden="true"></i>
             </button>
-            <div class="ms-auto d-flex align-items-center">
+            <div class="navbar-actions d-flex align-items-center flex-shrink-0">
                 <a href="{% url 'gestao_notificacoes_ecommerce' %}" class="btn btn-link text-light position-relative me-3" title="Gestão de notificações">
                     <i class="bi bi-bell-fill fs-5"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white navbar-count-badge js-bi-notif-badge {% if not bi_notificacoes_pendentes %}d-none{% endif %}">
@@ -387,11 +467,13 @@
                     </span>
                 </a>
                 <div class="dropdown">
-                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <button class="btn btn-link text-white dropdown-toggle navbar-user-toggle" type="button" id="userDropdown" data-bs-toggle="dropdown" aria-expanded="false" title="{{ request.user.username }}">
                         <i class="bi bi-person-circle me-2"></i>
-                        {{ request.user.username }}
+                        <span class="username-label">{{ request.user.username }}</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                        <li><h6 class="dropdown-header username-dropdown-header text-wrap mb-0">{{ request.user.username }}</h6></li>
+                        <li><hr class="dropdown-divider username-dropdown-divider"></li>
                         <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Perfil</a></li>
                         <li>
                             <form action="{% url 'configuracoes_admin' %}" method="get" class="m-0 p-0">
@@ -548,6 +630,8 @@
         </div>
     </div>
 
+    <div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
+
     <!-- Main Content -->
     <div class="main-content" id="mainContent">
         <div class="container-fluid">
@@ -643,31 +727,61 @@
             const sidebar = document.getElementById('sidebar');
             const mainContent = document.getElementById('mainContent');
             const sidebarToggle = document.getElementById('sidebarToggle');
+            const sidebarBackdrop = document.getElementById('sidebarBackdrop');
             let isSidebarVisible = true;
+
+            function isMobileView() {
+                return window.innerWidth <= 768;
+            }
+
+            function applySidebarState() {
+                if (isMobileView()) {
+                    sidebar.style.transform = '';
+                    mainContent.style.marginLeft = '0';
+                    sidebar.classList.toggle('show', isSidebarVisible);
+                    if (sidebarBackdrop) {
+                        sidebarBackdrop.classList.toggle('show', isSidebarVisible);
+                        sidebarBackdrop.setAttribute('aria-hidden', isSidebarVisible ? 'false' : 'true');
+                    }
+                } else {
+                    sidebar.classList.remove('show');
+                    if (sidebarBackdrop) {
+                        sidebarBackdrop.classList.remove('show');
+                        sidebarBackdrop.setAttribute('aria-hidden', 'true');
+                    }
+                    sidebar.style.transform = isSidebarVisible ? 'translateX(0)' : 'translateX(-100%)';
+                    mainContent.style.marginLeft = isSidebarVisible ? 'var(--sidebar-width)' : '0';
+                }
+            }
 
             sidebarToggle.addEventListener('click', function() {
                 isSidebarVisible = !isSidebarVisible;
-                
-                if (isSidebarVisible) {
-                    sidebar.style.transform = 'translateX(0)';
-                    mainContent.style.marginLeft = 'var(--sidebar-width)';
-                } else {
-                    sidebar.style.transform = 'translateX(-100%)';
-                    mainContent.style.marginLeft = '0';
-                }
+                applySidebarState();
             });
 
-            // Ajustar para telas menores
+            if (sidebarBackdrop) {
+                sidebarBackdrop.addEventListener('click', function() {
+                    isSidebarVisible = false;
+                    applySidebarState();
+                });
+            }
+
+            sidebar.querySelectorAll('a.nav-link[href]:not([data-bs-toggle="collapse"])').forEach(function(link) {
+                link.addEventListener('click', function() {
+                    if (isMobileView()) {
+                        isSidebarVisible = false;
+                        applySidebarState();
+                    }
+                });
+            });
+
             function handleResize() {
-                if (window.innerWidth <= 768) {
-                    sidebar.style.transform = 'translateX(-100%)';
-                    mainContent.style.marginLeft = '0';
+                if (isMobileView()) {
                     isSidebarVisible = false;
                 } else {
-                    sidebar.style.transform = 'translateX(0)';
-                    mainContent.style.marginLeft = 'var(--sidebar-width)';
                     isSidebarVisible = true;
                 }
+                applySidebarState();
             }
 
             // Adicionar listener para redimensionamento

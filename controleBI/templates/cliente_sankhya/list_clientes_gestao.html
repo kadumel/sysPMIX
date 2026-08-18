@@ -3,6 +3,16 @@
 
 {% block content %}
 <div class="container-fluid">
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
     <div class="row">
         <div class="col-12">
             <div class="card">
@@ -11,7 +21,12 @@
                         <i class="bi bi-building me-2"></i>
                         Clientes (Sankhya)
                     </h4>
-                    <span class="text-muted small">Tabela <code>sankhya_cliente</code> — usuários de acesso ao e-commerce</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small">Tabela <code>sankhya_cliente</code> — usuários de acesso ao e-commerce</span>
+                        <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalImportarUsuarios">
+                            <i class="bi bi-upload me-1"></i>Importar usuários em lote
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body">
                     <div class="row mb-4">
@@ -96,4 +111,54 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalImportarUsuarios" tabindex="-1" aria-labelledby="modalImportarUsuariosTitulo" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'importar_usuarios_cliente_sankhya' %}" enctype="multipart/form-data" id="formImportarUsuarios">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalImportarUsuariosTitulo">Importar usuários em lote</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Envie a planilha no formato <strong>Codigo_Cliente, Usuario, Nome, E-mail Gerado, Senha Gerada</strong>.
+                        Cada linha é vinculada ao cliente Sankhya pelo código. Logins já existentes são ignorados.
+                        A senha é criptografada automaticamente pelo sistema. Arquivos grandes podem levar alguns minutos.
+                    </p>
+                    <div class="mb-0">
+                        <label class="form-label" for="{{ form_importar.planilha.id_for_label }}">{{ form_importar.planilha.label }}</label>
+                        {{ form_importar.planilha }}
+                        {% if form_importar.planilha.help_text %}
+                        <div class="form-text">{{ form_importar.planilha.help_text }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary" id="btnSubmitImportarUsuarios">
+                        <i class="bi bi-upload me-1"></i>Importar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var formImportar = document.getElementById('formImportarUsuarios');
+    var btnImportar = document.getElementById('btnSubmitImportarUsuarios');
+    if (formImportar && btnImportar) {
+        formImportar.addEventListener('submit', function () {
+            btnImportar.disabled = true;
+            btnImportar.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Importando...';
+        });
+    }
+});
+</script>
 {% endblock %}

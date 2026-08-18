@@ -7,6 +7,7 @@ from .views import (
     RelatorioPedidoView, sync_pedido, sync_pedido_batch, edit_pedido,
     ListPracaView, CadastrarPracaView, PracaEditView, PracaDeleteView, GerenciarEnderecosPracaView,
     ListClienteSankhyaGestaoView, GestaoUsuariosClienteSankhyaView,
+    ImportarUsuariosClienteSankhyaView,
     GestaoCategoriasEcommerceView,
     GestaoCampanhasEcommerceView,
     CampanhaEcommerceFormView,
@@ -66,6 +67,11 @@ urlpatterns = [
 
     # Clientes Sankhya — gestão de usuários (tabela sankhya_cliente)
     path('clientes-sankhya/', ListClienteSankhyaGestaoView.as_view(), name='gestao_clientes_sankhya'),
+    path(
+        'clientes-sankhya/importar-usuarios/',
+        ImportarUsuariosClienteSankhyaView.as_view(),
+        name='importar_usuarios_cliente_sankhya',
+    ),
     path(
         'clientes-sankhya/<int:pk>/usuarios/',
         GestaoUsuariosClienteSankhyaView.as_view(),
