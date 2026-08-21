@@ -587,7 +587,11 @@ def checkout_analise_preview(request):
     if not get_cart(request):
         return JsonResponse({'ok': False, 'erro': 'O carrinho está vazio.'}, status=400)
 
-    resultado = calcular_analise_pedido(cliente_ctx, get_cart(request))
+    resultado = calcular_analise_pedido(
+        cliente_ctx,
+        get_cart(request),
+        tipo_loja=catalog.tipo_loja_ativo_efetivo(request),
+    )
     snapshot = resultado.to_session_dict()
     request.session[SESSION_ANALISE_KEY] = snapshot
     request.session.modified = True
@@ -614,6 +618,7 @@ def checkout_analise_preview(request):
         payload['debug_novidades'] = diagnosticar_novidades_campanha(
             cliente_ctx,
             get_cart(request),
+            tipo_loja=catalog.tipo_loja_ativo_efetivo(request),
         )
     return JsonResponse(payload)
 
@@ -695,7 +700,11 @@ def checkout_finalizar(request):
 
     snapshot = request.session.pop(SESSION_ANALISE_KEY, None)
     if snapshot is None:
-        resultado = calcular_analise_pedido(cliente_ctx, get_cart(request))
+        resultado = calcular_analise_pedido(
+            cliente_ctx,
+            get_cart(request),
+            tipo_loja=catalog.tipo_loja_ativo_efetivo(request),
+        )
         snapshot = resultado.to_session_dict()
 
     pedido, err = finalizar_pedido_loja(

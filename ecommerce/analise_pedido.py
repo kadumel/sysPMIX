@@ -391,6 +391,18 @@ def _produtos_ja_comprados_cliente(cliente: Cliente) -> set[int]:
     return comprados
 
 
+def _resolver_tipo_loja_analise(
+    cart_codigos: set[int],
+    tipo_loja: str | None,
+) -> str:
+    if tipo_loja in catalog.TIPOS_LOJA_VALIDOS:
+        return tipo_loja
+    inferido = catalog.infer_tipo_loja_de_codigos_produto(cart_codigos)
+    if inferido in catalog.TIPOS_LOJA_VALIDOS:
+        return inferido
+    return catalog.tipo_loja_padrao()
+
+
 def _produtos_disponiveis_loja(
     codigos: set[int],
     codtab: int | None,
@@ -418,14 +430,16 @@ def _produtos_disponiveis_loja(
 def _produtos_para_esquecidos(
     codigos: set[int],
     codtab: int | None,
+    tipo_loja: str | None,
 ) -> dict[int, Produto]:
-    """Produtos ativos do histórico; preço da tabela quando existir (sem exigir preço/grupo loja)."""
+    """Produtos ativos do histórico do mesmo tipo do pedido (Mercadoria/Revenda)."""
     if not codigos:
         return {}
     produtos = {
         p.codigo_produto: p
         for p in Produto.objects.filter(codigo_produto__in=codigos, ativo=True)
     }
+    produtos = catalog.filtrar_produtos_por_tipo_loja(produtos, tipo_loja)
     precos = catalog.map_precos_por_codtab(list(produtos.keys()), codtab) if codtab else {}
     for cod, produto in produtos.items():
         produto.preco_ecommerce = precos.get(cod)
@@ -455,7 +469,7 @@ def _itens_esquecidos(
     desde: date,
     ate: date,
     codtab: int | None,
-    codigos_permitidos: set[int],
+    tipo_loja: str | None,
 ) -> list[SugestaoAnalise]:
     freq, total_pedidos = _freq_pedidos_cliente_periodo(cliente, desde, ate)
     if not freq:
@@ -471,7 +485,7 @@ def _itens_esquecidos(
     if not candidatos:
         return []
 
-    produtos = _produtos_para_esquecidos({c for c, _ in candidatos}, codtab)
+    produtos = _produtos_para_esquecidos({c for c, _ in candidatos}, codtab, tipo_loja)
     out: list[SugestaoAnalise] = []
     for cod, qtd in candidatos:
         if total_pedidos > 0:
@@ -667,12 +681,14 @@ def diagnosticar_novidades_campanha(
     cliente: Cliente,
     cart: list[dict],
     ref: date | None = None,
+    tipo_loja: str | None = None,
 ) -> dict:
     """Detalha por que produtos de campanha não entram em novidades (uso em DEBUG/suporte)."""
     ref = ref or catalog.data_referencia_ecommerce()
     cart_codigos = _codigos_carrinho(cart)
+    tipo_loja = _resolver_tipo_loja_analise(cart_codigos, tipo_loja)
     codtab = catalog.normalizar_codtab(getattr(cliente, 'codtab', None))
-    codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_permitidos = catalog.codigos_grupos_permitidos_por_tipo_loja(tipo_loja)
     campanhas = _campanhas_vigentes(ref)
 
     diag: dict = {
@@ -680,6 +696,7 @@ def diagnosticar_novidades_campanha(
         'cliente_id': cliente.pk,
         'codigo_cliente': cliente.codigo_cliente,
         'codtab': codtab,
+        'tipo_loja': tipo_loja,
         'grupos_permitidos': len(codigos_permitidos),
         'campanhas_vigentes': [
             {
@@ -711,6 +728,8 @@ def diagnosticar_novidades_campanha(
                 motivos.append('no_carrinho')
             if not produto or not produto.ativo:
                 motivos.append('produto_inativo_ou_inexistente')
+            elif catalog.tipo_loja_do_produto(produto) != tipo_loja:
+                motivos.append('tipo_loja_incompativel')
             elif not catalog.produto_permitido_na_loja(produto, codigos_permitidos):
                 motivos.append('grupo_nao_habilitado_loja')
             if not preco or preco <= 0:
@@ -736,14 +755,16 @@ def calcular_analise_pedido(
     cliente: Cliente,
     cart: list[dict],
     ref: date | None = None,
+    tipo_loja: str | None = None,
 ) -> ResultadoAnalise:
     ref = ref or catalog.data_referencia_ecommerce()
     desde, ate, meses = _periodo_analise(cliente, ref)
     cart_codigos = _codigos_carrinho(cart)
+    tipo_loja = _resolver_tipo_loja_analise(cart_codigos, tipo_loja)
     codtab = catalog.normalizar_codtab(getattr(cliente, 'codtab', None))
-    codigos_permitidos = catalog.codigos_grupos_permitidos_ecommerce()
+    codigos_permitidos = catalog.codigos_grupos_permitidos_por_tipo_loja(tipo_loja)
 
-    esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, codigos_permitidos)
+    esquecidos = _itens_esquecidos(cliente, cart_codigos, desde, ate, codtab, tipo_loja)
     usados = {s.codigo_produto for s in esquecidos}
 
     novidades = _itens_novidades(cliente, cart_codigos, ref, codtab, codigos_permitidos)
