@@ -407,17 +407,8 @@ def tipo_loja_do_produto(produto: Produto) -> str | None:
     return tipo_loja_do_codigo_grupo(produto.codigo_grupo_produto)
 
 
-def infer_tipo_loja_carrinho(request) -> str | None:
-    """Infere o tipo a partir dos grupos dos produtos no carrinho (carrinhos antigos sem sessão)."""
-    from .cart_session import get_cart
-
-    cart = get_cart(request)
-    codigos = []
-    for item in cart:
-        try:
-            codigos.append(int(item.get('codigo_produto')))
-        except (TypeError, ValueError):
-            continue
+def infer_tipo_loja_de_codigos_produto(codigos: list[int] | set[int]) -> str | None:
+    """Infere Mercadoria/Revenda a partir dos grupos dos produtos (carrinho sem sessão)."""
     if not codigos:
         return None
     grupos = set(
@@ -439,6 +430,56 @@ def infer_tipo_loja_carrinho(request) -> str | None:
     if len(tipos) == 1:
         return next(iter(tipos))
     return tipo_loja_padrao()
+
+
+def infer_tipo_loja_carrinho(request) -> str | None:
+    """Infere o tipo a partir dos grupos dos produtos no carrinho (carrinhos antigos sem sessão)."""
+    from .cart_session import get_cart
+
+    cart = get_cart(request)
+    codigos = []
+    for item in cart:
+        try:
+            codigos.append(int(item.get('codigo_produto')))
+        except (TypeError, ValueError):
+            continue
+    return infer_tipo_loja_de_codigos_produto(codigos)
+
+
+def filtrar_produtos_por_tipo_loja(
+    produtos: dict[int, Produto],
+    tipo_loja: str | None,
+) -> dict[int, Produto]:
+    """Mantém só produtos cujo grupo está classificado no tipo Mercadoria/Revenda informado."""
+    if not tipo_loja or tipo_loja not in TIPOS_LOJA_VALIDOS or not produtos:
+        return produtos
+    grupos = {
+        p.codigo_grupo_produto
+        for p in produtos.values()
+        if p.codigo_grupo_produto is not None
+    }
+    if not grupos:
+        return {}
+    grupos_ok = set(
+        GrupoProduto.objects.filter(
+            codigo_grupo_produto__in=grupos,
+            tipo_loja=tipo_loja,
+        ).values_list('codigo_grupo_produto', flat=True)
+    )
+    return {
+        cod: p
+        for cod, p in produtos.items()
+        if p.codigo_grupo_produto in grupos_ok
+    }
+
+
+def codigos_grupos_permitidos_por_tipo_loja(tipo_loja: str | None) -> set[int]:
+    """Categorias da loja restritas ao tipo Mercadoria ou Revenda (mesmo critério do catálogo)."""
+    permitidos = codigos_grupos_permitidos_ecommerce()
+    if tipo_loja not in TIPOS_LOJA_VALIDOS:
+        return permitidos
+    by_id, _, _ = grupos_ativos_map(apenas_visiveis_loja=False)
+    return codigos_grupo_filtrados_tipo_loja(permitidos, {tipo_loja}, by_id)
 
 
 def tipo_loja_ativo_efetivo(request) -> str:
