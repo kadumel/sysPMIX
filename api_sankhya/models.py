@@ -272,8 +272,8 @@ class Cliente(models.Model):
             models.Index(fields=['tipo']),
             models.Index(fields=['cidade']),
             models.Index(fields=['codtab']),
-            models.Index(fields=['codvend']),
-            models.Index(fields=['codigo_empresa']),
+            models.Index(fields=['codvend'], name='sankhya_cli_codvend_idx'),
+            models.Index(fields=['codigo_empresa'], name='sankhya_cli_codemp_idx'),
             models.Index(fields=['codend']),
         ]
     
@@ -460,8 +460,8 @@ class GrupoProduto(models.Model):
             models.Index(fields=['ativo']),
             models.Index(fields=['grupo_icms']),
             models.Index(fields=['ativo', 'mostrar_no_ecommerce']),
-            models.Index(fields=['tipo_loja']),
-            models.Index(fields=['ordem']),
+            models.Index(fields=['tipo_loja'], name='sankhya_gru_tipo_lo_8a1f2d_idx'),
+            models.Index(fields=['ordem'], name='sankhya_gru_ordem_7c2a1b_idx'),
         ]
     
     def __str__(self):
@@ -589,7 +589,7 @@ class Pedido(models.Model):
         db_table = 'sankhya_pedido'
         unique_together = [['codigo_nota', 'codigo_empresa', 'origem']]
         indexes = [
-            models.Index(fields=['codigo_nota', 'codigo_empresa', 'origem']),
+            models.Index(fields=['codigo_nota', 'codigo_empresa', 'origem'], name='sankhya_ped_nota_empr_orig_idx'),
             models.Index(fields=['codigo_cliente']),
             models.Index(fields=['data_negociacao']),
             models.Index(fields=['pendente', 'confirmada']),
@@ -663,12 +663,12 @@ class NotaFiscal(models.Model):
         ordering = ["-data_negociacao", "-numero_nota"]
         db_table = "sankhya_nota_fiscal"
         indexes = [
-            models.Index(fields=["nunota"]),
-            models.Index(fields=["codigo_empresa", "numero_nota"]),
-            models.Index(fields=["codigo_parceiro"]),
-            models.Index(fields=["codigo_vendedor"]),
-            models.Index(fields=["data_negociacao"]),
-            models.Index(fields=["status_nfe"]),
+            models.Index(fields=["nunota"], name="sankhya_not_nunota_idx"),
+            models.Index(fields=["codigo_empresa", "numero_nota"], name="sankhya_not_emp_num_idx"),
+            models.Index(fields=["codigo_parceiro"], name="sankhya_not_parc_idx"),
+            models.Index(fields=["codigo_vendedor"], name="sankhya_not_vend_idx"),
+            models.Index(fields=["data_negociacao"], name="sankhya_not_dtneg_idx"),
+            models.Index(fields=["status_nfe"], name="sankhya_not_stnfe_idx"),
         ]
 
     def __str__(self):
@@ -704,8 +704,8 @@ class ItemNotaFiscal(models.Model):
         db_table = "sankhya_item_nota_fiscal"
         unique_together = [["nota_fiscal", "sequencia"]]
         indexes = [
-            models.Index(fields=["nota_fiscal"]),
-            models.Index(fields=["cod_produto"]),
+            models.Index(fields=["nota_fiscal"], name="sankhya_itnf_nota_idx"),
+            models.Index(fields=["cod_produto"], name="sankhya_itnf_prod_idx"),
         ]
 
     def __str__(self):
@@ -860,6 +860,38 @@ class Funcionario(models.Model):
 
     def __str__(self):
         return f"{self.nome or 'N/A'} (Emp: {self.empresa_codigo}, Func: {self.codigo_funcionario})"
+
+
+class NotaCancelada(models.Model):
+    """
+    Cancelamentos de nota do Sankhya (TGFCAN).
+    Chave natural: NUNOTA.
+    """
+    nunota = models.IntegerField(unique=True, verbose_name="Nº único (NUNOTA)")
+    numero_nota = models.IntegerField(null=True, blank=True, verbose_name="Número NF (NUMNOTA)")
+    codigo_empresa = models.IntegerField(null=True, blank=True, verbose_name="Código Empresa (CODEMP)")
+    codigo_parceiro = models.IntegerField(null=True, blank=True, verbose_name="Parceiro (CODPARC)")
+    data_negociacao = models.DateField(null=True, blank=True, verbose_name="Data Negociação (DTNEG)")
+    data_cancelamento = models.DateTimeField(null=True, blank=True, verbose_name="Data Cancelamento (DTCANC)")
+    motivo_cancelamento = models.CharField(
+        max_length=255, null=True, blank=True, verbose_name="Motivo Cancelamento (MOTCANCEL)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Data de Criação")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Data de Atualização")
+
+    class Meta:
+        verbose_name = "Nota Cancelada Sankhya"
+        verbose_name_plural = "Notas Canceladas Sankhya"
+        ordering = ["-data_cancelamento", "-numero_nota"]
+        db_table = "sankhya_nota_cancelada"
+        indexes = [
+            models.Index(fields=["codigo_empresa", "numero_nota"]),
+            models.Index(fields=["codigo_parceiro"]),
+            models.Index(fields=["data_cancelamento"]),
+        ]
+
+    def __str__(self):
+        return f"Canc. NF {self.numero_nota or '?'} (NUNOTA {self.nunota})"
 
 
 

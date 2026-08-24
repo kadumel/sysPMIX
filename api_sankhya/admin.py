@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Veiculo, Empresa, Cidade, Logradouro, Bairro, Vendedor, Cliente, Motorista,
-    Preco, Produto, GrupoProduto, Pedido, ItemPedido, NotaFiscal, ItemNotaFiscal, Contato
+    Preco, Produto, GrupoProduto, Pedido, ItemPedido, NotaFiscal, ItemNotaFiscal,
+    NotaCancelada, Contato,
 )
 
 
@@ -425,6 +426,24 @@ class NotaFiscalAdmin(admin.ModelAdmin):
     search_fields = ("nunota", "numero_nota", "codigo_parceiro", "codigo_vendedor")
     readonly_fields = ("created_at", "updated_at")
     inlines = [ItemNotaFiscalInline]
+
+
+@admin.register(NotaCancelada)
+class NotaCanceladaAdmin(admin.ModelAdmin):
+    list_display = (
+        "nunota",
+        "numero_nota",
+        "codigo_empresa",
+        "codigo_parceiro",
+        "data_negociacao",
+        "data_cancelamento",
+        "motivo_cancelamento",
+        "updated_at",
+    )
+    list_filter = ("codigo_empresa",)
+    search_fields = ("nunota", "numero_nota", "codigo_parceiro", "motivo_cancelamento")
+    readonly_fields = ("created_at", "updated_at")
+    list_per_page = 50
 
 
 @admin.register(Contato)
