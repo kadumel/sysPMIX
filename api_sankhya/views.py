@@ -4,12 +4,14 @@ from django.conf import settings
 from django.db.models import Max
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
+from django.utils import timezone as dj_timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Callable
 import os
+import re
 
 import requests
 from django_q.tasks import async_task
@@ -32,6 +34,7 @@ from .models import (
     ItemNotaFiscal,
     ItemPedido,
     Logradouro,
+    NotaCancelada,
     NotaFiscal,
     Pedido,
     Preco,
@@ -164,12 +167,52 @@ def _to_str(val, max_len=None):
     return v
 
 
+_SANKHYA_DATETIME_FORMATS = (
+    "%d/%m/%Y %H:%M:%S",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y-%m-%d %H:%M",
+    "%Y-%m-%d",
+    "%d%m%Y %H:%M:%S",  # 19082026 00:00:00
+    "%d%m%Y %H:%M",
+    "%d%m%Y",
+    "%Y%m%d %H:%M:%S",
+    "%Y%m%d %H:%M",
+    "%Y%m%d",
+    "%d%m%Y%H%M%S",
+    "%Y%m%d%H%M%S",
+)
+
+
 def _to_date(value):
     if not value:
         return None
+    dt = _parse_sankhya_datetime(value)
+    if dt:
+        return dt.date()
+    raw = str(value).strip()[:10]
     for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
         try:
-            return datetime.strptime(str(value)[:10], fmt).date()
+            return datetime.strptime(raw, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _datetime_from_compact_digits(digits: str):
+    """Interpreta 8 dígitos (ddmmyyyy / yyyymmdd) ou 14 (com hora) no padrão Sankhya."""
+    if not digits or not digits.isdigit():
+        return None
+    if len(digits) == 8:
+        formats = ("%d%m%Y", "%Y%m%d")
+    elif len(digits) == 14:
+        formats = ("%d%m%Y%H%M%S", "%Y%m%d%H%M%S")
+    else:
+        return None
+    for fmt in formats:
+        try:
+            return datetime.strptime(digits, fmt)
         except ValueError:
             continue
     return None
@@ -210,6 +253,95 @@ def _parse_datetime_flexible(value):
         except ValueError:
             continue
     return None
+
+
+def _parse_sankhya_datetime(value: Any):
+    """Converte data/hora do Sankhya (ddmmyyyy, dd/mm/yyyy, epoch ms, /Date(ms)/) em datetime aware."""
+    if value is None or value == "":
+        return None
+    dt = None
+    if isinstance(value, datetime):
+        dt = value
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        compact = _datetime_from_compact_digits(str(int(value)))
+        if compact is not None:
+            dt = compact
+        else:
+            ts = float(value)
+            if ts > 1e11:
+                ts = ts / 1000.0
+            dt = datetime.fromtimestamp(ts)
+    else:
+        raw = str(value).strip()
+        if not raw or raw.lower() == "null":
+            return None
+        match = re.search(r"/Date\((\-?\d+)\)/", raw)
+        if match:
+            ts = float(match.group(1))
+            if abs(ts) > 1e11:
+                ts = ts / 1000.0
+            dt = datetime.fromtimestamp(ts)
+        else:
+            candidate = raw.replace("T", " ")
+            if "." in candidate:
+                candidate = candidate.split(".", 1)[0]
+            dt = _parse_datetime_flexible(candidate.replace(" ", "T", 1))
+            if dt is None:
+                for fmt in _SANKHYA_DATETIME_FORMATS:
+                    try:
+                        dt = datetime.strptime(candidate, fmt)
+                        break
+                    except ValueError:
+                        continue
+            if dt is None:
+                digits = re.sub(r"\D", "", candidate)
+                dt = _datetime_from_compact_digits(digits)
+    if dt is None:
+        return None
+    if dj_timezone.is_naive(dt):
+        return dj_timezone.make_aware(dt, dj_timezone.get_current_timezone())
+    return dt
+
+
+def _sankhya_gateway_url(service_name: str) -> str:
+    base = _get_env_or_setting("SANKHYA_URL_GENERIC")
+    base = base.split("?", 1)[0]
+    return f"{base}?serviceName={service_name}&outputType=json"
+
+
+def _db_explorer_rows_to_dicts(response_body: dict[str, Any]) -> list[dict[str, Any]]:
+    if isinstance(response_body.get("query"), dict) and not response_body.get("rows"):
+        response_body = response_body["query"]
+    campos = [
+        str(meta.get("name") or "").strip().upper()
+        for meta in (response_body.get("fieldsMetadata") or [])
+    ]
+    linhas = response_body.get("rows") or []
+    resultado: list[dict[str, Any]] = []
+    for linha in linhas:
+        if not isinstance(linha, (list, tuple)):
+            continue
+        if campos:
+            resultado.append(
+                {
+                    campos[i]: linha[i]
+                    for i in range(min(len(campos), len(linha)))
+                    if campos[i]
+                }
+            )
+        elif len(linha) >= 7:
+            resultado.append(
+                {
+                    "NUMNOTA": linha[0],
+                    "CODEMP": linha[1],
+                    "NUNOTA": linha[2],
+                    "CODPARC": linha[3],
+                    "DTNEG": linha[4],
+                    "DTCANC": linha[5],
+                    "MOTCANCEL": linha[6],
+                }
+            )
+    return resultado
 
 
 def _pagination_has_more(pagination: dict | None) -> bool:
@@ -1147,6 +1279,115 @@ def getNotasFiscais():
     return out
 
 
+SANKHYA_DB_EXPLORER_SERVICE = "DbExplorerSP.executeQuery"
+NOTAS_CANCELADAS_PAGE_SIZE = 10000
+SQL_NOTAS_CANCELADAS_FULL = (
+    "select numnota, codemp, nunota, codparc, dtneg, dtcanc, motcancel "
+    "from tgfcan order by dtcanc desc"
+)
+SQL_NOTAS_CANCELADAS_DIFERENCIAL = (
+    "select numnota, codemp, nunota, codparc, dtneg, dtcanc, motcancel "
+    "from tgfcan where dtcanc > to_timestamp('{dtcanc}', 'dd/mm/yyyy hh24:mi:ss') "
+    "order by dtcanc desc"
+)
+
+
+def _max_dtcanc_notas_canceladas():
+    return NotaCancelada.objects.exclude(data_cancelamento__isnull=True).aggregate(
+        ultima=Max("data_cancelamento")
+    ).get("ultima")
+
+
+def getNotasCanceladas():
+    """
+    Importa cancelamentos (TGFCAN) via DbExplorerSP.executeQuery.
+    Primeira carga (sem registros) é full; depois diferencial por DTCANC.
+    """
+    headers = getToken()
+    headers["Content-Type"] = "application/json"
+    out = {"total_processados": 0, "total_inseridos": 0, "total_atualizados": 0}
+    url = _sankhya_gateway_url(SANKHYA_DB_EXPLORER_SERVICE)
+    ultima_dtcanc = _max_dtcanc_notas_canceladas()
+    if ultima_dtcanc:
+        dtcanc_sql = dj_timezone.localtime(ultima_dtcanc).strftime("%d/%m/%Y %H:%M:%S")
+        sql = SQL_NOTAS_CANCELADAS_DIFERENCIAL.format(dtcanc=dtcanc_sql)
+        print(f"Notas canceladas — carga diferencial DTCANC > {dtcanc_sql}")
+    else:
+        sql = SQL_NOTAS_CANCELADAS_FULL
+        print("Notas canceladas — carga completa (nenhum registro local).")
+
+    page = 0
+    has_more = True
+    while has_more:
+        body = {
+            "serviceName": SANKHYA_DB_EXPLORER_SERVICE,
+            "requestBody": {
+                "sql": sql,
+                "offsetPage": page,
+                "pageSize": NOTAS_CANCELADAS_PAGE_SIZE,
+            },
+        }
+        resp, headers = _request_with_token_retry("POST", url, headers, json=body, timeout=360)
+        resp.raise_for_status()
+        data = resp.json()
+        status = str(data.get("status", "")).strip().lower()
+        if status not in {"", "1", "true", "s"}:
+            mensagem = data.get("statusMessage") or data.get("mensagem") or data
+            raise RuntimeError(f"DbExplorer notas canceladas retornou status inválido: {mensagem}")
+
+        response_body = data.get("responseBody") or {}
+        if isinstance(response_body.get("query"), dict) and not response_body.get("rows"):
+            response_body = response_body["query"]
+        records = _db_explorer_rows_to_dicts(response_body)
+        print(f"Notas canceladas page={page} api={len(records)}")
+        if page == 0 and records:
+            amostra = records[0]
+            print(
+                "Notas canceladas amostra datas: "
+                f"DTNEG={amostra.get('DTNEG')!r} DTCANC={amostra.get('DTCANC')!r}"
+            )
+        parse_falhas = 0
+        for row in records:
+            nunota = _to_int(row.get("NUNOTA"))
+            if not nunota:
+                continue
+            dtcanc = _parse_sankhya_datetime(row.get("DTCANC"))
+            dtneg = _parse_sankhya_datetime(row.get("DTNEG"))
+            if dtcanc is None and row.get("DTCANC") not in (None, ""):
+                parse_falhas += 1
+                if parse_falhas <= 3:
+                    print(f"DTCANC não parseado: {row.get('DTCANC')!r} nunota={nunota}")
+            if dtneg is None and row.get("DTNEG") not in (None, ""):
+                parse_falhas += 1
+                if parse_falhas <= 3:
+                    print(f"DTNEG não parseado: {row.get('DTNEG')!r} nunota={nunota}")
+            defaults = {
+                "numero_nota": _to_int(row.get("NUMNOTA")),
+                "codigo_empresa": _to_int(row.get("CODEMP")),
+                "codigo_parceiro": _to_int(row.get("CODPARC")),
+                "data_negociacao": dtneg.date() if dtneg else _to_date(row.get("DTNEG")),
+                "data_cancelamento": dtcanc,
+                "motivo_cancelamento": _to_str(row.get("MOTCANCEL"), 255),
+            }
+            defaults = {k: v for k, v in defaults.items() if v is not None}
+            _, created = NotaCancelada.objects.update_or_create(nunota=nunota, defaults=defaults)
+            out["total_processados"] += 1
+            if created:
+                out["total_inseridos"] += 1
+            else:
+                out["total_atualizados"] += 1
+
+        has_more_raw = response_body.get("hasMoreResult")
+        if has_more_raw is not None:
+            has_more = str(has_more_raw).strip().lower() in {"1", "true", "s"}
+        else:
+            has_more = len(records) >= NOTAS_CANCELADAS_PAGE_SIZE
+        page += 1
+
+    print(f"\nNotas canceladas — fim: {out}")
+    return out
+
+
 def getContatos():
     headers = getToken()
     headers["Content-Type"] = "application/json"
@@ -1447,6 +1688,7 @@ INTEGRACOES = {
     "grupos_produto": {"nome": "Grupos de Produto", "model": GrupoProduto, "runner": getGruposProduto},
     "pedidos": {"nome": "Pedidos", "model": Pedido, "runner": getPedidosJson},
     "notas_fiscais": {"nome": "Notas Fiscais", "model": NotaFiscal, "runner": getNotasFiscais},
+    "notas_canceladas": {"nome": "Notas Canceladas", "model": NotaCancelada, "runner": getNotasCanceladas},
     "contatos": {"nome": "Contatos", "model": Contato, "runner": getContatos},
     "funcionarios": {"nome": "Funcionários", "model": Funcionario, "runner": getFuncionarios},
 }
