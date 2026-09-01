@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
+from django.db import IntegrityError
 from django.db.models import Max, Q
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect, render
@@ -1311,7 +1312,10 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
                     if ignorados_sem_nunota <= 3:
                         print(f"Linha ignorada (sem NUNOTA): {json.dumps(row, ensure_ascii=False, default=str)}")
                     continue
-                sequencia = _to_int(_crud_record_get(row, "SEQUENCIA"))
+                sequencia = _to_int(
+                    _crud_item_field_value(row_raw, idx_to_name, "SEQUENCIA")
+                    or _crud_record_get(row, "SEQUENCIA")
+                )
                 if sequencia is None:
                     sequencia = 0
                 dtalter = _to_datetime_iso_seconds(_crud_record_get(row, "DTALTER"))
@@ -1339,20 +1343,40 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
                     ItemNotaFiscal.objects.filter(nota_fiscal=nota).delete()
                     notas_com_itens_substituidos.add(nunota_row)
 
-                ItemNotaFiscal.objects.create(
-                    nota_fiscal=nota,
-                    sequencia=sequencia,
-                    cod_produto=_to_int(_crud_record_get(row, "CODPROD")),
-                    quantidade=_to_decimal(_crud_record_get(row, "QTDNEG")),
-                    valor_unitario=_to_decimal(_crud_record_get(row, "VLRUNIT")),
-                    valor_total=_to_decimal(_crud_record_get(row, "VLRTOT")),
-                    valor_desconto=_to_decimal(_crud_record_get(row, "VLRDESC")),
-                    uso_produto=_to_str(_crud_record_get(row, "USOPROD"), 10),
-                    status_nota=_to_str(
+                item_defaults = {
+                    "cod_produto": _to_int(
+                        _crud_item_field_value(row_raw, idx_to_name, "CODPROD") or _crud_record_get(row, "CODPROD")
+                    ),
+                    "quantidade": _to_decimal(
+                        _crud_item_field_value(row_raw, idx_to_name, "QTDNEG") or _crud_record_get(row, "QTDNEG")
+                    ),
+                    "valor_unitario": _to_decimal(
+                        _crud_item_field_value(row_raw, idx_to_name, "VLRUNIT") or _crud_record_get(row, "VLRUNIT")
+                    ),
+                    "valor_total": _to_decimal(
+                        _crud_item_field_value(row_raw, idx_to_name, "VLRTOT") or _crud_record_get(row, "VLRTOT")
+                    ),
+                    "valor_desconto": _to_decimal(
+                        _crud_item_field_value(row_raw, idx_to_name, "VLRDESC") or _crud_record_get(row, "VLRDESC")
+                    ),
+                    "uso_produto": _to_str(
+                        _crud_item_field_value(row_raw, idx_to_name, "USOPROD") or _crud_record_get(row, "USOPROD"),
+                        10,
+                    ),
+                    "status_nota": _to_str(
                         _crud_item_field_value(row_raw, idx_to_name, "STATUSNOTA") or _crud_record_get(row, "STATUSNOTA"),
                         30,
                     ),
-                )
+                }
+                item_defaults = {k: v for k, v in item_defaults.items() if v is not None}
+                try:
+                    ItemNotaFiscal.objects.update_or_create(
+                        nota_fiscal=nota,
+                        sequencia=sequencia,
+                        defaults=item_defaults,
+                    )
+                except IntegrityError:
+                    ItemNotaFiscal.objects.filter(nota_fiscal=nota, sequencia=sequencia).update(**item_defaults)
                 out["total_processados"] += 1
                 if nunota_row in notas_novas:
                     out["total_inseridos"] += 1
