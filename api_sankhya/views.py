@@ -1300,7 +1300,6 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
         if numero_consulta is None and dtneg_consulta is None
         else None
     )
-    criterio_manual = numero_consulta is not None or dtneg_consulta is not None or bool(modo_data)
     tem_dtalter_local = NotaFiscal.objects.exclude(dtalter__isnull=True).exclude(dtalter="").exists()
     if modo_data:
         ultima_alteracao = _user_input_to_criteria_date(str(modo_data))
@@ -1338,7 +1337,7 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
         "DTALTER",
     ]
 
-    def consultar(criteria_date=None, nunota=None, numnota=None, dtneg_date=None, permitir_fallback=False):
+    def consultar(criteria_date=None, nunota=None, numnota=None, dtneg_date=None):
         nonlocal headers
         page = 0
         has_more = True
@@ -1382,21 +1381,11 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
             if records and com_nunota == 0:
                 print("AVISO: mapeamento sem NUNOTA — amostra:", json.dumps(records[0], ensure_ascii=False, default=str))
 
-            if (
-                page == 0
-                and permitir_fallback
-                and usar_filtro_data
-                and not records
-                and tem_dtalter_local
-            ):
-                base_criteria = _iso_to_criteria_date_start_of_day(
-                    NOTA_FISCAL_DTALTER_BASE.strftime("%Y-%m-%dT%H:%M:%S")
+            if page == 0 and usar_filtro_data and not records:
+                print(
+                    f"Notas fiscais — nenhuma alteração desde {ultima}. "
+                    "Carga incremental encerrada (sem recarga histórica)."
                 )
-                if ultima != base_criteria:
-                    ultima = base_criteria
-                    has_more = True
-                    print("Notas fiscais: reconsulta a partir de 01/05/2026.")
-                    continue
 
             has_more = _crud_has_more_result(
                 entities, response_body, len(raw_records), NOTAS_FISCAIS_PAGE_SIZE
@@ -1548,7 +1537,6 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
     else:
         consultar(
             criteria_date=ultima_alteracao,
-            permitir_fallback=not criterio_manual,
         )
     print(f"\nNotas fiscais — fim: {out}")
     return out
