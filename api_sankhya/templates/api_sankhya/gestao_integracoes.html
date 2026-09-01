@@ -176,10 +176,14 @@
                         <input class="form-check-input" type="radio" name="notasModoSync" id="notasModoData" value="data" checked>
                         <label class="form-check-label" for="notasModoData">Por data de alteração (DTALTER)</label>
                     </div>
-                    <label for="notasDtalterDesde" class="form-label">Data a partir de</label>
-                    <input type="date" class="form-control" id="notasDtalterDesde"
-                           value="{{ notas_fiscais_sync.dtalter_input_padrao }}">
-                    <div class="form-text">Deixe a data padrão para a carga incremental, ou escolha outra para reimportar desde aquele dia.</div>
+                    <label for="notasDtalterDesde" class="form-label">DTALTER a partir de</label>
+                    <input type="datetime-local" step="1" class="form-control" id="notasDtalterDesde"
+                           value="{{ notas_fiscais_sync.dtalter_input_padrao }}"
+                           data-padrao="{{ notas_fiscais_sync.dtalter_input_padrao }}">
+                    <div class="form-text">
+                        O padrão é o último DTALTER local (com hora). Confirme sem alterar para a carga incremental.
+                        Só mude se quiser reimportar desde um momento anterior.
+                    </div>
                 </div>
                 <hr>
                 <div class="mb-3">
@@ -555,6 +559,9 @@
     if (inpNotasNumero) inpNotasNumero.classList.remove('is-invalid');
     if (inpNotasDtneg) inpNotasDtneg.value = '';
     if (inpNotasDtneg) inpNotasDtneg.classList.remove('is-invalid');
+    if (inpNotasData) {
+      inpNotasData.value = inpNotasData.getAttribute('data-padrao') || inpNotasData.value;
+    }
     atualizarCamposModalNotas();
     if (modalNotas) modalNotas.show();
   }
@@ -601,8 +608,12 @@
         }
         inpNotasDtneg.classList.remove('is-invalid');
         extra.dtneg = dtneg;
-      } else if (inpNotasData && inpNotasData.value) {
-        extra.dtalter_desde = inpNotasData.value;
+      } else if (modo === 'data') {
+        var valorData = inpNotasData && String(inpNotasData.value || '').trim();
+        var padraoData = inpNotasData && String(inpNotasData.getAttribute('data-padrao') || '').trim();
+        if (valorData && valorData !== padraoData) {
+          extra.dtalter_desde = valorData;
+        }
       }
       if (modalNotas) modalNotas.hide();
       submitIntegracao(formNotasPendente, extra);
