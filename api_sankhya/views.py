@@ -561,6 +561,8 @@ def _build_notas_fiscais_load_records_body(
         "includePresentationFields": "N",
         "tryJoinedFields": "true",
         "offsetPage": str(page),
+        "pageSize": str(NOTAS_FISCAIS_PAGE_SIZE),
+        "orderByExpression": "NUNOTA, SEQUENCIA",
         "entity": [
             {
                 "path": "",
@@ -571,10 +573,7 @@ def _build_notas_fiscais_load_records_body(
             {
                 "path": "CabecalhoNota",
                 "fieldset": {
-                    "list": (
-                        "NUNOTA,CODEMP,NUMNOTA,DTENTSAI,DTNEG,CODTIPOPER,CODPARC,CODVEND,TIPMOV,"
-                        "PENDENTE,STATUSNFE,STATUSNOTA,APROVADO,DTALTER"
-                    ),
+                    "list": CABECALHO_NOTA_FIELDS,
                 },
             },
         ],
@@ -608,6 +607,37 @@ def _build_notas_fiscais_load_records_body(
         "serviceName": "CRUDServiceProvider.loadRecords",
         "requestBody": {
             "dataSet": data_set,
+        },
+    }
+
+
+def _build_cabecalho_nota_load_records_body(page: int, dtneg_date) -> dict[str, Any]:
+    """Payload CRUD CabecalhoNota filtrado por um dia de DTNEG."""
+    inicio = datetime.combine(dtneg_date, datetime.min.time()).strftime("%d/%m/%Y %H:%M:%S")
+    fim = datetime.combine(dtneg_date + timedelta(days=1), datetime.min.time()).strftime("%d/%m/%Y %H:%M:%S")
+    return {
+        "serviceName": "CRUDServiceProvider.loadRecords",
+        "requestBody": {
+            "dataSet": {
+                "rootEntity": "CabecalhoNota",
+                "includePresentationFields": "N",
+                "offsetPage": str(page),
+                "pageSize": str(NOTAS_FISCAIS_PAGE_SIZE),
+                "orderByExpression": "NUNOTA",
+                "entity": [
+                    {
+                        "path": "",
+                        "fieldset": {"list": CABECALHO_NOTA_FIELDS},
+                    }
+                ],
+                "criteria": {
+                    "expression": {"$": "DTNEG >= ? AND DTNEG < ?"},
+                    "parameter": [
+                        {"type": "D", "$": inicio},
+                        {"type": "D", "$": fim},
+                    ],
+                },
+            }
         },
     }
 
@@ -648,6 +678,72 @@ def _crud_item_field_value(row_raw: dict, idx_to_name: dict[str, str], field: st
         if not nu.startswith("CABECALHONOTA"):
             item_val = val
     return item_val if item_val is not None else any_val
+
+
+NOTAS_FISCAIS_PAGE_SIZE = 5000
+CABECALHO_NOTA_FIELDS = (
+    "NUNOTA,CODEMP,NUMNOTA,DTENTSAI,DTNEG,CODTIPOPER,CODPARC,CODVEND,TIPMOV,"
+    "PENDENTE,STATUSNFE,STATUSNOTA,APROVADO,DTALTER"
+)
+CABECALHO_NOTA_FALLBACK_FIELDS = [
+    "NUNOTA",
+    "CODEMP",
+    "NUMNOTA",
+    "DTENTSAI",
+    "DTNEG",
+    "CODTIPOPER",
+    "CODPARC",
+    "CODVEND",
+    "TIPMOV",
+    "PENDENTE",
+    "STATUSNFE",
+    "STATUSNOTA",
+    "APROVADO",
+    "DTALTER",
+]
+
+
+def _crud_has_more_result(entities: dict, response_body: dict | None = None, n_records: int = 0, page_size: int = 0) -> bool:
+    raw = (entities or {}).get("hasMoreResult")
+    if raw is None and isinstance(response_body, dict):
+        raw = response_body.get("hasMoreResult")
+    if isinstance(raw, dict):
+        raw = raw.get("$")
+    if raw is not None and str(raw).strip() != "":
+        flag = str(raw).strip().lower() in {"1", "true", "s", "yes"}
+        if flag:
+            return True
+        return bool(page_size and n_records >= page_size)
+    return bool(page_size and n_records >= page_size)
+
+
+def _persistir_cabecalho_nota_fiscal(row: dict[str, Any], dtneg_fallback=None):
+    """Atualiza o cabeçalho da nota. Retorna (nota, created) ou (None, False)."""
+    nunota = _to_int(_crud_record_get(row, "NUNOTA"))
+    if not nunota:
+        return None, False
+    data_neg = _to_date(_crud_record_get(row, "DTNEG"))
+    if data_neg is None and dtneg_fallback is not None:
+        data_neg = dtneg_fallback
+    dtalter = _to_datetime_iso_seconds(_crud_record_get(row, "DTALTER"))
+    defaults = {
+        "codigo_empresa": _to_int(_crud_record_get(row, "CODEMP")),
+        "numero_nota": _to_int(_crud_record_get(row, "NUMNOTA")),
+        "data_entrada_saida": _to_date(_crud_record_get(row, "DTENTSAI")),
+        "data_negociacao": data_neg,
+        "codigo_tipo_operacao": _to_int(_crud_record_get(row, "CODTIPOPER")),
+        "codigo_parceiro": _to_int(_crud_record_get(row, "CODPARC")),
+        "codigo_vendedor": _to_int(_crud_record_get(row, "CODVEND")),
+        "tipo_movimento": _to_str(_crud_record_get(row, "TIPMOV"), 10),
+        "pendente": _to_str(_crud_record_get(row, "PENDENTE"), 5),
+        "status_nfe": _to_str(_crud_record_get(row, "STATUSNFE"), 30),
+        "status_nota": _to_str(_crud_record_get(row, "STATUSNOTA"), 30),
+        "aprovado": _to_str(_crud_record_get(row, "APROVADO"), 5),
+        "dtalter": _to_str(dtalter, 50),
+    }
+    defaults = {k: v for k, v in defaults.items() if v is not None}
+    nota, created = NotaFiscal.objects.update_or_create(nunota=nunota, defaults=defaults)
+    return nota, created
 
 
 def _iso_to_criteria_date_start_of_day(value):
@@ -1302,42 +1398,27 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
                     print("Notas fiscais: reconsulta a partir de 01/05/2026.")
                     continue
 
-            has_more = str(entities.get("hasMoreResult", "false")).lower() in {"1", "true", "s"}
+            has_more = _crud_has_more_result(
+                entities, response_body, len(raw_records), NOTAS_FISCAIS_PAGE_SIZE
+            )
             ignorados_sem_nunota = 0
             for i, row in enumerate(records):
                 row_raw = raw_rows[i] if i < len(raw_rows) else {}
-                nunota_row = _to_int(_crud_record_get(row, "NUNOTA"))
-                if not nunota_row:
+                nota, nota_created = _persistir_cabecalho_nota_fiscal(row, dtneg_fallback=dtneg_date)
+                if not nota:
                     ignorados_sem_nunota += 1
                     if ignorados_sem_nunota <= 3:
                         print(f"Linha ignorada (sem NUNOTA): {json.dumps(row, ensure_ascii=False, default=str)}")
                     continue
+                nunota_row = nota.nunota
+                if nota_created:
+                    notas_novas.add(nunota_row)
                 sequencia = _to_int(
                     _crud_item_field_value(row_raw, idx_to_name, "SEQUENCIA")
                     or _crud_record_get(row, "SEQUENCIA")
                 )
                 if sequencia is None:
                     sequencia = 0
-                dtalter = _to_datetime_iso_seconds(_crud_record_get(row, "DTALTER"))
-                nota_defaults = {
-                    "codigo_empresa": _to_int(_crud_record_get(row, "CODEMP")),
-                    "numero_nota": _to_int(_crud_record_get(row, "NUMNOTA")),
-                    "data_entrada_saida": _to_date(_crud_record_get(row, "DTENTSAI")),
-                    "data_negociacao": _to_date(_crud_record_get(row, "DTNEG")),
-                    "codigo_tipo_operacao": _to_int(_crud_record_get(row, "CODTIPOPER")),
-                    "codigo_parceiro": _to_int(_crud_record_get(row, "CODPARC")),
-                    "codigo_vendedor": _to_int(_crud_record_get(row, "CODVEND")),
-                    "tipo_movimento": _to_str(_crud_record_get(row, "TIPMOV"), 10),
-                    "pendente": _to_str(_crud_record_get(row, "PENDENTE"), 5),
-                    "status_nfe": _to_str(_crud_record_get(row, "STATUSNFE"), 30),
-                    "status_nota": _to_str(_crud_record_get(row, "STATUSNOTA"), 30),
-                    "aprovado": _to_str(_crud_record_get(row, "APROVADO"), 5),
-                    "dtalter": _to_str(dtalter, 50),
-                }
-                nota_defaults = {k: v for k, v in nota_defaults.items() if v is not None}
-                nota, nota_created = NotaFiscal.objects.update_or_create(nunota=nunota_row, defaults=nota_defaults)
-                if nota_created:
-                    notas_novas.add(nunota_row)
 
                 if nunota_row not in notas_com_itens_substituidos:
                     ItemNotaFiscal.objects.filter(nota_fiscal=nota).delete()
@@ -1389,6 +1470,50 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
             )
             page += 1
 
+    def consultar_cabecalhos(dtneg_date) -> set[int]:
+        nonlocal headers
+        nunotas: set[int] = set()
+        page = 0
+        has_more = True
+        while has_more:
+            body = _build_cabecalho_nota_load_records_body(page, dtneg_date)
+            resp, headers = _request_with_token_retry("POST", url, headers, json=body, timeout=360)
+            if _is_no_records_not_found(resp):
+                print("CabecalhoNota — nenhum registro retornado pelo Sankhya.")
+                break
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            if _is_no_records_payload(data):
+                print("CabecalhoNota — nenhum registro no payload.")
+                break
+            resp.raise_for_status()
+            response_body = data.get("responseBody") or data
+            entities = response_body.get("entities") or {}
+            raw_records = entities.get("entity") or entities.get("record") or entities.get("records") or []
+            if isinstance(raw_records, dict):
+                raw_records = [raw_records]
+            idx_to_name = _crud_idx_to_name_from_entities(entities, CABECALHO_NOTA_FALLBACK_FIELDS)
+            records = [_crud_row_to_flat_record(r, idx_to_name) for r in raw_records]
+            print(
+                f"CabecalhoNota DTNEG page={page} api={len(raw_records)} "
+                f"hasMore={entities.get('hasMoreResult')!r}"
+            )
+            has_more = _crud_has_more_result(
+                entities, response_body, len(raw_records), NOTAS_FISCAIS_PAGE_SIZE
+            )
+            for row in records:
+                nota, created = _persistir_cabecalho_nota_fiscal(row, dtneg_fallback=dtneg_date)
+                if not nota:
+                    continue
+                nunotas.add(nota.nunota)
+                if created:
+                    notas_novas.add(nota.nunota)
+            page += 1
+        print(f"CabecalhoNota DTNEG — {len(nunotas)} notas encontradas")
+        return nunotas
+
     if numero_consulta is not None:
         print(f"Notas fiscais — consulta específica NUNOTA/NUMNOTA={numero_consulta}")
         consultar(nunota=numero_consulta)
@@ -1403,14 +1528,23 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
             print(f"Notas fiscais — excluídas localmente (não encontradas no Sankhya): {excluidos}")
     elif dtneg_consulta is not None:
         print(f"Notas fiscais — consulta por DTNEG={dtneg_consulta.isoformat()}")
+        nunotas_cabecalho = consultar_cabecalhos(dtneg_consulta)
         consultar(dtneg_date=dtneg_consulta)
+        for nunota_cab in nunotas_cabecalho:
+            if nunota_cab in notas_com_itens_substituidos:
+                continue
+            nota_sem_item = NotaFiscal.objects.filter(nunota=nunota_cab).first()
+            if nota_sem_item:
+                ItemNotaFiscal.objects.filter(nota_fiscal=nota_sem_item).delete()
+            notas_com_itens_substituidos.add(nunota_cab)
         locais = NotaFiscal.objects.filter(data_negociacao=dtneg_consulta)
-        a_excluir = locais.exclude(nunota__in=notas_com_itens_substituidos)
+        a_excluir = locais.exclude(nunota__in=nunotas_cabecalho)
         excluidos = list(a_excluir.values_list("nunota", "numero_nota"))
         if excluidos:
             a_excluir.delete()
             out["total_excluidos"] = len(excluidos)
             print(f"Notas fiscais — excluídas localmente (DTNEG {dtneg_consulta}, não encontradas no Sankhya): {excluidos}")
+        out["total_notas_cabecalho"] = len(nunotas_cabecalho)
     else:
         consultar(
             criteria_date=ultima_alteracao,
