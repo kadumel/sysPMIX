@@ -7,6 +7,8 @@ def run_integracao_sankhya(
     chave: str,
     codigo_tabela: int | None = None,
     dtalter_desde: str | None = None,
+    numero_nota: int | None = None,
+    dtneg: str | None = None,
 ) -> dict:
     from api_sankhya.views import INTEGRACOES
 
@@ -16,6 +18,12 @@ def run_integracao_sankhya(
         resultado = INTEGRACOES[chave]["runner"](codigo_tabela=codigo_tabela)
     elif chave == "clientes":
         resultado = INTEGRACOES[chave]["runner"](dtalter_desde=dtalter_desde)
+    elif chave == "notas_fiscais":
+        resultado = INTEGRACOES[chave]["runner"](
+            dtalter_desde=dtalter_desde,
+            numero_nota=numero_nota,
+            dtneg=dtneg,
+        )
     else:
         resultado = INTEGRACOES[chave]["runner"]()
     if not isinstance(resultado, dict):
