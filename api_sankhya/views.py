@@ -746,11 +746,16 @@ def _persistir_cabecalho_nota_fiscal(row: dict[str, Any], dtneg_fallback=None):
     return nota, created
 
 
-def _iso_to_criteria_date_start_of_day(value):
+def _iso_to_criteria_datetime(value):
+    """Converte ISO/local para critério Sankhya preservando hora, minuto e segundo."""
     dt = _parse_datetime_flexible(value)
     if dt is None:
         return None
     return dt.strftime("%d/%m/%Y %H:%M:%S")
+
+
+def _iso_to_criteria_date_start_of_day(value):
+    return _iso_to_criteria_datetime(value)
 
 
 def _user_input_to_criteria_date(value: str | None) -> str | None:
@@ -793,8 +798,8 @@ def _notas_fiscais_sync_modal_context() -> dict[str, Any]:
     dt = _parse_datetime_flexible(iso) if iso else None
     return {
         "ultima_dtalter_exibicao": dt.strftime("%d/%m/%Y %H:%M:%S") if dt and tem_dtalter_local else None,
-        "dtalter_criteria_padrao": _iso_to_criteria_date_start_of_day(iso) if iso else None,
-        "dtalter_input_padrao": dt.strftime("%Y-%m-%d") if dt else "",
+        "dtalter_criteria_padrao": _iso_to_criteria_datetime(iso) if iso else None,
+        "dtalter_input_padrao": dt.strftime("%Y-%m-%dT%H:%M:%S") if dt else "",
         "usa_base_maio_2026": not tem_dtalter_local,
     }
 
@@ -1304,10 +1309,10 @@ def getNotasFiscais(dtalter_desde=None, numero_nota=None, dtneg=None):
     if modo_data:
         ultima_alteracao = _user_input_to_criteria_date(str(modo_data))
         if not ultima_alteracao:
-            ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_nota_fiscal_iso())
+            ultima_alteracao = _iso_to_criteria_datetime(_max_dtalter_nota_fiscal_iso())
         print(f"Notas fiscais — filtro DTALTER informado: {ultima_alteracao}")
     else:
-        ultima_alteracao = _iso_to_criteria_date_start_of_day(_max_dtalter_nota_fiscal_iso())
+        ultima_alteracao = _iso_to_criteria_datetime(_max_dtalter_nota_fiscal_iso())
         origem = "maior DTALTER local" if tem_dtalter_local else "base 01/05/2026 (sem DTALTER na tabela)"
         if numero_consulta is None and dtneg_consulta is None:
             print(f"Notas fiscais — filtro DTALTER ({origem}): {ultima_alteracao}")
