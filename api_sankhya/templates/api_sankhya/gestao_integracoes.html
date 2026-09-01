@@ -136,6 +136,85 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalNotasFiscaisSync" tabindex="-1" aria-labelledby="modalNotasFiscaisSyncLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalNotasFiscaisSyncLabel">Atualizar notas fiscais</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-3">
+                    Escolha <strong>DTALTER</strong> para carga incremental, <strong>DTNEG</strong> para
+                    todas as notas de um dia de negociação, ou o <strong>número</strong> de uma nota
+                    (NUNOTA ou número da NF). Na consulta por número ou DTNEG, notas locais que não
+                    existirem no Sankhya (e os itens) são excluídas.
+                </p>
+                <dl class="row small mb-3">
+                    <dt class="col-sm-5">Última DTALTER local</dt>
+                    <dd class="col-sm-7" id="notasUltimaDtalter">
+                        {% if notas_fiscais_sync.ultima_dtalter_exibicao %}
+                            {{ notas_fiscais_sync.ultima_dtalter_exibicao }}
+                        {% elif notas_fiscais_sync.usa_base_maio_2026 %}
+                            <span class="text-muted">Nenhuma — filtro base 01/05/2026</span>
+                        {% else %}
+                            <span class="text-muted">Nenhuma</span>
+                        {% endif %}
+                    </dd>
+                    <dt class="col-sm-5">Filtro padrão (incremental)</dt>
+                    <dd class="col-sm-7" id="notasDtalterCriteria">
+                        {% if notas_fiscais_sync.dtalter_criteria_padrao %}
+                            {{ notas_fiscais_sync.dtalter_criteria_padrao }}
+                        {% else %}
+                            <span class="text-muted">Sem filtro</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+                <div class="mb-3">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="notasModoSync" id="notasModoData" value="data" checked>
+                        <label class="form-check-label" for="notasModoData">Por data de alteração (DTALTER)</label>
+                    </div>
+                    <label for="notasDtalterDesde" class="form-label">Data a partir de</label>
+                    <input type="date" class="form-control" id="notasDtalterDesde"
+                           value="{{ notas_fiscais_sync.dtalter_input_padrao }}">
+                    <div class="form-text">Deixe a data padrão para a carga incremental, ou escolha outra para reimportar desde aquele dia.</div>
+                </div>
+                <hr>
+                <div class="mb-3">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="notasModoSync" id="notasModoDtneg" value="dtneg">
+                        <label class="form-check-label" for="notasModoDtneg">Por data de negociação (DTNEG)</label>
+                    </div>
+                    <label for="notasDtneg" class="form-label">Data de negociação</label>
+                    <input type="date" class="form-control" id="notasDtneg" disabled>
+                    <div class="invalid-feedback">Informe a data de negociação.</div>
+                    <div class="form-text">Atualiza todas as notas daquele dia. Notas locais dessa DTNEG que não existirem no Sankhya serão removidas.</div>
+                </div>
+                <hr>
+                <div class="mb-0">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="notasModoSync" id="notasModoNumero" value="numero">
+                        <label class="form-check-label" for="notasModoNumero">Por número da nota</label>
+                    </div>
+                    <label for="notasNumeroNota" class="form-label">NUNOTA ou número da NF</label>
+                    <input type="number" class="form-control" id="notasNumeroNota" min="1" step="1" disabled>
+                    <div class="invalid-feedback">Informe o NUNOTA ou o número da nota fiscal.</div>
+                    <div class="form-text">
+                        Se a nota estiver na sua base e não existir no Sankhya, ela e os itens serão removidos daqui.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="btnConfirmarNotasFiscaisSync">
+                    <i class="bi bi-arrow-repeat me-1"></i>Iniciar atualização
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -286,7 +365,10 @@
         var detail = '';
         if (d.result && typeof d.result === 'object') {
           var r = d.result;
-          if (r.total_processados != null) detail = 'Proc.: ' + r.total_processados;
+          var parts = [];
+          if (r.total_processados != null) parts.push('Proc.: ' + r.total_processados);
+          if (r.total_excluidos) parts.push('Excl.: ' + r.total_excluidos);
+          detail = parts.join(' · ');
         }
         setCellDone(chave, ok, detail);
         if (chave === '__todas__') {
@@ -442,12 +524,102 @@
     });
   }
 
+  var modalNotasEl = document.getElementById('modalNotasFiscaisSync');
+  var modalNotas = modalNotasEl ? new bootstrap.Modal(modalNotasEl) : null;
+  var formNotasPendente = null;
+  var radioNotasData = document.getElementById('notasModoData');
+  var radioNotasDtneg = document.getElementById('notasModoDtneg');
+  var radioNotasNumero = document.getElementById('notasModoNumero');
+  var inpNotasData = document.getElementById('notasDtalterDesde');
+  var inpNotasDtneg = document.getElementById('notasDtneg');
+  var inpNotasNumero = document.getElementById('notasNumeroNota');
+
+  function modoNotasSelecionado() {
+    var checked = document.querySelector('input[name="notasModoSync"]:checked');
+    return checked ? checked.value : 'data';
+  }
+
+  function atualizarCamposModalNotas() {
+    var modo = modoNotasSelecionado();
+    if (inpNotasData) inpNotasData.disabled = modo !== 'data';
+    if (inpNotasDtneg) inpNotasDtneg.disabled = modo !== 'dtneg';
+    if (inpNotasNumero) inpNotasNumero.disabled = modo !== 'numero';
+  }
+
+  function abrirModalNotasFiscais(form) {
+    formNotasPendente = form;
+    if (radioNotasData) radioNotasData.checked = true;
+    if (radioNotasDtneg) radioNotasDtneg.checked = false;
+    if (radioNotasNumero) radioNotasNumero.checked = false;
+    if (inpNotasNumero) inpNotasNumero.value = '';
+    if (inpNotasNumero) inpNotasNumero.classList.remove('is-invalid');
+    if (inpNotasDtneg) inpNotasDtneg.value = '';
+    if (inpNotasDtneg) inpNotasDtneg.classList.remove('is-invalid');
+    atualizarCamposModalNotas();
+    if (modalNotas) modalNotas.show();
+  }
+
+  if (radioNotasData) radioNotasData.addEventListener('change', atualizarCamposModalNotas);
+  if (radioNotasDtneg) radioNotasDtneg.addEventListener('change', atualizarCamposModalNotas);
+  if (radioNotasNumero) radioNotasNumero.addEventListener('change', atualizarCamposModalNotas);
+  if (inpNotasNumero) {
+    inpNotasNumero.addEventListener('input', function () {
+      inpNotasNumero.classList.remove('is-invalid');
+    });
+  }
+  if (inpNotasDtneg) {
+    inpNotasDtneg.addEventListener('input', function () {
+      inpNotasDtneg.classList.remove('is-invalid');
+    });
+  }
+
+  var btnConfirmarNotas = document.getElementById('btnConfirmarNotasFiscaisSync');
+  if (btnConfirmarNotas) {
+    btnConfirmarNotas.addEventListener('click', function () {
+      if (!formNotasPendente) return;
+      var extra = {};
+      var modo = modoNotasSelecionado();
+      if (modo === 'numero') {
+        var numero = inpNotasNumero && String(inpNotasNumero.value || '').trim();
+        if (!numero || !/^\d+$/.test(numero)) {
+          if (inpNotasNumero) {
+            inpNotasNumero.classList.add('is-invalid');
+            inpNotasNumero.focus();
+          }
+          return;
+        }
+        inpNotasNumero.classList.remove('is-invalid');
+        extra.numero_nota = numero;
+      } else if (modo === 'dtneg') {
+        var dtneg = inpNotasDtneg && String(inpNotasDtneg.value || '').trim();
+        if (!dtneg) {
+          if (inpNotasDtneg) {
+            inpNotasDtneg.classList.add('is-invalid');
+            inpNotasDtneg.focus();
+          }
+          return;
+        }
+        inpNotasDtneg.classList.remove('is-invalid');
+        extra.dtneg = dtneg;
+      } else if (inpNotasData && inpNotasData.value) {
+        extra.dtalter_desde = inpNotasData.value;
+      }
+      if (modalNotas) modalNotas.hide();
+      submitIntegracao(formNotasPendente, extra);
+      formNotasPendente = null;
+    });
+  }
+
   document.querySelectorAll('form.form-integracao').forEach(function (form) {
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       const chave = form.getAttribute('data-chave');
       if (chave === 'clientes') {
         abrirModalClientes(form);
+        return;
+      }
+      if (chave === 'notas_fiscais') {
+        abrirModalNotasFiscais(form);
         return;
       }
       submitIntegracao(form);
