@@ -2,6 +2,7 @@ from django.contrib import admin, messages
 from django.utils import timezone
 
 from .models import (
+    AlertaLoja,
     BannerPromocional,
     Campanha,
     ItemCampanha,
@@ -232,6 +233,62 @@ class BannerPromocionalAdmin(admin.ModelAdmin):
     list_editable = ('ordem', 'ativo')
     list_filter = ('ativo',)
     search_fields = ('titulo', 'descricao_curta', 'descricao_longa', 'call_to_action')
+
+
+@admin.register(AlertaLoja)
+class AlertaLojaAdmin(admin.ModelAdmin):
+    list_display = (
+        'id',
+        'titulo',
+        'tipo',
+        'destino_display',
+        'data_inicio',
+        'data_fim',
+        'hora_inicio',
+        'hora_fim',
+        'ordem',
+        'ativo',
+    )
+    list_editable = ('ordem', 'ativo')
+    list_filter = ('ativo', 'tipo', 'data_inicio', 'data_fim')
+    search_fields = (
+        'titulo',
+        'mensagem',
+        'clientes__nome',
+        'clientes__razao',
+        'clientes__codigo_cliente',
+    )
+    autocomplete_fields = ('clientes',)
+    fieldsets = (
+        (None, {'fields': ('titulo', 'mensagem', 'tipo', 'ativo', 'ordem')}),
+        (
+            'Destinatário',
+            {
+                'fields': ('clientes',),
+                'description': 'Deixe vazio para exibir a todos. Selecione um ou mais clientes para restringir.',
+            },
+        ),
+        ('Período', {'fields': ('data_inicio', 'data_fim')}),
+        (
+            'Horário diário',
+            {
+                'fields': ('hora_inicio', 'hora_fim'),
+                'description': 'Janela em que o alerta aparece todos os dias do período. Ex.: início 12:00 e fim vazio = após o meio-dia.',
+            },
+        ),
+        ('Auditoria', {'fields': ('criado_em', 'atualizado_em')}),
+    )
+
+    @admin.display(description='Destinatário')
+    def destino_display(self, obj):
+        nomes = list(obj.clientes.all()[:4])
+        if not nomes:
+            return 'Todos os clientes'
+        texto = ', '.join(str(c) for c in nomes)
+        extra = obj.clientes.count() - len(nomes)
+        if extra > 0:
+            texto = f'{texto} (+{extra})'
+        return texto
 
 
 @admin.register(ProdutoImagem)

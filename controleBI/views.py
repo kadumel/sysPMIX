@@ -11,7 +11,13 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from api_sankhya.models import Cliente as ClienteSankhya, GrupoProduto, Produto as ProdutoSankhya
 from ecommerce import catalog as catalog_ecommerce
-from ecommerce.services import filtrar_pedidos_loja_notificacoes_comercial, integrar_pedido_no_sistema_externo
+from ecommerce.services import (
+    adicionar_produto_analise_ao_pedido,
+    filtrar_pedidos_loja_notificacoes_comercial,
+    integrar_pedido_no_sistema_externo,
+)
+from ecommerce.analise_pedido import resultado_analise_de_pedido
+from ecommerce.cart_session import format_qty_display, parse_quantity
 from ecommerce.sankhya_integracao import IntegracaoSankhyaError
 from .models import (
     Funcionario,
@@ -29,6 +35,7 @@ from .models import (
 from .forms import (
     VeiculoForm,
     CampanhaForm,
+    AlertaLojaForm,
     ClienteSankhyaConfigForm,
     CriarUsuarioClienteSankhyaForm,
     AlterarSenhaUsuarioClienteForm,
@@ -62,6 +69,7 @@ from .services import VeiculoService, PedidoService, FuncionarioService, Cliente
 from api_sankhya.tasks import run_integracao_sankhya
 from django.db import connections
 from ecommerce.models import (
+    AlertaLoja,
     Campanha,
     ItemCampanha,
     NotificacaoLoja,
@@ -2456,6 +2464,211 @@ class CampanhaEcommerceFormView(PerfilGestaoRotasMixin, View):
         return self._render(request, campanha, form=form)
 
 
+def _status_alerta(alerta, ref=None):
+    hoje = ref or date.today()
+    if not alerta.ativo:
+        return 'inativo'
+    if hoje < alerta.data_inicio:
+        return 'futura'
+    if hoje > alerta.data_fim:
+        return 'encerrada'
+    return 'vigente'
+
+
+def _horario_alerta_label(alerta):
+    if alerta.hora_inicio and alerta.hora_fim:
+        return f'{alerta.hora_inicio:%H:%M} – {alerta.hora_fim:%H:%M}'
+    if alerta.hora_inicio:
+        return f'a partir de {alerta.hora_inicio:%H:%M}'
+    if alerta.hora_fim:
+        return f'até {alerta.hora_fim:%H:%M}'
+    return 'o dia inteiro'
+
+
+def _buscar_clientes_alerta(termo, limite=50):
+    termo = (termo or '').strip()
+    if not termo:
+        return []
+    qs = ClienteSankhya.objects.all()
+    lookup = (
+        Q(nome__icontains=termo)
+        | Q(razao__icontains=termo)
+        | Q(cnpj_cpf__icontains=termo)
+    )
+    if termo.isdigit():
+        lookup |= Q(codigo_cliente=int(termo))
+    return list(qs.filter(lookup).order_by('nome', 'razao', 'codigo_cliente')[:limite])
+
+
+def _ids_clientes_alerta(request, alerta=None):
+    if request.method == 'POST':
+        return AlertaLojaForm.ids_clientes_from_data(request.POST)
+    if alerta and alerta.pk:
+        return list(alerta.clientes.order_by('nome', 'razao', 'codigo_cliente').values_list('id', flat=True))
+    return []
+
+
+def _clientes_por_ids(ids):
+    if not ids:
+        return []
+    by_id = {c.id: c for c in ClienteSankhya.objects.filter(id__in=ids)}
+    return [by_id[cid] for cid in ids if cid in by_id]
+
+
+class GestaoAlertasEcommerceView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/alertas.html'
+
+    def get(self, request):
+        hoje = date.today()
+        qs = AlertaLoja.objects.prefetch_related('clientes')
+        search = (request.GET.get('search') or '').strip()
+        if search:
+            q = (
+                Q(titulo__icontains=search)
+                | Q(mensagem__icontains=search)
+                | Q(clientes__nome__icontains=search)
+                | Q(clientes__razao__icontains=search)
+            )
+            if search.isdigit():
+                q |= Q(pk=int(search)) | Q(clientes__codigo_cliente=int(search))
+            qs = qs.filter(q)
+
+        status = (request.GET.get('status') or '').strip()
+        if status == 'vigente':
+            qs = qs.filter(ativo=True, data_inicio__lte=hoje, data_fim__gte=hoje)
+        elif status == 'futura':
+            qs = qs.filter(ativo=True, data_inicio__gt=hoje)
+        elif status == 'encerrada':
+            qs = qs.filter(data_fim__lt=hoje)
+        elif status == 'inativo':
+            qs = qs.filter(ativo=False)
+
+        qs = qs.annotate(qtd_clientes=Count('clientes', distinct=True)).distinct()
+
+        alcance = (request.GET.get('alcance') or '').strip()
+        if alcance == 'todos':
+            qs = qs.filter(qtd_clientes=0)
+        elif alcance == 'cliente':
+            qs = qs.filter(qtd_clientes__gt=0)
+
+        alertas = []
+        for alerta in qs.order_by('ordem', '-data_inicio', '-id'):
+            alerta.status_periodo = _status_alerta(alerta, hoje)
+            alerta.horario_label = _horario_alerta_label(alerta)
+            alertas.append(alerta)
+
+        return render(
+            request,
+            self.template_name,
+            {
+                'alertas': alertas,
+                'current_search': search,
+                'filtro_status': status,
+                'filtro_alcance': alcance,
+            },
+        )
+
+
+class AlertaEcommerceFormView(PerfilGestaoRotasMixin, View):
+    template_name = 'ecommerce_gestao/alerta_form.html'
+
+    def _get_alerta(self, pk):
+        return get_object_or_404(AlertaLoja.objects.prefetch_related('clientes'), pk=pk)
+
+    def _render(self, request, alerta=None, form=None, clientes_ids=None, **extra):
+        busca_cliente = extra.pop('busca_cliente', None)
+        if busca_cliente is None:
+            busca_cliente = (request.POST.get('q') or request.GET.get('q') or '').strip()
+        else:
+            busca_cliente = (busca_cliente or '').strip()
+        if clientes_ids is None:
+            clientes_ids = _ids_clientes_alerta(request, alerta)
+        clientes_selecionados = _clientes_por_ids(clientes_ids)
+        selecionados_ids = {c.id for c in clientes_selecionados}
+        clientes_busca = []
+        if busca_cliente:
+            clientes_busca = _buscar_clientes_alerta(busca_cliente)
+            for c in clientes_busca:
+                c.ja_adicionado = c.id in selecionados_ids
+        form = form or AlertaLojaForm(instance=alerta)
+        ctx = {
+            'alerta': alerta,
+            'form': form,
+            'busca_cliente': busca_cliente,
+            'clientes_busca': clientes_busca,
+            'clientes_selecionados': clientes_selecionados,
+            'status_periodo': _status_alerta(alerta) if alerta else None,
+            'horario_label': _horario_alerta_label(alerta) if alerta else None,
+        }
+        ctx.update(extra)
+        return render(request, self.template_name, ctx)
+
+    def get(self, request, pk=None):
+        alerta = self._get_alerta(pk) if pk else None
+        return self._render(request, alerta)
+
+    def post(self, request, pk=None):
+        action = (request.POST.get('action') or '').strip()
+        if request.POST.get('cliente_add_id'):
+            action = 'adicionar_clientes'
+        elif request.POST.get('cliente_remove_id'):
+            action = 'remover_cliente'
+        elif not action:
+            action = 'salvar'
+        alerta = self._get_alerta(pk) if pk else None
+        ids = _ids_clientes_alerta(request, alerta)
+
+        if action == 'excluir' and alerta:
+            titulo = alerta.titulo or f'Alerta #{alerta.pk}'
+            alerta.delete()
+            messages.success(request, f'Alerta "{titulo}" excluído.')
+            return redirect('gestao_alertas_ecommerce')
+
+        if action == 'buscar_cliente':
+            form = AlertaLojaForm(request.POST, instance=alerta)
+            return self._render(request, alerta, form=form, clientes_ids=ids)
+
+        if action == 'adicionar_clientes':
+            extras = list(request.POST.getlist('clientes_add_ids'))
+            um = (request.POST.get('cliente_add_id') or '').strip()
+            if um:
+                extras.append(um)
+            seen = set(ids)
+            for raw in extras:
+                try:
+                    cid = int(raw)
+                except (TypeError, ValueError):
+                    continue
+                if cid not in seen and ClienteSankhya.objects.filter(pk=cid).exists():
+                    seen.add(cid)
+                    ids.append(cid)
+            form = AlertaLojaForm(request.POST, instance=alerta)
+            post_data = request.POST.copy()
+            if ids:
+                post_data['alcance'] = AlertaLojaForm.ALCANCE_CLIENTE
+                form = AlertaLojaForm(post_data, instance=alerta)
+            return self._render(request, alerta, form=form, clientes_ids=ids)
+
+        if action == 'remover_cliente':
+            try:
+                remover_id = int(request.POST.get('cliente_remove_id') or 0)
+            except (TypeError, ValueError):
+                remover_id = 0
+            ids = [cid for cid in ids if cid != remover_id]
+            form = AlertaLojaForm(request.POST, instance=alerta)
+            return self._render(request, alerta, form=form, clientes_ids=ids)
+
+        form = AlertaLojaForm(request.POST, instance=alerta)
+        if form.is_valid():
+            alerta = form.save()
+            if pk:
+                messages.success(request, 'Alerta atualizado.')
+            else:
+                messages.success(request, 'Alerta criado. Ele será exibido na loja no período e horário cadastrados.')
+            return redirect('gestao_alertas_ecommerce')
+        return self._render(request, alerta, form=form, clientes_ids=ids)
+
+
 class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
     template_name = 'ecommerce_gestao/notificacoes.html'
 
@@ -2537,8 +2750,12 @@ class GestaoNotificacoesEcommerceView(PerfilBIAccessMixin, View):
             for nome, total in sorted(contador.items(), key=lambda x: (-x[1], x[0]))
         ]
 
+        pedidos_exibir = list(pedidos)
+        for pedido in pedidos_exibir:
+            pedido.analise_resultado = resultado_analise_de_pedido(pedido)
+
         context = {
-            'pedidos': pedidos,
+            'pedidos': pedidos_exibir,
             'tops_envio': TopEnvioSankhya.objects.filter(ativo=True).order_by('descricao', 'codigo_top'),
             'total_pedidos': pedidos.count(),
             'pendentes': pedidos.filter(status=PedidoLoja.Status.PENDENTE).count(),
@@ -2642,6 +2859,45 @@ def gestao_notificacao_aprovar(request, pk: int):
     )
     messages.success(request, f'Pedido #{pedido.pk} aprovado com sucesso.')
     return redirect('gestao_notificacoes_ecommerce')
+
+
+@login_required
+@requer_acesso_bi
+@require_POST
+def gestao_notificacao_analise_adicionar(request, pk: int):
+    perfil = ensure_perfil(request.user)
+    if not perfil or perfil.perfil not in PERFIS_PAINEL_BI_LOJA:
+        return JsonResponse({'ok': False, 'erro': 'Sem permissão para alterar o pedido.'}, status=403)
+
+    pedidos_qs, _ = GestaoNotificacoesEcommerceView.pedidos_visiveis_para_usuario(request.user)
+    pedido = get_object_or_404(pedidos_qs, pk=pk)
+
+    try:
+        codigo = int(request.POST.get('codigo_produto'))
+    except (TypeError, ValueError):
+        return JsonResponse({'ok': False, 'erro': 'Produto inválido.'}, status=400)
+
+    qty = parse_quantity(request.POST.get('qty'))
+    if qty is None:
+        return JsonResponse({'ok': False, 'erro': 'Quantidade inválida.'}, status=400)
+
+    item, err = adicionar_produto_analise_ao_pedido(pedido, codigo, qty)
+    if err:
+        return JsonResponse({'ok': False, 'erro': err}, status=400)
+
+    pedido.refresh_from_db(fields=['valor_total'])
+    return JsonResponse(
+        {
+            'ok': True,
+            'codigo_produto': item.codigo_produto,
+            'nome_produto': item.nome_produto,
+            'quantidade': str(item.quantidade),
+            'quantidade_label': format_qty_display(item.quantidade),
+            'preco_unitario': f'{item.preco_unitario:.2f}',
+            'valor_total': f'{item.valor_total:.2f}',
+            'pedido_valor_total': f'{pedido.valor_total:.2f}',
+        }
+    )
 
 
 @login_required

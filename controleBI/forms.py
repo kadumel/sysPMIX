@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.models import User
 
 from api_sankhya.models import Cliente as ClienteSankhya
-from ecommerce.models import Campanha
+from ecommerce.models import AlertaLoja, Campanha
 
 from .models import Veiculo
 
@@ -31,6 +31,119 @@ class CampanhaForm(forms.ModelForm):
         if ini and fim and fim < ini:
             raise forms.ValidationError('A data de fim deve ser igual ou posterior à data de início.')
         return data
+
+
+class AlertaLojaForm(forms.ModelForm):
+    ALCANCE_TODOS = 'todos'
+    ALCANCE_CLIENTE = 'cliente'
+
+    alcance = forms.ChoiceField(
+        label='Destinatário',
+        choices=(
+            (ALCANCE_TODOS, 'Todos os clientes'),
+            (ALCANCE_CLIENTE, 'Clientes específicos'),
+        ),
+        widget=forms.RadioSelect(attrs={'class': 'form-check-input'}),
+        initial=ALCANCE_TODOS,
+    )
+
+    class Meta:
+        model = AlertaLoja
+        fields = [
+            'titulo',
+            'mensagem',
+            'tipo',
+            'ativo',
+            'ordem',
+            'data_inicio',
+            'data_fim',
+            'hora_inicio',
+            'hora_fim',
+        ]
+        labels = {
+            'titulo': 'Título',
+            'mensagem': 'Mensagem',
+            'tipo': 'Tipo',
+            'ativo': 'Ativo',
+            'ordem': 'Ordem',
+            'data_inicio': 'Data de início',
+            'data_fim': 'Data de fim',
+            'hora_inicio': 'Horário de início',
+            'hora_fim': 'Horário de fim',
+        }
+        widgets = {
+            'titulo': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Ex.: Horário de entrega'}),
+            'mensagem': forms.Textarea(
+                attrs={
+                    'class': 'form-control',
+                    'rows': 4,
+                    'placeholder': 'Ex.: Pedidos feitos após as 12h serão entregues no próximo dia útil.',
+                }
+            ),
+            'tipo': forms.Select(attrs={'class': 'form-select'}),
+            'ativo': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'ordem': forms.NumberInput(attrs={'class': 'form-control', 'min': 0}),
+            'data_inicio': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}, format='%Y-%m-%d'),
+            'data_fim': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}, format='%Y-%m-%d'),
+            'hora_inicio': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}, format='%H:%M'),
+            'hora_fim': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}, format='%H:%M'),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['hora_inicio'].required = False
+        self.fields['hora_fim'].required = False
+        self.fields['titulo'].required = False
+        instance = self.instance
+        tem_clientes = False
+        if instance and instance.pk:
+            tem_clientes = instance.clientes.exists()
+        if tem_clientes:
+            self.fields['alcance'].initial = self.ALCANCE_CLIENTE
+        elif not self.data:
+            self.fields['alcance'].initial = self.ALCANCE_TODOS
+
+    @staticmethod
+    def ids_clientes_from_data(data):
+        ids = []
+        seen = set()
+        for raw in data.getlist('clientes_ids'):
+            try:
+                cid = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if cid not in seen:
+                seen.add(cid)
+                ids.append(cid)
+        return ids
+
+    def clean(self):
+        data = super().clean()
+        ini = data.get('data_inicio')
+        fim = data.get('data_fim')
+        if ini and fim and fim < ini:
+            self.add_error('data_fim', 'A data de fim deve ser igual ou posterior à data de início.')
+        hora_ini = data.get('hora_inicio')
+        hora_fim = data.get('hora_fim')
+        if hora_ini and hora_fim and hora_fim < hora_ini:
+            self.add_error('hora_fim', 'O horário de fim deve ser igual ou posterior ao horário de início.')
+        alcance = data.get('alcance')
+        ids = self.ids_clientes_from_data(self.data) if self.data else []
+        if ids:
+            validos = set(ClienteSankhya.objects.filter(pk__in=ids).values_list('id', flat=True))
+            ids = [cid for cid in ids if cid in validos]
+        if alcance == self.ALCANCE_CLIENTE and not ids:
+            self.add_error('alcance', 'Adicione pelo menos um cliente ou marque "Todos os clientes".')
+        if alcance != self.ALCANCE_CLIENTE:
+            ids = []
+        data['clientes_ids'] = ids
+        return data
+
+    def save(self, commit=True):
+        obj = super().save(commit=commit)
+        if commit:
+            obj.clientes.set(self.cleaned_data.get('clientes_ids') or [])
+        return obj
 
 
 class ClienteSankhyaConfigForm(forms.ModelForm):

@@ -1,6 +1,9 @@
+from datetime import time as dt_time
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 import os
 
 
@@ -320,6 +323,124 @@ class BannerPromocional(models.Model):
 
     def __str__(self):
         return self.titulo or f'Banner #{self.pk}'
+
+
+class AlertaLojaQuerySet(models.QuerySet):
+    def ativos(self):
+        return self.filter(ativo=True)
+
+    def vigentes_na_data(self, dia):
+        return self.ativos().filter(data_inicio__lte=dia, data_fim__gte=dia)
+
+    def para_cliente(self, cliente):
+        """Alertas sem clientes vinculados valem para todos; os demais, só para os vinculados."""
+        q = Q(clientes__isnull=True)
+        if cliente is not None:
+            q |= Q(clientes=cliente)
+        return self.filter(q).distinct()
+
+    def visiveis_em(self, momento, cliente=None):
+        """Alertas ativos no período, horário e destinatário (todos ou os clientes vinculados)."""
+        dia = momento.date() if hasattr(momento, 'date') else momento
+        hora = momento.time().replace(microsecond=0) if hasattr(momento, 'time') else None
+        candidatos = list(
+            self.vigentes_na_data(dia)
+            .para_cliente(cliente)
+            .prefetch_related('clientes')
+            .order_by('ordem', '-criado_em')
+        )
+        if hora is None:
+            return candidatos
+        return [alerta for alerta in candidatos if alerta.esta_visivel_no_horario(hora)]
+
+
+class AlertaLoja(models.Model):
+    """Mensagem no topo da loja (entre o navbar e o carrossel), com período e horário."""
+
+    class Tipo(models.TextChoices):
+        INFO = 'info', 'Informação'
+        WARNING = 'warning', 'Atenção'
+        DANGER = 'danger', 'Urgente'
+        SUCCESS = 'success', 'Positivo'
+
+    titulo = models.CharField(max_length=160, blank=True, verbose_name='Título')
+    mensagem = models.TextField(verbose_name='Mensagem')
+    tipo = models.CharField(
+        max_length=16,
+        choices=Tipo.choices,
+        default=Tipo.WARNING,
+        db_index=True,
+        verbose_name='Tipo',
+    )
+    clientes = models.ManyToManyField(
+        'api_sankhya.Cliente',
+        blank=True,
+        related_name='alertas_loja',
+        verbose_name='Clientes',
+        help_text='Vazio = todos os clientes. Vincule um ou mais para restringir o alerta.',
+    )
+    data_inicio = models.DateField(verbose_name='Data de início', db_index=True)
+    data_fim = models.DateField(verbose_name='Data de fim', db_index=True)
+    hora_inicio = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário de início',
+        help_text='Opcional. Ex.: 12:00 para aparecer todos os dias a partir do meio-dia. Vazio = desde 00:00.',
+    )
+    hora_fim = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário de fim',
+        help_text='Opcional. Vazio = até o fim do dia. Use com o horário de início para uma janela (ex.: 12:00–18:00).',
+    )
+    ordem = models.PositiveIntegerField(default=0, db_index=True, verbose_name='Ordem')
+    ativo = models.BooleanField(default=True, db_index=True, verbose_name='Ativo')
+    criado_em = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    atualizado_em = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+
+    objects = AlertaLojaQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'Alerta da loja'
+        verbose_name_plural = 'Alertas da loja'
+        ordering = ['ordem', '-criado_em']
+        indexes = [
+            models.Index(fields=['ativo', 'data_inicio', 'data_fim']),
+        ]
+
+    def __str__(self):
+        titulo = (self.titulo or self.mensagem or 'Alerta')[:60]
+        if not self.pk:
+            return titulo
+        qtd = self.clientes.count()
+        destino = 'Todos' if qtd == 0 else f'{qtd} cliente(s)'
+        return f'{titulo} ({destino})'
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.data_inicio and self.data_fim and self.data_fim < self.data_inicio:
+            errors['data_fim'] = 'A data de fim deve ser igual ou posterior à data de início.'
+        if self.hora_inicio and self.hora_fim and self.hora_fim < self.hora_inicio:
+            errors['hora_fim'] = 'O horário de fim deve ser igual ou posterior ao horário de início.'
+        if errors:
+            raise ValidationError(errors)
+
+    def esta_visivel_no_horario(self, hora):
+        """True se `hora` está dentro da janela diária cadastrada."""
+        if hora is None:
+            return True
+        if hasattr(hora, 'replace'):
+            hora = hora.replace(microsecond=0)
+        inicio = self.hora_inicio or dt_time.min
+        fim = self.hora_fim or dt_time.max.replace(microsecond=0)
+        return inicio <= hora <= fim
+
+    @property
+    def para_todos(self):
+        if not self.pk:
+            return True
+        return not self.clientes.exists()
 
 
 def _produto_imagem_upload_to(instance, filename):

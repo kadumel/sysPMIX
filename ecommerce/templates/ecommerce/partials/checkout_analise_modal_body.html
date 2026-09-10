@@ -1,105 +1,130 @@
 {% if analise.esquecidos or analise.novidades or analise.curva_a %}
 <p class="text-muted small mb-3">
+    {% if modo_gestao %}
+    Sugestões exibidas ao cliente na finalização
+    (últimos {{ analise.tempo_analise_meses }} meses{% if analise_gerada_em %} · {{ analise_gerada_em|date:'d/m/Y H:i' }}{% endif %}).
+    {% if pedido.status == 'pendente' %}Inclua no pedido se for necessário.{% endif %}
+    {% else %}
     Antes de enviar o pedido, confira as sugestões abaixo com base no seu histórico
     (últimos {{ analise.tempo_analise_meses }} meses). Você pode incluir itens no carrinho ou continuar sem alterações.
+    {% endif %}
 </p>
 
-<div class="accordion" id="accordionAnaliseCheckout">
+<div class="analise-stepper mb-3" {% if stepper_id %}id="{{ stepper_id }}"{% endif %} aria-label="Etapas da análise">
     {% if analise.esquecidos %}
-    <div class="accordion-item">
-        <h2 class="accordion-header">
-            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                    data-bs-target="#analiseCheckoutEsquecidos" aria-expanded="false"
-                    aria-controls="analiseCheckoutEsquecidos">
-                <i class="bi bi-clock-history me-2 text-primary"></i>
-                Itens que você costuma pedir
-                <span class="badge bg-primary ms-2">{{ analise.esquecidos|length }}</span>
-            </button>
-        </h2>
-        <div id="analiseCheckoutEsquecidos" class="accordion-collapse collapse"
-             data-bs-parent="#accordionAnaliseCheckout">
-            <div class="accordion-body p-0">
-                <p class="small text-muted px-3 pt-3 mb-2">Produtos do seu histórico que não estão no carrinho.</p>
-                <div class="list-group list-group-flush">
-                    {% for item in analise.esquecidos %}
-                    <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                        {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
-                        {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
-                    </div>
-                    {% endfor %}
-                </div>
-            </div>
-        </div>
+    <div class="analise-step-dot is-active" data-step-key="esquecidos">
+        <span class="analise-step-num">1</span>
+        <span class="analise-step-label">Que costuma pedir</span>
     </div>
+    {% endif %}
+    {% if analise.novidades %}
+    <div class="analise-step-dot{% if not analise.esquecidos %} is-active{% endif %}" data-step-key="novidades">
+        <span class="analise-step-num">{% if analise.esquecidos %}2{% else %}1{% endif %}</span>
+        <span class="analise-step-label">Campanha</span>
+    </div>
+    {% endif %}
+    {% if analise.curva_a %}
+    <div class="analise-step-dot{% if not analise.esquecidos and not analise.novidades %} is-active{% endif %}" data-step-key="curva_a">
+        <span class="analise-step-num">{% if analise.esquecidos and analise.novidades %}3{% elif analise.esquecidos or analise.novidades %}2{% else %}1{% endif %}</span>
+        <span class="analise-step-label">Curva A</span>
+    </div>
+    {% endif %}
+</div>
+
+<div class="js-analise-steps">
+    {% if analise.esquecidos %}
+    <section class="js-analise-step" data-step-key="esquecidos" data-step-title="Produtos que costuma pedir">
+        <h6 class="mb-1">
+            <i class="bi bi-clock-history me-2 text-primary"></i>
+            Produtos que costuma pedir
+            <span class="badge bg-primary ms-1 js-analise-step-badge">{{ analise.esquecidos|length }}</span>
+        </h6>
+        <p class="small text-muted mb-3">
+            {% if modo_gestao %}Produtos do histórico que o cliente não incluiu no pedido.{% else %}Produtos do seu histórico que não estão no carrinho.{% endif %}
+        </p>
+        <div class="list-group border rounded js-analise-step-list">
+            {% for item in analise.esquecidos %}
+            <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+                {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
+                {% if not modo_gestao or pedido.status == 'pendente' %}
+                {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <p class="js-analise-step-empty small text-muted text-center py-3 mb-0 d-none">
+            {% if modo_gestao %}Todos os produtos desta etapa já foram incluídos no pedido.{% else %}Você adicionou todos os produtos desta etapa.{% endif %}
+        </p>
+    </section>
     {% endif %}
 
     {% if analise.novidades %}
-    <div class="accordion-item">
-        <h2 class="accordion-header">
-            <button class="accordion-button collapsed" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#analiseCheckoutNovidades"
-                    aria-expanded="false"
-                    aria-controls="analiseCheckoutNovidades">
-                <i class="bi bi-stars me-2 text-warning"></i>
-                Novidades para você
-                <span class="badge bg-warning text-dark ms-2">{{ analise.novidades|length }}</span>
-            </button>
-        </h2>
-        <div id="analiseCheckoutNovidades" class="accordion-collapse collapse"
-             data-bs-parent="#accordionAnaliseCheckout">
-            <div class="accordion-body p-0">
-                <p class="small text-muted px-3 pt-3 mb-2">Produtos de campanhas vigentes que não estão no carrinho.</p>
-                <div class="list-group list-group-flush">
-                    {% for item in analise.novidades %}
+    <section class="js-analise-step d-none" data-step-key="novidades" data-step-title="Produtos Campanha">
+        <h6 class="mb-1">
+            <i class="bi bi-stars me-2 text-warning"></i>
+            Produtos Campanha
+            <span class="badge bg-warning text-dark ms-1 js-analise-step-badge">{{ analise.novidades|length }}</span>
+        </h6>
+        <p class="small text-muted mb-3">
+            {% if modo_gestao %}Produtos de campanhas vigentes que o cliente não incluiu no pedido.{% else %}Produtos de campanhas vigentes que não estão no carrinho.{% endif %}
+        </p>
+        <div class="list-group border rounded js-analise-step-list">
+            {% for item in analise.novidades %}
+            <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
+                {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
+                {% if not modo_gestao or pedido.status == 'pendente' %}
+                {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        <p class="js-analise-step-empty small text-muted text-center py-3 mb-0 d-none">
+            {% if modo_gestao %}Todos os produtos desta etapa já foram incluídos no pedido.{% else %}Você adicionou todos os produtos desta etapa.{% endif %}
+        </p>
+    </section>
+    {% endif %}
+
+    {% if analise.curva_a %}
+    <section class="js-analise-step d-none" data-step-key="curva_a" data-step-title="Produtos Curva A">
+        <h6 class="mb-1">
+            <i class="bi bi-graph-up-arrow me-2 text-success"></i>
+            Produtos Curva A
+            <span class="badge bg-success ms-1 js-analise-step-badge">{{ analise.curva_a|length }}</span>
+        </h6>
+        <p class="small text-muted mb-3">
+            {% if modo_gestao %}Itens de maior saída no mercado (por grupo) que o cliente ainda não pediu.{% else %}Itens de maior saída no mercado (por grupo) que você ainda não pediu.{% endif %}
+        </p>
+        <div class="js-analise-step-list">
+            {% for grupo_nome, itens_grupo in analise.curva_a_por_grupo %}
+            <div class="mb-3 js-analise-grupo">
+                <div class="small fw-semibold text-uppercase text-muted border-bottom pb-1 mb-2">{{ grupo_nome }}</div>
+                <div class="list-group list-group-flush border rounded">
+                    {% for item in itens_grupo %}
                     <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
                         {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
+                        {% if not modo_gestao or pedido.status == 'pendente' %}
                         {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
+                        {% endif %}
                     </div>
                     {% endfor %}
                 </div>
             </div>
+            {% endfor %}
         </div>
-    </div>
-    {% endif %}
-
-    {% if analise.curva_a %}
-    <div class="accordion-item">
-        <h2 class="accordion-header">
-            <button class="accordion-button collapsed" type="button"
-                    data-bs-toggle="collapse" data-bs-target="#analiseCheckoutCurvaA"
-                    aria-expanded="false"
-                    aria-controls="analiseCheckoutCurvaA">
-                <i class="bi bi-graph-up-arrow me-2 text-success"></i>
-                Curva A — alto giro
-                <span class="badge bg-success ms-2">{{ analise.curva_a|length }}</span>
-            </button>
-        </h2>
-        <div id="analiseCheckoutCurvaA" class="accordion-collapse collapse"
-             data-bs-parent="#accordionAnaliseCheckout">
-            <div class="accordion-body">
-                <p class="small text-muted mb-3">Itens de maior saída no mercado (por grupo) que você ainda não pediu.</p>
-                {% for grupo_nome, itens_grupo in analise.curva_a_por_grupo %}
-                <div class="mb-3">
-                    <div class="small fw-semibold text-uppercase text-muted border-bottom pb-1 mb-2">{{ grupo_nome }}</div>
-                    <div class="list-group list-group-flush border rounded">
-                        {% for item in itens_grupo %}
-                        <div class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 py-2">
-                            {% include 'ecommerce/partials/checkout_analise_item_info.html' %}
-                            {% include 'ecommerce/partials/checkout_analise_add_row.html' %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+        <p class="js-analise-step-empty small text-muted text-center py-3 mb-0 d-none">
+            {% if modo_gestao %}Todos os produtos desta etapa já foram incluídos no pedido.{% else %}Você adicionou todos os produtos desta etapa.{% endif %}
+        </p>
+    </section>
     {% endif %}
 </div>
 {% else %}
 <div class="text-center py-4">
     <i class="bi bi-check-circle text-success" style="font-size: 2rem;"></i>
-    <p class="mb-0 mt-2 text-muted">Todas as sugestões foram incluídas no carrinho.</p>
-    <p class="small text-muted mb-0">Você pode confirmar o pedido quando quiser.</p>
+    <p class="mb-0 mt-2 text-muted">
+        {% if modo_gestao %}Não há sugestões pendentes para este pedido.{% else %}Todas as sugestões foram incluídas no carrinho.{% endif %}
+    </p>
+    {% if not modo_gestao %}
+    <p class="small text-muted mb-0">Você pode finalizar o pedido quando quiser.</p>
+    {% endif %}
 </div>
 {% endif %}
