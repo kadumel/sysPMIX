@@ -1,0 +1,121 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if messages %}
+    <div class="mb-3">
+        {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h4 class="card-title mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Alertas da loja</h4>
+            <a href="{% url 'gestao_alerta_novo' %}" class="btn btn-primary">
+                <i class="bi bi-plus-lg me-1"></i>Novo alerta
+            </a>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-4">
+                Mensagens exibidas no topo da loja, entre o menu e o carrossel, conforme o período, o horário do dia e o destinatário.
+            </p>
+            <form method="get" class="row g-3 align-items-end mb-4">
+                <div class="col-md-4">
+                    <label for="search" class="form-label">Buscar</label>
+                    <input type="text" class="form-control" id="search" name="search"
+                           placeholder="Título, mensagem, cliente ou código..."
+                           value="{{ current_search }}">
+                </div>
+                <div class="col-md-3">
+                    <label for="status" class="form-label">Período</label>
+                    <select name="status" id="status" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="vigente" {% if filtro_status == 'vigente' %}selected{% endif %}>Vigentes</option>
+                        <option value="futura" {% if filtro_status == 'futura' %}selected{% endif %}>Futuros</option>
+                        <option value="encerrada" {% if filtro_status == 'encerrada' %}selected{% endif %}>Encerrados</option>
+                        <option value="inativo" {% if filtro_status == 'inativo' %}selected{% endif %}>Inativos</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="alcance" class="form-label">Destinatário</label>
+                    <select name="alcance" id="alcance" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="todos" {% if filtro_alcance == 'todos' %}selected{% endif %}>Todos os clientes</option>
+                        <option value="cliente" {% if filtro_alcance == 'cliente' %}selected{% endif %}>Clientes específicos</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-grow-1">
+                        <i class="bi bi-search me-1"></i>Filtrar
+                    </button>
+                    <a href="{% url 'gestao_alertas_ecommerce' %}" class="btn btn-outline-secondary">Limpar</a>
+                </div>
+            </form>
+
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>Alerta</th>
+                            <th>Destinatário</th>
+                            <th>Período</th>
+                            <th>Horário</th>
+                            <th class="text-center">Status</th>
+                            <th style="width: 140px;">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alerta in alertas %}
+                        <tr>
+                            <td>
+                                <div class="fw-semibold">{{ alerta.titulo|default:"(sem título)" }}</div>
+                                <div class="small text-muted text-truncate" style="max-width: 360px;">{{ alerta.mensagem }}</div>
+                                <span class="badge text-bg-{% if alerta.tipo == 'danger' %}danger{% elif alerta.tipo == 'success' %}success{% elif alerta.tipo == 'info' %}info{% else %}warning{% endif %} mt-1">{{ alerta.get_tipo_display }}</span>
+                            </td>
+                            <td>
+                                {% if alerta.qtd_clientes %}
+                                {% for c in alerta.clientes.all|slice:":3" %}
+                                <div {% if not forloop.first %}class="small"{% endif %}>{{ c.nome|default:c.razao|default:"-" }} <span class="text-muted">· {{ c.codigo_cliente }}</span></div>
+                                {% endfor %}
+                                {% if alerta.qtd_clientes > 3 %}
+                                <div class="small text-muted">+{{ alerta.qtd_clientes|add:"-3" }} cliente(s)</div>
+                                {% endif %}
+                                {% else %}
+                                <span class="badge text-bg-primary">Todos os clientes</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ alerta.data_inicio|date:"d/m/Y" }} — {{ alerta.data_fim|date:"d/m/Y" }}</td>
+                            <td>{{ alerta.horario_label }}</td>
+                            <td class="text-center">
+                                {% if alerta.status_periodo == 'vigente' %}
+                                <span class="badge text-bg-success">Vigente</span>
+                                {% elif alerta.status_periodo == 'futura' %}
+                                <span class="badge text-bg-info">Futuro</span>
+                                {% elif alerta.status_periodo == 'inativo' %}
+                                <span class="badge text-bg-secondary">Inativo</span>
+                                {% else %}
+                                <span class="badge text-bg-secondary">Encerrado</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'gestao_alerta_editar' alerta.pk %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-pencil me-1"></i>Editar
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">Nenhum alerta encontrado.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

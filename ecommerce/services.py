@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Sum
 from django.utils import timezone
 
 from api_sankhya.models import Preco, Produto
@@ -12,7 +12,7 @@ from api_sankhya.models import Preco, Produto
 from . import catalog
 from .cart_session import clear_cart, get_cart
 from .analise_pedido import persistir_analise_pedido
-from .models import ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente, TopEnvioSankhya
+from .models import AnalisePedidoLoja, ItemAnalisePedidoLoja, ItemPedidoLoja, NotificacaoLoja, PedidoLoja, RotaDiaCliente, TopEnvioSankhya
 from .sankhya_integracao import IntegracaoSankhyaError, integrar_pedido_loja_sankhya
 
 
@@ -138,6 +138,90 @@ def finalizar_pedido_loja(
         pedido=pedido,
     )
     return pedido, None
+
+
+def adicionar_produto_analise_ao_pedido(
+    pedido: PedidoLoja,
+    codigo_produto: int,
+    qty,
+) -> tuple[ItemPedidoLoja | None, str | None]:
+    """Inclui um produto da análise no pedido pendente (uso do comercial)."""
+    if pedido.status != PedidoLoja.Status.PENDENTE:
+        return None, 'Só é possível incluir itens em pedidos pendentes.'
+
+    try:
+        qty_dec = Decimal(str(qty))
+    except (InvalidOperation, ValueError, TypeError):
+        return None, 'Quantidade inválida.'
+    if qty_dec != qty_dec.to_integral_value() or qty_dec < 1:
+        return None, 'Informe uma quantidade inteira maior ou igual a 1.'
+
+    try:
+        analise = pedido.analise
+    except AnalisePedidoLoja.DoesNotExist:
+        return None, 'Este pedido não possui análise registrada.'
+
+    item_analise = analise.itens.filter(codigo_produto=codigo_produto).first()
+    if not item_analise:
+        return None, 'Produto não está nas sugestões deste pedido.'
+
+    if not pedido.codtab:
+        return None, 'Pedido sem tabela de preço. Não é possível incluir o item.'
+
+    try:
+        produto = Produto.objects.get(codigo_produto=codigo_produto)
+    except Produto.DoesNotExist:
+        return None, 'Produto não está mais disponível.'
+
+    if not catalog.produto_permitido_na_loja(produto, catalog.codigos_grupos_permitidos_ecommerce()):
+        nome = (produto.nome or '').strip() or str(codigo_produto)
+        return None, f'O produto "{nome}" não está disponível para pedido.'
+
+    nome = (produto.nome or item_analise.nome_produto or '').strip() or f'Cód. {codigo_produto}'
+    preco = (
+        Preco.objects.filter(codigo_produto=codigo_produto, codigo_tabela=pedido.codtab)
+        .order_by('codigo_local_estoque')
+        .first()
+    )
+    if not preco or not preco.valor or preco.valor <= 0:
+        return None, f'Produto "{nome}" sem preço válido na tabela {pedido.codtab}.'
+
+    valor_unitario = preco.valor
+    with transaction.atomic():
+        existente = (
+            pedido.itens.select_for_update().filter(codigo_produto=codigo_produto).first()
+        )
+        if existente:
+            existente.quantidade = existente.quantidade + qty_dec
+            existente.valor_total = (existente.preco_unitario * existente.quantidade).quantize(
+                Decimal('0.01')
+            )
+            existente.save(update_fields=['quantidade', 'valor_total'])
+            item = existente
+        else:
+            valor_total = (valor_unitario * qty_dec).quantize(Decimal('0.01'))
+            item = ItemPedidoLoja.objects.create(
+                pedido=pedido,
+                codigo_produto=codigo_produto,
+                nome_produto=nome[:300],
+                quantidade=qty_dec,
+                preco_unitario=valor_unitario,
+                valor_total=valor_total,
+            )
+        total = pedido.itens.aggregate(s=Sum('valor_total'))['s'] or Decimal('0')
+        pedido.valor_total = total
+        pedido.save(update_fields=['valor_total', 'atualizado_em'])
+        ItemAnalisePedidoLoja.objects.filter(pk=item_analise.pk).delete()
+
+    criar_notificacao(
+        pedido.user,
+        f'Pedido #{pedido.pk} atualizado',
+        (
+            f'O comercial incluiu {int(qty_dec)} un. de "{nome}" no pedido #{pedido.pk}.'
+        ),
+        pedido=pedido,
+    )
+    return item, None
 
 
 def filtrar_pedidos_loja_notificacoes_comercial(pedidos_qs, user):

@@ -1,9 +1,10 @@
 from controleBI.models import PERFIS_PAINEL_BI_LOJA, UsuarioClienteSankhya
 from django.urls import reverse
+from django.utils import timezone
 
 from . import catalog
 from .cart_session import cart_line_count, cart_total_units, cart_tipo_loja_bloqueado, format_qty_display
-from .models import NotificacaoLoja
+from .models import AlertaLoja, NotificacaoLoja
 from api_sankhya.models import GrupoProduto
 
 
@@ -25,6 +26,7 @@ def ecommerce_nav(request):
         'ecommerce_cliente_context_id': None,
         'ecommerce_clientes_selector_url': reverse('gestao_ecommerce_clientes_selector'),
         'ecommerce_cliente_selecionar_url': reverse('gestao_ecommerce_cliente_selecionar'),
+        'ecommerce_alertas': [],
     }
     user = request.user
     if user.is_authenticated:
@@ -48,4 +50,8 @@ def ecommerce_nav(request):
         ).count()
         perfil = getattr(getattr(user, 'perfil_usuario', None), 'perfil', None)
         ctx['ecommerce_selector_habilitado'] = perfil in PERFIS_PAINEL_BI_LOJA
+        path = getattr(request, 'path', '') or ''
+        if path.startswith('/ecommerce'):
+            agora = timezone.now().astimezone(catalog.ECOMMERCE_TZ)
+            ctx['ecommerce_alertas'] = AlertaLoja.objects.visiveis_em(agora, c)
     return ctx

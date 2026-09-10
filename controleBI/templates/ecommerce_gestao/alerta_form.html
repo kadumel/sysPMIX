@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb mb-0">
+            <li class="breadcrumb-item"><a href="{% url 'gestao_alertas_ecommerce' %}">Alertas da loja</a></li>
+            <li class="breadcrumb-item active" aria-current="page">
+                {% if alerta %}{{ alerta.titulo|default:"Editar alerta" }}{% else %}Novo alerta{% endif %}
+            </li>
+        </ol>
+    </nav>
+
+    <form method="post" novalidate id="alertaLojaForm">
+        {% csrf_token %}
+        {% for c in clientes_selecionados %}
+        <input type="hidden" name="clientes_ids" value="{{ c.pk }}">
+        {% endfor %}
+
+        <div class="row g-4">
+            <div class="col-lg-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            {% if alerta %}Dados do alerta{% else %}Novo alerta{% endif %}
+                        </h5>
+                        {% if alerta and status_periodo %}
+                        {% if status_periodo == 'vigente' %}
+                        <span class="badge text-bg-success">Vigente</span>
+                        {% elif status_periodo == 'futura' %}
+                        <span class="badge text-bg-info">Futuro</span>
+                        {% elif status_periodo == 'inativo' %}
+                        <span class="badge text-bg-secondary">Inativo</span>
+                        {% else %}
+                        <span class="badge text-bg-secondary">Encerrado</span>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label" for="id_titulo">{{ form.titulo.label }}</label>
+                            {{ form.titulo }}
+                            {% if form.titulo.errors %}<div class="text-danger small">{{ form.titulo.errors }}</div>{% endif %}
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="id_mensagem">{{ form.mensagem.label }}</label>
+                            {{ form.mensagem }}
+                            {% if form.mensagem.errors %}<div class="text-danger small">{{ form.mensagem.errors }}</div>{% endif %}
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_tipo">{{ form.tipo.label }}</label>
+                                {{ form.tipo }}
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label" for="id_ordem">{{ form.ordem.label }}</label>
+                                {{ form.ordem }}
+                            </div>
+                            <div class="col-md-3 d-flex align-items-end">
+                                <div class="form-check mb-2">
+                                    {{ form.ativo }}
+                                    <label class="form-check-label" for="id_ativo">{{ form.ativo.label }}</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_data_inicio">{{ form.data_inicio.label }}</label>
+                                {{ form.data_inicio }}
+                                {% if form.data_inicio.errors %}<div class="text-danger small">{{ form.data_inicio.errors }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_data_fim">{{ form.data_fim.label }}</label>
+                                {{ form.data_fim }}
+                                {% if form.data_fim.errors %}<div class="text-danger small">{{ form.data_fim.errors }}</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_hora_inicio">{{ form.hora_inicio.label }}</label>
+                                {{ form.hora_inicio }}
+                                <div class="form-text">Ex.: 12:00 para aparecer a partir do meio-dia. Vazio = desde 00:00.</div>
+                                {% if form.hora_inicio.errors %}<div class="text-danger small">{{ form.hora_inicio.errors }}</div>{% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="id_hora_fim">{{ form.hora_fim.label }}</label>
+                                {{ form.hora_fim }}
+                                <div class="form-text">Vazio = até o fim do dia.</div>
+                                {% if form.hora_fim.errors %}<div class="text-danger small">{{ form.hora_fim.errors }}</div>{% endif %}
+                            </div>
+                        </div>
+
+                        <fieldset class="mb-3">
+                            <legend class="form-label fs-6">{{ form.alcance.label }}</legend>
+                            <div class="d-flex flex-column gap-2">
+                                {% for radio in form.alcance %}
+                                <div class="form-check">
+                                    {{ radio.tag }}
+                                    <label class="form-check-label" for="{{ radio.id_for_label }}">{{ radio.choice_label }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% if form.alcance.errors %}<div class="text-danger small mt-1">{{ form.alcance.errors }}</div>{% endif %}
+                        </fieldset>
+
+                        <div id="alertaClientesSelecionados" class="border rounded p-3 mb-3 bg-body-tertiary">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="fw-semibold">Clientes deste alerta</div>
+                                <span class="badge text-bg-primary">{{ clientes_selecionados|length }}</span>
+                            </div>
+                            {% if clientes_selecionados %}
+                            <div class="table-responsive">
+                                <table class="table table-sm align-middle mb-0">
+                                    <tbody>
+                                        {% for c in clientes_selecionados %}
+                                        <tr>
+                                            <td>
+                                                <div>{{ c.nome|default:c.razao|default:"—" }}</div>
+                                                <div class="small text-muted">Cód. {{ c.codigo_cliente }}{% if c.cnpj_cpf %} · {{ c.cnpj_cpf }}{% endif %}</div>
+                                            </td>
+                                            <td class="text-end">
+                                                <button type="submit" class="btn btn-sm btn-outline-danger" name="cliente_remove_id" value="{{ c.pk }}">
+                                                    Remover
+                                                </button>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% else %}
+                            <p class="text-muted small mb-0">Nenhum cliente adicionado. Busque à direita e marque os que devem receber o alerta.</p>
+                            {% endif %}
+                        </div>
+
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        {% endif %}
+                        <div class="d-flex gap-2 flex-wrap">
+                            <button type="submit" class="btn btn-primary" name="action" value="salvar">
+                                <i class="bi bi-check-lg me-1"></i>
+                                {% if alerta %}Salvar alterações{% else %}Criar alerta{% endif %}
+                            </button>
+                            <a href="{% url 'gestao_alertas_ecommerce' %}" class="btn btn-outline-secondary">Voltar</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card" id="alertaClienteBuscaCard">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="bi bi-search me-2"></i>Buscar e adicionar clientes</h5>
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted small">Busque pelo nome (ex.: Frangolândia), marque vários resultados e clique em adicionar.</p>
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-8">
+                                <label for="q" class="form-label">Código, nome, razão ou CNPJ</label>
+                                <input type="text" class="form-control" id="q" name="q"
+                                       placeholder="Buscar..."
+                                       value="{{ busca_cliente }}">
+                            </div>
+                            <div class="col-4">
+                                <button type="submit" class="btn btn-primary w-100" name="action" value="buscar_cliente">
+                                    <i class="bi bi-search me-1"></i>Buscar
+                                </button>
+                            </div>
+                        </div>
+
+                        {% if busca_cliente and not clientes_busca %}
+                        <p class="text-muted small mb-0">Nenhum cliente encontrado para "{{ busca_cliente }}".</p>
+                        {% endif %}
+
+                        {% if clientes_busca %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small text-muted">{{ clientes_busca|length }} resultado(s)</span>
+                            <button type="submit" class="btn btn-sm btn-outline-primary" name="action" value="adicionar_clientes">
+                                <i class="bi bi-plus-lg me-1"></i>Adicionar selecionados
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th style="width: 2.2rem;"></th>
+                                        <th>Código</th>
+                                        <th>Cliente</th>
+                                        <th class="text-end">Ação</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for c in clientes_busca %}
+                                    <tr {% if c.ja_adicionado %}class="table-success"{% endif %}>
+                                        <td>
+                                            {% if not c.ja_adicionado %}
+                                            <input type="checkbox" class="form-check-input" name="clientes_add_ids" value="{{ c.pk }}" aria-label="Selecionar {{ c.nome|default:c.razao }}">
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ c.codigo_cliente }}</td>
+                                        <td>
+                                            {{ c.nome|default:c.razao|default:"—" }}
+                                            {% if c.cnpj_cpf %}<br><small class="text-muted">{{ c.cnpj_cpf }}</small>{% endif %}
+                                        </td>
+                                        <td class="text-end">
+                                            {% if c.ja_adicionado %}
+                                            <span class="badge text-bg-success">Adicionado</span>
+                                            {% else %}
+                                            <button type="submit" class="btn btn-sm btn-outline-primary" name="cliente_add_id" value="{{ c.pk }}">
+                                                Adicionar
+                                            </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% elif not busca_cliente %}
+                        <p class="text-muted small mb-0">
+                            Digite parte do nome e busque. Você pode marcar vários clientes da lista e adicioná-los de uma vez.
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% if alerta %}
+    <form method="post" class="mt-3" onsubmit="return confirm('Excluir este alerta?');">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="excluir">
+        <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-trash me-1"></i>Excluir alerta
+        </button>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var form = document.getElementById('alertaLojaForm');
+    if (!form) return;
+
+    function alcanceAtual() {
+        var checked = form.querySelector('input[name="alcance"]:checked');
+        return checked ? checked.value : 'todos';
+    }
+
+    form.addEventListener('submit', function (ev) {
+        var submitter = ev.submitter;
+        var isAdd = submitter && (
+            submitter.name === 'cliente_add_id'
+            || (submitter.name === 'action' && submitter.value === 'adicionar_clientes')
+        );
+        if (isAdd) {
+            var clienteRadio = form.querySelector('input[name="alcance"][value="cliente"]');
+            if (clienteRadio) clienteRadio.checked = true;
+        }
+        if (submitter && submitter.name === 'action' && submitter.value === 'salvar' && alcanceAtual() !== 'cliente') {
+            form.querySelectorAll('input[name="clientes_ids"]').forEach(function (el) {
+                el.disabled = true;
+            });
+        }
+    });
+})();
+</script>
+{% endblock %}

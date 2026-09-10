@@ -825,3 +825,55 @@ def agrupar_itens_analise_por_tipo(analise: AnalisePedidoLoja) -> dict[str, list
     for item in analise.itens.all().order_by('ordem', 'codigo_produto'):
         grupos.setdefault(item.tipo, []).append(item)
     return grupos
+
+
+def resultado_analise_de_pedido(pedido: PedidoLoja) -> ResultadoAnalise | None:
+    """Reconstrói a análise persistida no formato da loja, sem itens já no pedido."""
+    try:
+        analise = pedido.analise
+    except AnalisePedidoLoja.DoesNotExist:
+        return None
+
+    grupos = agrupar_itens_analise_por_tipo(analise)
+    ja_no_pedido = {
+        int(item.codigo_produto)
+        for item in pedido.itens.all()
+        if item.codigo_produto is not None
+    }
+
+    def to_sugestoes(itens: list[ItemAnalisePedidoLoja]) -> list[SugestaoAnalise]:
+        out: list[SugestaoAnalise] = []
+        for item in itens:
+            codigo = int(item.codigo_produto)
+            if codigo in ja_no_pedido:
+                continue
+            out.append(
+                SugestaoAnalise(
+                    codigo_produto=codigo,
+                    nome=item.nome_produto or '',
+                    tipo=item.tipo,
+                    grupo_produto=item.grupo_produto or '',
+                    detalhe=item.detalhe or '',
+                    ordem=item.ordem,
+                )
+            )
+        return out
+
+    data_fim = analise.gerada_em.date() if analise.gerada_em else date.today()
+    resultado = ResultadoAnalise(
+        tempo_analise_meses=analise.tempo_analise_meses,
+        data_inicio_periodo=_data_meses_atras(data_fim, analise.tempo_analise_meses),
+        data_fim_periodo=data_fim,
+        esquecidos=to_sugestoes(grupos.get(TIPO_ESQUECIDOS, [])),
+        novidades=to_sugestoes(grupos.get(TIPO_NOVIDADES, [])),
+        curva_a=to_sugestoes(grupos.get(TIPO_CURVA_A, [])),
+    )
+    anexar_imagens_sugestoes(resultado)
+    if pedido.codtab:
+        precos = catalog.map_precos_por_codtab(
+            [s.codigo_produto for s in resultado.todas_sugestoes()],
+            pedido.codtab,
+        )
+        for sugestao in resultado.todas_sugestoes():
+            sugestao.preco_unitario = precos.get(sugestao.codigo_produto)
+    return resultado

@@ -13,6 +13,11 @@
                 var theme = localStorage.getItem('syspmix-theme');
                 if (theme !== 'dark' && theme !== 'light') theme = 'light';
                 document.documentElement.setAttribute('data-bs-theme', theme);
+                var standalone = window.matchMedia('(display-mode: standalone)').matches
+                    || window.matchMedia('(display-mode: fullscreen)').matches
+                    || window.matchMedia('(display-mode: minimal-ui)').matches
+                    || window.navigator.standalone === true;
+                if (standalone) document.documentElement.classList.add('pwa-standalone');
             } catch (e) {}
         })();
     </script>
@@ -489,6 +494,68 @@
         .analise-sugestao-thumb-fallback {
             line-height: 1;
         }
+        .analise-stepper {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.25rem;
+        }
+        .analise-step-dot {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            min-width: 0;
+            position: relative;
+        }
+        .analise-step-dot:not(:last-child)::after {
+            content: '';
+            position: absolute;
+            top: 0.7rem;
+            left: calc(50% + 0.85rem);
+            right: calc(-50% + 0.85rem);
+            height: 2px;
+            background: var(--border-subtle);
+        }
+        .analise-step-dot.is-done:not(:last-child)::after {
+            background: var(--primary-color);
+        }
+        .analise-step-num {
+            width: 1.4rem;
+            height: 1.4rem;
+            border-radius: 50%;
+            border: 2px solid var(--border-subtle);
+            background: var(--card-bg);
+            color: var(--body-color);
+            font-size: 0.7rem;
+            font-weight: 700;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1;
+        }
+        .analise-step-dot.is-active .analise-step-num {
+            border-color: var(--primary-color);
+            background: var(--primary-color);
+            color: #fff;
+        }
+        .analise-step-dot.is-done .analise-step-num {
+            border-color: var(--primary-color);
+            background: var(--primary-color);
+            color: #fff;
+        }
+        .analise-step-label {
+            margin-top: 0.35rem;
+            font-size: 0.68rem;
+            line-height: 1.2;
+            color: var(--body-color);
+            opacity: 0.7;
+        }
+        .analise-step-dot.is-active .analise-step-label {
+            opacity: 1;
+            font-weight: 600;
+        }
         [data-bs-theme="dark"] .btn-theme-outline.btn-outline-primary,
         [data-bs-theme="dark"] .btn-theme-outline.btn-outline-secondary {
             color: #fff !important;
@@ -552,6 +619,88 @@
             color: #000 !important;
             background-color: #fff !important;
             border-color: #fff !important;
+        }
+        .ecommerce-alerta-loja {
+            border-left-width: 5px;
+            border-radius: 0.5rem;
+        }
+        .ecommerce-alerta-loja .ecommerce-alerta-titulo {
+            font-weight: 700;
+        }
+        .ecommerce-alertas {
+            margin-top: -0.6rem;
+        }
+        .ecommerce-alertas .ecommerce-alerta-loja {
+            margin-bottom: 0.75rem;
+        }
+        /* Catálogo em 2 colunas no PWA / celular — cards compactos */
+        .ecommerce-product-grid > .col-12 {
+            width: 100%;
+        }
+        @media (max-width: 767.98px) {
+            .ecommerce-product-card:hover {
+                transform: none;
+            }
+            .ecommerce-product-card .ecommerce-product-thumb,
+            .ecommerce-product-card .ecommerce-product-thumb .ecommerce-product-thumb-img {
+                height: 7.25rem;
+            }
+            .ecommerce-product-card .ecommerce-product-thumb {
+                font-size: 1.35rem;
+            }
+            .ecommerce-product-card .card-body {
+                padding: 0.6rem 0.65rem 0.7rem;
+            }
+            .ecommerce-product-card .ecommerce-product-group {
+                font-size: 0.62rem;
+                margin-bottom: 0.35rem !important;
+            }
+            .ecommerce-product-card .card-title {
+                font-size: 0.78rem;
+                line-height: 1.25;
+                margin-bottom: 0.3rem;
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+            }
+            .ecommerce-product-card .ecommerce-product-desc {
+                display: none;
+            }
+            .ecommerce-product-card .ecommerce-product-code {
+                font-size: 0.68rem;
+                margin-bottom: 0.2rem !important;
+            }
+            .ecommerce-product-card .ecommerce-product-price {
+                font-size: 0.86rem;
+                margin-bottom: 0.4rem !important;
+            }
+            .ecommerce-product-card .ecommerce-product-add {
+                font-size: 0.72rem;
+                padding: 0.28rem 0.35rem;
+            }
+            .ecommerce-product-card .ecommerce-product-add .bi {
+                margin-right: 0.15rem !important;
+            }
+        }
+        @media (max-width: 379.98px) {
+            .ecommerce-product-card .ecommerce-product-add-label {
+                display: none;
+            }
+            .ecommerce-product-card .ecommerce-product-add .bi {
+                margin-right: 0 !important;
+            }
+        }
+        html.pwa-standalone .ecommerce-product-grid {
+            --bs-gutter-x: 0.65rem;
+            --bs-gutter-y: 0.65rem;
+        }
+        @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+            .ecommerce-product-grid {
+                --bs-gutter-x: 0.65rem;
+                --bs-gutter-y: 0.65rem;
+            }
         }
     </style>
     {% block extra_head %}{% endblock %}
@@ -669,6 +818,23 @@
                 <div class="alert alert-{% if message.tags == 'error' %}danger{% elif message.tags == 'success' %}success{% elif message.tags == 'warning' %}warning{% else %}info{% endif %} alert-dismissible fade show py-2 small" role="alert">
                     {{ message }}
                     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if ecommerce_alertas %}
+            <div class="ecommerce-alertas">
+                {% for alerta in ecommerce_alertas %}
+                <div class="alert alert-{{ alerta.tipo }} ecommerce-alerta-loja shadow-sm" role="alert">
+                    <div class="d-flex gap-3 align-items-start">
+                        <i class="bi {% if alerta.tipo == 'danger' %}bi-exclamation-octagon-fill{% elif alerta.tipo == 'success' %}bi-check-circle-fill{% elif alerta.tipo == 'info' %}bi-info-circle-fill{% else %}bi-exclamation-triangle-fill{% endif %} fs-4 flex-shrink-0" aria-hidden="true"></i>
+                        <div class="flex-grow-1">
+                            {% if alerta.titulo %}
+                            <div class="ecommerce-alerta-titulo mb-1">{{ alerta.titulo }}</div>
+                            {% endif %}
+                            <div>{{ alerta.mensagem|linebreaksbr }}</div>
+                        </div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>

@@ -3,8 +3,8 @@
         <button type="button" class="btn btn-outline-secondary js-qty-minus" aria-label="Diminuir quantidade">
             <i class="bi bi-dash-lg"></i>
         </button>
-        <label class="visually-hidden" for="analise-qty-{{ item.codigo_produto }}">Quantidade</label>
-        <input type="number" id="analise-qty-{{ item.codigo_produto }}"
+        <label class="visually-hidden" for="{{ qty_id_prefix|default:'analise-qty' }}-{{ item.codigo_produto }}">Quantidade</label>
+        <input type="number" id="{{ qty_id_prefix|default:'analise-qty' }}-{{ item.codigo_produto }}"
                class="form-control text-center js-analise-qty js-qty-input"
                value="1" min="1" max="99999" step="1" inputmode="numeric" pattern="[0-9]*"
                autocomplete="off" title="Quantidade">
@@ -13,6 +13,6 @@
         </button>
     </div>
     <button type="button" class="btn btn-sm btn-outline-primary js-analise-add-cart btn-theme-outline" data-codigo="{{ item.codigo_produto }}">
-        <i class="bi bi-cart-plus me-1"></i>Adicionar
+        <i class="bi bi-cart-plus me-1"></i>{{ add_button_label|default:'Adicionar' }}
     </button>
 </div>

@@ -1,8 +1,91 @@
 {% extends 'base.html' %}
-{% load analise_extras %}
+
+{% block extra_head %}
+<style>
+    .analise-sugestao-thumb {
+        width: 56px;
+        height: 56px;
+        border-radius: 0.375rem;
+        overflow: hidden;
+        background: linear-gradient(135deg, rgba(0, 74, 141, 0.12), rgba(247, 148, 29, 0.18));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(0, 74, 141, 0.35);
+        font-weight: 600;
+        font-size: 1.1rem;
+    }
+    .analise-sugestao-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+    .analise-sugestao-thumb-fallback { line-height: 1; }
+    .analise-stepper {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    .analise-step-dot {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        min-width: 0;
+        position: relative;
+    }
+    .analise-step-dot:not(:last-child)::after {
+        content: '';
+        position: absolute;
+        top: 0.7rem;
+        left: calc(50% + 0.85rem);
+        right: calc(-50% + 0.85rem);
+        height: 2px;
+        background: var(--border-subtle);
+    }
+    .analise-step-dot.is-done:not(:last-child)::after {
+        background: var(--primary-color);
+    }
+    .analise-step-num {
+        width: 1.4rem;
+        height: 1.4rem;
+        border-radius: 50%;
+        border: 2px solid var(--border-subtle);
+        background: var(--card-bg);
+        color: var(--body-color);
+        font-size: 0.7rem;
+        font-weight: 700;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+    }
+    .analise-step-dot.is-active .analise-step-num,
+    .analise-step-dot.is-done .analise-step-num {
+        border-color: var(--primary-color);
+        background: var(--primary-color);
+        color: #fff;
+    }
+    .analise-step-label {
+        margin-top: 0.35rem;
+        font-size: 0.68rem;
+        line-height: 1.2;
+        color: var(--body-color);
+        opacity: 0.7;
+    }
+    .analise-step-dot.is-active .analise-step-label {
+        opacity: 1;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
+    {% csrf_token %}
     {% if messages %}
     <div class="mb-3">
         {% for message in messages %}
@@ -186,23 +269,27 @@
                                 <th>Total</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="itensPedidoBody{{ pedido.id }}">
                             {% for item in pedido.itens.all %}
-                            <tr>
+                            <tr data-codigo="{{ item.codigo_produto }}">
                                 <td>{{ item.codigo_produto }}</td>
                                 <td>{{ item.nome_produto }}</td>
-                                <td>{{ item.quantidade }}</td>
+                                <td class="js-item-qtd">{{ item.quantidade|floatformat:0 }}</td>
                                 <td>R$ {{ item.preco_unitario }}</td>
-                                <td>R$ {{ item.valor_total }}</td>
+                                <td class="js-item-total">R$ {{ item.valor_total }}</td>
                             </tr>
                             {% empty %}
-                            <tr>
+                            <tr class="js-itens-empty">
                                 <td colspan="5" class="text-center text-muted">Pedido sem itens.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
+            </div>
+            <div class="modal-footer">
+                <span class="me-auto fw-semibold" id="itensPedidoTotal{{ pedido.id }}">Total: R$ {{ pedido.valor_total }}</span>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
             </div>
         </div>
     </div>
@@ -248,114 +335,33 @@
     </div>
 </div>
 
-<div class="modal fade" id="analisePedidoModal{{ pedido.id }}" tabindex="-1" aria-hidden="true">
+<div class="modal fade js-analise-gestao-modal" id="analisePedidoModal{{ pedido.id }}" tabindex="-1" aria-hidden="true"
+     data-pedido-id="{{ pedido.id }}"
+     data-add-url="{% url 'gestao_notificacao_analise_adicionar' pedido.id %}">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Análise do pedido #{{ pedido.id }}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body js-analise-gestao-body">
                 {% if pedido.analise %}
-                <p class="text-muted small mb-3">
-                    Sugestões exibidas ao cliente na finalização
-                    (período de {{ pedido.analise.tempo_analise_meses }} meses · {{ pedido.analise.gerada_em|date:'d/m/Y H:i' }}).
-                </p>
-                <div class="accordion" id="accordionAnalisePedido{{ pedido.id }}">
-                    {% itens_analise_tipo pedido.analise 'esquecidos' as itens_esquecidos %}
-                    {% if itens_esquecidos %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
-                                    data-bs-target="#analisePedido{{ pedido.id }}Esquecidos" aria-expanded="false">
-                                Itens que costuma pedir e não incluiu
-                                <span class="badge bg-primary ms-2">{{ itens_esquecidos|length }}</span>
-                            </button>
-                        </h2>
-                        <div id="analisePedido{{ pedido.id }}Esquecidos" class="accordion-collapse collapse"
-                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
-                            <div class="accordion-body p-0">
-                                <ul class="list-group list-group-flush">
-                                    {% for item in itens_esquecidos %}
-                                    <li class="list-group-item py-2">
-                                        <strong>{{ item.nome_produto }}</strong>
-                                        <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
-                                        {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
-                                    </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% itens_analise_tipo pedido.analise 'novidades' as itens_novidades %}
-                    {% if itens_novidades %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                    data-bs-toggle="collapse" data-bs-target="#analisePedido{{ pedido.id }}Novidades"
-                                    aria-expanded="false">
-                                Novidades sugeridas
-                                <span class="badge bg-warning text-dark ms-2">{{ itens_novidades|length }}</span>
-                            </button>
-                        </h2>
-                        <div id="analisePedido{{ pedido.id }}Novidades" class="accordion-collapse collapse"
-                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
-                            <div class="accordion-body p-0">
-                                <ul class="list-group list-group-flush">
-                                    {% for item in itens_novidades %}
-                                    <li class="list-group-item py-2">
-                                        <strong>{{ item.nome_produto }}</strong>
-                                        <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
-                                        {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
-                                    </li>
-                                    {% endfor %}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-
-                    {% itens_analise_tipo pedido.analise 'curva_a' as itens_curva_a %}
-                    {% if itens_curva_a %}
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                            <button class="accordion-button collapsed" type="button"
-                                    data-bs-toggle="collapse" data-bs-target="#analisePedido{{ pedido.id }}CurvaA"
-                                    aria-expanded="false">
-                                Curva A — alto giro não adquirido
-                                <span class="badge bg-success ms-2">{{ itens_curva_a|length }}</span>
-                            </button>
-                        </h2>
-                        <div id="analisePedido{{ pedido.id }}CurvaA" class="accordion-collapse collapse"
-                             data-bs-parent="#accordionAnalisePedido{{ pedido.id }}">
-                            <div class="accordion-body">
-                                {% for subgrupo, itens_sub in itens_curva_a|agrupar_curva_a %}
-                                <div class="mb-3">
-                                    <div class="small fw-semibold text-uppercase text-muted border-bottom pb-1 mb-2">{{ subgrupo }}</div>
-                                    <ul class="list-group list-group-flush border rounded">
-                                        {% for item in itens_sub %}
-                                        <li class="list-group-item py-2">
-                                            <strong>{{ item.nome_produto }}</strong>
-                                            <span class="text-muted small">(cód. {{ item.codigo_produto }})</span>
-                                            {% if item.detalhe %}<div class="small text-muted">{{ item.detalhe }}</div>{% endif %}
-                                        </li>
-                                        {% endfor %}
-                                    </ul>
-                                </div>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-                {% if not itens_esquecidos and not itens_novidades and not itens_curva_a %}
-                <p class="text-muted mb-0">Nenhuma sugestão registrada para este pedido.</p>
-                {% endif %}
+                <div class="js-analise-gestao-alert d-none alert alert-success py-2 small" role="status"></div>
+                {% include 'ecommerce/partials/checkout_analise_modal_body.html' with analise=pedido.analise_resultado modo_gestao=True add_button_label='Adicionar ao pedido' qty_id_prefix=pedido.id analise_gerada_em=pedido.analise.gerada_em %}
                 {% else %}
                 <p class="text-muted mb-0">Este pedido não possui análise registrada.</p>
                 {% endif %}
+            </div>
+            <div class="modal-footer flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Fechar</button>
+                <div class="ms-auto d-flex flex-wrap gap-2">
+                    <button type="button" class="btn btn-outline-primary d-none js-analise-prev">
+                        <i class="bi bi-arrow-left me-1"></i>Anterior
+                    </button>
+                    <button type="button" class="btn btn-primary d-none js-analise-next">
+                        Próximo<i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -397,5 +403,196 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
         form.querySelectorAll('button[type="button"]').forEach(function (b) { b.disabled = true; });
     });
 });
+
+(function () {
+    var QTY_MIN = 1;
+    var QTY_MAX = 99999;
+
+    function getCsrf() {
+        var el = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (el && el.value) return el.value;
+        var m = document.cookie.match(/(?:^|; )csrftoken=([^;]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function initQtySteppers(root) {
+        (root || document).querySelectorAll('.js-qty-stepper').forEach(function (group) {
+            if (group.dataset.qtyStepperInit === '1') return;
+            group.dataset.qtyStepperInit = '1';
+            var input = group.querySelector('.js-qty-input');
+            var minus = group.querySelector('.js-qty-minus');
+            var plus = group.querySelector('.js-qty-plus');
+            if (!input) return;
+            function clamp(n) {
+                n = parseInt(String(n), 10);
+                if (isNaN(n) || n < QTY_MIN) return QTY_MIN;
+                if (n > QTY_MAX) return QTY_MAX;
+                return n;
+            }
+            function write(n) { input.value = String(clamp(n)); }
+            if (minus) minus.addEventListener('click', function () { write(clamp(input.value) - 1); });
+            if (plus) plus.addEventListener('click', function () { write(clamp(input.value) + 1); });
+            input.addEventListener('input', function () {
+                var digits = String(this.value).replace(/\D/g, '');
+                this.value = digits ? String(clamp(digits)) : '';
+            });
+            input.addEventListener('blur', function () {
+                if (!String(this.value).trim()) write(QTY_MIN);
+            });
+        });
+    }
+
+    function getSteps(modalEl) {
+        return Array.prototype.slice.call(modalEl.querySelectorAll('.js-analise-step'));
+    }
+
+    function mostrarStep(modalEl, index) {
+        var steps = getSteps(modalEl);
+        var btnPrev = modalEl.querySelector('.js-analise-prev');
+        var btnNext = modalEl.querySelector('.js-analise-next');
+        if (!steps.length) {
+            if (btnPrev) btnPrev.classList.add('d-none');
+            if (btnNext) btnNext.classList.add('d-none');
+            return;
+        }
+        if (index < 0) index = 0;
+        if (index >= steps.length) index = steps.length - 1;
+        modalEl._analiseIndex = index;
+        steps.forEach(function (el, i) {
+            el.classList.toggle('d-none', i !== index);
+        });
+        var dots = modalEl.querySelectorAll('.analise-stepper .analise-step-dot');
+        dots.forEach(function (dot, i) {
+            dot.classList.toggle('is-active', i === index);
+            dot.classList.toggle('is-done', i < index);
+        });
+        if (btnPrev) btnPrev.classList.toggle('d-none', index === 0);
+        if (btnNext) btnNext.classList.toggle('d-none', index >= steps.length - 1);
+    }
+
+    function removerItemAnalise(btn) {
+        var listItem = btn.closest('.list-group-item');
+        if (!listItem) return;
+        var stepEl = listItem.closest('.js-analise-step');
+        var grupo = listItem.closest('.js-analise-grupo');
+        listItem.remove();
+        if (grupo && !grupo.querySelector('.list-group-item')) {
+            grupo.remove();
+        }
+        if (stepEl) {
+            var restantes = stepEl.querySelectorAll('.list-group-item').length;
+            var badge = stepEl.querySelector('.js-analise-step-badge');
+            if (badge) badge.textContent = restantes;
+            if (restantes === 0) {
+                var list = stepEl.querySelector('.js-analise-step-list');
+                if (list) list.classList.add('d-none');
+                var emptyMsg = stepEl.querySelector('.js-analise-step-empty');
+                if (emptyMsg) emptyMsg.classList.remove('d-none');
+            }
+        }
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function upsertItemPedido(pedidoId, data) {
+        var tbody = document.getElementById('itensPedidoBody' + pedidoId);
+        if (!tbody) return;
+        var row = tbody.querySelector('tr[data-codigo="' + data.codigo_produto + '"]');
+        if (row) {
+            var qtd = row.querySelector('.js-item-qtd');
+            var total = row.querySelector('.js-item-total');
+            if (qtd) qtd.textContent = data.quantidade_label;
+            if (total) total.textContent = 'R$ ' + data.valor_total;
+        } else {
+            var empty = tbody.querySelector('.js-itens-empty');
+            if (empty) empty.remove();
+            tbody.insertAdjacentHTML('beforeend',
+                '<tr data-codigo="' + escapeHtml(data.codigo_produto) + '">' +
+                '<td>' + escapeHtml(data.codigo_produto) + '</td>' +
+                '<td>' + escapeHtml(data.nome_produto) + '</td>' +
+                '<td class="js-item-qtd">' + escapeHtml(data.quantidade_label) + '</td>' +
+                '<td>R$ ' + escapeHtml(data.preco_unitario) + '</td>' +
+                '<td class="js-item-total">R$ ' + escapeHtml(data.valor_total) + '</td>' +
+                '</tr>'
+            );
+        }
+        var totalPedido = document.getElementById('itensPedidoTotal' + pedidoId);
+        if (totalPedido && data.pedido_valor_total) {
+            totalPedido.textContent = 'Total: R$ ' + data.pedido_valor_total;
+        }
+    }
+
+    document.querySelectorAll('.js-analise-gestao-modal').forEach(function (modalEl) {
+        modalEl._analiseIndex = 0;
+        var btnPrev = modalEl.querySelector('.js-analise-prev');
+        var btnNext = modalEl.querySelector('.js-analise-next');
+        if (btnPrev) {
+            btnPrev.addEventListener('click', function () {
+                mostrarStep(modalEl, (modalEl._analiseIndex || 0) - 1);
+            });
+        }
+        if (btnNext) {
+            btnNext.addEventListener('click', function () {
+                mostrarStep(modalEl, (modalEl._analiseIndex || 0) + 1);
+            });
+        }
+        modalEl.addEventListener('shown.bs.modal', function () {
+            initQtySteppers(modalEl);
+            mostrarStep(modalEl, 0);
+        });
+
+        modalEl.querySelectorAll('.js-analise-add-cart').forEach(function (b) {
+            b.addEventListener('click', function () {
+                var row = b.closest('.js-analise-add-row');
+                var qtyInput = row ? row.querySelector('.js-analise-qty') : null;
+                var qtyRaw = qtyInput ? qtyInput.value.trim() : '1';
+                var qtyNum = parseInt(qtyRaw, 10);
+                if (!qtyRaw || isNaN(qtyNum) || qtyNum < 1) {
+                    alert('Informe uma quantidade inteira maior ou igual a 1.');
+                    if (qtyInput) qtyInput.focus();
+                    return;
+                }
+                var codigo = b.getAttribute('data-codigo');
+                var addUrl = modalEl.getAttribute('data-add-url');
+                var pedidoId = modalEl.getAttribute('data-pedido-id');
+                b.disabled = true;
+                var fd = new FormData();
+                fd.append('codigo_produto', codigo);
+                fd.append('qty', String(qtyNum));
+                fetch(addUrl, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrf(), 'X-Requested-With': 'XMLHttpRequest' },
+                    body: fd,
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (data) {
+                        if (data.ok) {
+                            upsertItemPedido(pedidoId, data);
+                            removerItemAnalise(b);
+                            var alertEl = modalEl.querySelector('.js-analise-gestao-alert');
+                            if (alertEl) {
+                                alertEl.textContent = data.nome_produto + ' incluído no pedido (' + data.quantidade_label + ' un.).';
+                                alertEl.classList.remove('d-none');
+                            }
+                        } else {
+                            b.disabled = false;
+                            alert(data.erro || 'Não foi possível incluir o item no pedido.');
+                        }
+                    })
+                    .catch(function () {
+                        b.disabled = false;
+                        alert('Erro ao incluir item no pedido.');
+                    });
+            });
+        });
+    });
+})();
 </script>
 {% endblock %}

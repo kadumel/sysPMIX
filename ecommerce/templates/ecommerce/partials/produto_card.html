@@ -1,5 +1,5 @@
 <div class="col">
-    <div class="card h-100">
+    <div class="card h-100 ecommerce-product-card">
         <div class="ecommerce-product-thumb overflow-hidden">
             {% for im in p.imagens_ecommerce.all %}
                 {% if forloop.first %}
@@ -15,32 +15,32 @@
         </div>
         <div class="card-body d-flex flex-column">
             {% if p.nome_grupo_produto %}
-            <span class="badge rounded-pill align-self-start mb-2 text-truncate" style="max-width: 100%;" title="{{ p.nome_grupo_produto }}">{{ p.nome_grupo_produto }}</span>
+            <span class="badge rounded-pill align-self-start mb-2 text-truncate ecommerce-product-group" style="max-width: 100%;" title="{{ p.nome_grupo_produto }}">{{ p.nome_grupo_produto }}</span>
             {% endif %}
             <h3 class="card-title h6">{{ p.nome|default:"Sem nome" }}</h3>
             {% if p.complemento %}
-            <p class="card-text small text-muted flex-grow-1">{{ p.complemento|truncatewords:22 }}</p>
+            <p class="card-text small text-muted flex-grow-1 ecommerce-product-desc">{{ p.complemento|truncatewords:22 }}</p>
             {% elif p.caracteristicas %}
-            <p class="card-text small text-muted flex-grow-1">{{ p.caracteristicas|truncatewords:22 }}</p>
+            <p class="card-text small text-muted flex-grow-1 ecommerce-product-desc">{{ p.caracteristicas|truncatewords:22 }}</p>
             {% else %}
             <div class="flex-grow-1"></div>
             {% endif %}
-            <p class="small text-muted mb-2">Cód. {{ p.codigo_produto }}</p>
+            <p class="small text-muted mb-2 ecommerce-product-code">Cód. {{ p.codigo_produto }}</p>
             {% if p.preco_ecommerce is not None %}
-            <p class="fw-semibold mb-2">R$ {{ p.preco_ecommerce|floatformat:2 }}</p>
+            <p class="fw-semibold mb-2 ecommerce-product-price">R$ {{ p.preco_ecommerce|floatformat:2 }}</p>
             {% elif request.user.is_authenticated %}
-            <p class="small text-muted mb-2">Preço indisponível para sua tabela.</p>
+            <p class="small text-muted mb-2 ecommerce-product-price">Preço indisponível para sua tabela.</p>
             {% endif %}
             <button
                 type="button"
-                class="btn btn-primary btn-sm w-100 mt-auto"
+                class="btn btn-primary btn-sm w-100 mt-auto ecommerce-product-add"
                 data-bs-toggle="modal"
                 data-bs-target="#ecommerceModalAddCart"
                 data-product-codigo="{{ p.codigo_produto }}"
                 data-product-nome="{{ p.nome|default:'Sem nome' }}"
                 data-next="{{ request.get_full_path }}"
             >
-                <i class="bi bi-cart-plus me-1"></i>Adicionar
+                <i class="bi bi-cart-plus me-1"></i><span class="ecommerce-product-add-label">Adicionar</span>
             </button>
         </div>
     </div>
