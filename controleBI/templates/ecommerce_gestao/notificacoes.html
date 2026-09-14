@@ -358,10 +358,11 @@
                     <button type="button" class="btn btn-outline-primary d-none js-analise-prev">
                         <i class="bi bi-arrow-left me-1"></i>Anterior
                     </button>
-                    <button type="button" class="btn btn-primary d-none js-analise-next">
+                    <button type="button" class="btn btn-primary d-none js-analise-next" disabled>
                         Próximo<i class="bi bi-arrow-right ms-1"></i>
                     </button>
                 </div>
+                <span class="w-100 small text-muted text-end js-analise-scroll-hint d-none">Role até o final da lista para continuar</span>
             </div>
         </div>
     </div>
@@ -446,13 +447,53 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
         return Array.prototype.slice.call(modalEl.querySelectorAll('.js-analise-step'));
     }
 
+    function chegouAoFimDoScroll(el) {
+        if (!el) return true;
+        if (el.clientHeight < 1) return false;
+        if (el.scrollHeight <= el.clientHeight + 8) return true;
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - 16;
+    }
+
+    function atualizarBloqueioScroll(modalEl) {
+        var btnNext = modalEl.querySelector('.js-analise-next');
+        var hint = modalEl.querySelector('.js-analise-scroll-hint');
+        var scrollEl = modalEl.querySelector('.js-analise-gestao-body');
+        var mostraProximo = btnNext && !btnNext.classList.contains('d-none');
+        if (!mostraProximo) {
+            if (hint) hint.classList.add('d-none');
+            return;
+        }
+        var vistos = modalEl._analiseStepsVistos || {};
+        var index = modalEl._analiseIndex || 0;
+        var liberado = !!vistos[index] || chegouAoFimDoScroll(scrollEl);
+        if (liberado) {
+            vistos[index] = true;
+            modalEl._analiseStepsVistos = vistos;
+        }
+        btnNext.disabled = !liberado;
+        btnNext.title = liberado ? '' : 'Role até o final da lista para continuar';
+        if (hint) hint.classList.toggle('d-none', liberado);
+    }
+
+    function agendarBloqueioScroll(modalEl) {
+        requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+                atualizarBloqueioScroll(modalEl);
+            });
+        });
+    }
+
     function mostrarStep(modalEl, index) {
         var steps = getSteps(modalEl);
         var btnPrev = modalEl.querySelector('.js-analise-prev');
         var btnNext = modalEl.querySelector('.js-analise-next');
+        var scrollEl = modalEl.querySelector('.js-analise-gestao-body');
+        var vistos = modalEl._analiseStepsVistos || {};
         if (!steps.length) {
             if (btnPrev) btnPrev.classList.add('d-none');
             if (btnNext) btnNext.classList.add('d-none');
+            var hintEmpty = modalEl.querySelector('.js-analise-scroll-hint');
+            if (hintEmpty) hintEmpty.classList.add('d-none');
             return;
         }
         if (index < 0) index = 0;
@@ -467,7 +508,19 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
             dot.classList.toggle('is-done', i < index);
         });
         if (btnPrev) btnPrev.classList.toggle('d-none', index === 0);
-        if (btnNext) btnNext.classList.toggle('d-none', index >= steps.length - 1);
+        if (btnNext) {
+            btnNext.classList.toggle('d-none', index >= steps.length - 1);
+            if (!btnNext.classList.contains('d-none')) {
+                btnNext.disabled = !vistos[index];
+            }
+        }
+        if (scrollEl) scrollEl.scrollTop = 0;
+        var hint = modalEl.querySelector('.js-analise-scroll-hint');
+        if (hint) {
+            var mostraProximo = btnNext && !btnNext.classList.contains('d-none');
+            hint.classList.toggle('d-none', !mostraProximo || !!vistos[index]);
+        }
+        agendarBloqueioScroll(modalEl);
     }
 
     function removerItemAnalise(btn) {
@@ -490,6 +543,8 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
                 if (emptyMsg) emptyMsg.classList.remove('d-none');
             }
         }
+        var modalEl = btn.closest('.js-analise-gestao-modal');
+        if (modalEl) agendarBloqueioScroll(modalEl);
     }
 
     function escapeHtml(value) {
@@ -531,8 +586,10 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
 
     document.querySelectorAll('.js-analise-gestao-modal').forEach(function (modalEl) {
         modalEl._analiseIndex = 0;
+        modalEl._analiseStepsVistos = {};
         var btnPrev = modalEl.querySelector('.js-analise-prev');
         var btnNext = modalEl.querySelector('.js-analise-next');
+        var scrollEl = modalEl.querySelector('.js-analise-gestao-body');
         if (btnPrev) {
             btnPrev.addEventListener('click', function () {
                 mostrarStep(modalEl, (modalEl._analiseIndex || 0) - 1);
@@ -540,10 +597,17 @@ document.querySelectorAll('form[action*="/aprovar/"]').forEach(function (form) {
         }
         if (btnNext) {
             btnNext.addEventListener('click', function () {
+                if (btnNext.disabled) return;
                 mostrarStep(modalEl, (modalEl._analiseIndex || 0) + 1);
             });
         }
+        if (scrollEl) {
+            scrollEl.addEventListener('scroll', function () {
+                atualizarBloqueioScroll(modalEl);
+            }, { passive: true });
+        }
         modalEl.addEventListener('shown.bs.modal', function () {
+            modalEl._analiseStepsVistos = {};
             initQtySteppers(modalEl);
             mostrarStep(modalEl, 0);
         });
