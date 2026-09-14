@@ -570,6 +570,17 @@
             background-color: #fff !important;
             border-color: #fff !important;
         }
+        #ecommerceCarouselBanners .ecommerce-banner-link {
+            display: block;
+            line-height: 0;
+        }
+        #ecommerceCarouselBanners .ecommerce-banner-img {
+            display: block;
+            width: 100%;
+            max-height: 360px;
+            object-fit: cover;
+            object-position: center;
+        }
         #ecommerceCarouselBanners .carousel-control-prev,
         #ecommerceCarouselBanners .carousel-control-next {
             width: 2.25rem;
@@ -633,11 +644,38 @@
         .ecommerce-alertas .ecommerce-alerta-loja {
             margin-bottom: 0.75rem;
         }
-        /* Catálogo em 2 colunas no PWA / celular — cards compactos */
+        /* Catálogo em 2 colunas no celular / PWA — cards compactos */
         .ecommerce-product-grid > .col-12 {
             width: 100%;
         }
-        @media (max-width: 767.98px) {
+        @media (max-width: 991.98px) {
+            #ecommerceCarouselBanners .carousel-inner,
+            #ecommerceCarouselBanners .carousel-item {
+                height: 14.5rem;
+            }
+            #ecommerceCarouselBanners .carousel-item {
+                position: relative;
+            }
+            #ecommerceCarouselBanners .ecommerce-banner-link {
+                display: block;
+                position: absolute;
+                inset: 0;
+                height: auto;
+                line-height: 0;
+            }
+            #ecommerceCarouselBanners .ecommerce-banner-img {
+                position: absolute;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                max-height: none;
+                object-fit: cover;
+                object-position: center;
+            }
+            .ecommerce-product-grid {
+                --bs-gutter-x: 0.65rem;
+                --bs-gutter-y: 0.65rem;
+            }
             .ecommerce-product-card:hover {
                 transform: none;
             }
@@ -684,22 +722,18 @@
                 margin-right: 0.15rem !important;
             }
         }
+        @media (min-width: 768px) and (max-width: 991.98px) {
+            #ecommerceCarouselBanners .carousel-inner,
+            #ecommerceCarouselBanners .carousel-item {
+                height: 16.5rem;
+            }
+        }
         @media (max-width: 379.98px) {
             .ecommerce-product-card .ecommerce-product-add-label {
                 display: none;
             }
             .ecommerce-product-card .ecommerce-product-add .bi {
                 margin-right: 0 !important;
-            }
-        }
-        html.pwa-standalone .ecommerce-product-grid {
-            --bs-gutter-x: 0.65rem;
-            --bs-gutter-y: 0.65rem;
-        }
-        @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
-            .ecommerce-product-grid {
-                --bs-gutter-x: 0.65rem;
-                --bs-gutter-y: 0.65rem;
             }
         }
     </style>

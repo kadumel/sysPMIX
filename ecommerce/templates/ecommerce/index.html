@@ -23,11 +23,11 @@
                 {% for banner in banners %}
                 <div class="carousel-item {% if forloop.first %}active{% endif %}">
                     {% if banner.link %}
-                    <a href="{{ banner.link }}" target="_blank" rel="noopener noreferrer">
-                        <img src="{{ banner.imagem.url }}" class="d-block w-100" alt="{{ banner.titulo|default:'Banner promocional' }}" style="max-height: 360px; object-fit: cover;">
+                    <a href="{{ banner.link }}" class="ecommerce-banner-link" target="_blank" rel="noopener noreferrer">
+                        <img src="{{ banner.imagem.url }}" class="ecommerce-banner-img" alt="{{ banner.titulo|default:'Banner promocional' }}">
                     </a>
                     {% else %}
-                    <img src="{{ banner.imagem.url }}" class="d-block w-100" alt="{{ banner.titulo|default:'Banner promocional' }}" style="max-height: 360px; object-fit: cover;">
+                    <img src="{{ banner.imagem.url }}" class="ecommerce-banner-img" alt="{{ banner.titulo|default:'Banner promocional' }}">
                     {% endif %}
                     {% if banner.titulo or banner.descricao_curta or banner.descricao_longa or banner.call_to_action %}
                     <div class="carousel-caption text-start start-0 end-auto top-0 bottom-0 d-flex align-items-center">

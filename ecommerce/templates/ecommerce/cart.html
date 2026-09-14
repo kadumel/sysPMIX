@@ -53,7 +53,7 @@
                     <button type="button" class="btn btn-outline-primary d-none" id="btnAnaliseCheckoutAnterior">
                         <i class="bi bi-arrow-left me-1"></i>Anterior
                     </button>
-                    <button type="button" class="btn btn-primary d-none" id="btnAnaliseCheckoutProximo">
+                    <button type="button" class="btn btn-primary d-none" id="btnAnaliseCheckoutProximo" disabled>
                         Próximo<i class="bi bi-arrow-right ms-1"></i>
                     </button>
                     <form method="post" action="{% url 'ecommerce_checkout_finalizar' %}" class="m-0 d-none" id="formCheckoutFinalizar">
@@ -63,6 +63,7 @@
                         </button>
                     </form>
                 </div>
+                <span class="w-100 small text-muted text-end js-analise-scroll-hint d-none">Role até o final da lista para continuar</span>
             </div>
         </div>
     </div>
@@ -88,9 +89,47 @@ document.addEventListener('DOMContentLoaded', function () {
     var btnAnterior = document.getElementById('btnAnaliseCheckoutAnterior');
     var analiseStepIndex = 0;
     var analiseFluxoConcluido = false;
+    var analiseStepsVistos = {};
+    var btnFinalizar = document.getElementById('btnCheckoutFinalizarPedido');
+    var hintScroll = modalEl.querySelector('.js-analise-scroll-hint');
 
     function getCsrf() {
         return csrfInput ? csrfInput.value : '';
+    }
+
+    function chegouAoFimDoScroll(el) {
+        if (!el) return true;
+        if (el.clientHeight < 1) return false;
+        if (el.scrollHeight <= el.clientHeight + 8) return true;
+        return el.scrollTop + el.clientHeight >= el.scrollHeight - 16;
+    }
+
+    function atualizarBloqueioScroll() {
+        var steps = getAnaliseSteps();
+        var isLast = steps.length > 0 && analiseStepIndex >= steps.length - 1;
+        var mostraProximo = btnProximo && !btnProximo.classList.contains('d-none');
+        var mostraFinalizar = isLast && formFinalizar && !formFinalizar.classList.contains('d-none');
+        if (!mostraProximo && !mostraFinalizar) {
+            if (hintScroll) hintScroll.classList.add('d-none');
+            return;
+        }
+        var liberado = !!analiseStepsVistos[analiseStepIndex] || chegouAoFimDoScroll(sugestoesEl);
+        if (liberado) analiseStepsVistos[analiseStepIndex] = true;
+        if (mostraProximo) {
+            btnProximo.disabled = !liberado;
+            btnProximo.title = liberado ? '' : 'Role até o final da lista para continuar';
+        }
+        if (mostraFinalizar && btnFinalizar) {
+            btnFinalizar.disabled = !liberado;
+            btnFinalizar.title = liberado ? '' : 'Role até o final da lista para continuar';
+        }
+        if (hintScroll) hintScroll.classList.toggle('d-none', liberado);
+    }
+
+    function agendarBloqueioScroll() {
+        requestAnimationFrame(function () {
+            requestAnimationFrame(atualizarBloqueioScroll);
+        });
     }
 
     function getAnaliseSteps() {
@@ -124,6 +163,11 @@ document.addEventListener('DOMContentLoaded', function () {
             if (btnProximo) btnProximo.classList.add('d-none');
             if (btnAnterior) btnAnterior.classList.add('d-none');
             formFinalizar.classList.remove('d-none');
+            if (btnFinalizar) {
+                btnFinalizar.disabled = false;
+                btnFinalizar.title = '';
+            }
+            if (hintScroll) hintScroll.classList.add('d-none');
             return;
         }
         if (index < 0) index = 0;
@@ -135,16 +179,31 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         atualizarStepper(steps, index, false);
         atualizarBotoesWizard(steps, index);
+        if (sugestoesEl) sugestoesEl.scrollTop = 0;
+        if (btnProximo && !btnProximo.classList.contains('d-none')) {
+            btnProximo.disabled = !analiseStepsVistos[index];
+        }
+        if (btnFinalizar && formFinalizar && !formFinalizar.classList.contains('d-none')) {
+            btnFinalizar.disabled = !analiseStepsVistos[index];
+        }
+        if (hintScroll) hintScroll.classList.toggle('d-none', !!analiseStepsVistos[index]);
+        agendarBloqueioScroll();
     }
 
     function initAnaliseWizard() {
         analiseStepIndex = 0;
         analiseFluxoConcluido = false;
+        analiseStepsVistos = {};
         var steps = getAnaliseSteps();
         if (!steps.length) {
             formFinalizar.classList.remove('d-none');
             if (btnProximo) btnProximo.classList.add('d-none');
             if (btnAnterior) btnAnterior.classList.add('d-none');
+            if (btnFinalizar) {
+                btnFinalizar.disabled = false;
+                btnFinalizar.title = '';
+            }
+            if (hintScroll) hintScroll.classList.add('d-none');
             return;
         }
         mostrarStep(0);
@@ -190,6 +249,11 @@ document.addEventListener('DOMContentLoaded', function () {
         if (btnProximo) btnProximo.classList.add('d-none');
         if (btnAnterior) btnAnterior.classList.add('d-none');
         formFinalizar.classList.remove('d-none');
+        if (btnFinalizar) {
+            btnFinalizar.disabled = false;
+            btnFinalizar.title = '';
+        }
+        if (hintScroll) hintScroll.classList.add('d-none');
     }
 
     function removerItemDaAnaliseUI(btn) {
@@ -217,6 +281,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (emptyMsg) emptyMsg.classList.remove('d-none');
             }
         }
+        agendarBloqueioScroll();
     }
 
     function bindAddButtons() {
@@ -291,8 +356,14 @@ document.addEventListener('DOMContentLoaded', function () {
             });
     }
 
+    sugestoesEl.addEventListener('scroll', atualizarBloqueioScroll, { passive: true });
+    modalEl.addEventListener('shown.bs.modal', function () {
+        agendarBloqueioScroll();
+    });
+
     if (btnProximo) {
         btnProximo.addEventListener('click', function () {
+            if (btnProximo.disabled) return;
             mostrarStep(analiseStepIndex + 1);
         });
     }
