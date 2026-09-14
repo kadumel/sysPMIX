@@ -1,0 +1,6 @@
+<picture>
+    {% if banner.imagem_mobile %}
+    <source media="(max-width: 991.98px)" srcset="{{ banner.imagem_mobile.url }}">
+    {% endif %}
+    <img src="{{ banner.imagem.url }}" class="ecommerce-banner-img" alt="{{ banner.titulo|default:'Banner promocional' }}">
+</picture>

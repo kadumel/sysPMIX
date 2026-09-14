@@ -1,10 +1,13 @@
 from datetime import time as dt_time
+import logging
+import os
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
-import os
+
+logger = logging.getLogger(__name__)
 
 
 class PedidoLoja(models.Model):
@@ -309,7 +312,17 @@ class BannerPromocional(models.Model):
     descricao_curta = models.CharField('Descrição curta', max_length=220, blank=True)
     descricao_longa = models.TextField('Descrição longa', blank=True)
     call_to_action = models.CharField('Call-to-action', max_length=120, blank=True)
-    imagem = models.ImageField('Imagem', upload_to='ecommerce/banners/')
+    imagem = models.ImageField(
+        'Imagem',
+        upload_to='ecommerce/banners/',
+        help_text='Arte principal (desktop). No upload, o sistema gera automaticamente a versão para celular.',
+    )
+    imagem_mobile = models.ImageField(
+        'Imagem (celular)',
+        upload_to='ecommerce/banners/mobile/',
+        blank=True,
+        help_text='Gerada automaticamente no upload (recorte central na proporção do celular).',
+    )
     link = models.URLField('Link', blank=True)
     ordem = models.PositiveIntegerField('Ordem', default=0, db_index=True)
     ativo = models.BooleanField('Ativo', default=True, db_index=True)
@@ -323,6 +336,42 @@ class BannerPromocional(models.Model):
 
     def __str__(self):
         return self.titulo or f'Banner #{self.pk}'
+
+    def _imagem_original_mudou(self):
+        if not self.pk:
+            return True
+        antigo = type(self).objects.filter(pk=self.pk).values_list('imagem', flat=True).first()
+        atual = self.imagem.name if self.imagem else ''
+        return (antigo or '') != (atual or '')
+
+    def gerar_imagem_mobile(self, forcar=False):
+        if not self.imagem:
+            return False
+        if not forcar and self.imagem_mobile and not self._imagem_original_mudou():
+            return False
+        from ecommerce.banner_images import criar_arquivo_banner_mobile
+
+        nome, conteudo = criar_arquivo_banner_mobile(self.imagem)
+        if self.imagem_mobile:
+            self.imagem_mobile.delete(save=False)
+        self.imagem_mobile.save(nome, conteudo, save=False)
+        return True
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        campos = set(update_fields) if update_fields is not None else None
+        precisa_gerar = False
+        if campos is None or 'imagem' in campos:
+            precisa_gerar = bool(self.imagem) and (
+                self._imagem_original_mudou() or not self.imagem_mobile
+            )
+        super().save(*args, **kwargs)
+        if precisa_gerar:
+            try:
+                if self.gerar_imagem_mobile(forcar=True):
+                    super().save(update_fields=['imagem_mobile'])
+            except Exception:
+                logger.exception('Falha ao gerar imagem mobile do banner %s', self.pk)
 
 
 class AlertaLojaQuerySet(models.QuerySet):
