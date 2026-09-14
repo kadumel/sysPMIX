@@ -570,7 +570,8 @@
             background-color: #fff !important;
             border-color: #fff !important;
         }
-        #ecommerceCarouselBanners .ecommerce-banner-link {
+        #ecommerceCarouselBanners .ecommerce-banner-link,
+        #ecommerceCarouselBanners picture {
             display: block;
             line-height: 0;
         }
@@ -656,12 +657,16 @@
             #ecommerceCarouselBanners .carousel-item {
                 position: relative;
             }
-            #ecommerceCarouselBanners .ecommerce-banner-link {
+            #ecommerceCarouselBanners .ecommerce-banner-link,
+            #ecommerceCarouselBanners picture {
                 display: block;
                 position: absolute;
                 inset: 0;
                 height: auto;
                 line-height: 0;
+            }
+            #ecommerceCarouselBanners .carousel-caption {
+                z-index: 2;
             }
             #ecommerceCarouselBanners .ecommerce-banner-img {
                 position: absolute;
