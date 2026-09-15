@@ -233,14 +233,18 @@ class BannerPromocionalAdmin(admin.ModelAdmin):
     list_editable = ('ordem', 'ativo')
     list_filter = ('ativo',)
     search_fields = ('titulo', 'descricao_curta', 'descricao_longa', 'call_to_action')
-    readonly_fields = ('imagem_mobile', 'criado_em', 'atualizado_em')
+    readonly_fields = ('criado_em', 'atualizado_em')
     fieldsets = (
         (None, {'fields': ('titulo', 'descricao_curta', 'descricao_longa', 'call_to_action', 'link', 'ordem', 'ativo')}),
         (
             'Imagens',
             {
                 'fields': ('imagem', 'imagem_mobile'),
-                'description': 'Envie a arte de desktop. A versão para celular/PWA é gerada sozinha (recorte central).',
+                'description': (
+                    'Envie uma arte para o computador e outra para o celular. '
+                    'Desktop: 1920 × 360 px. Celular/PWA: 1080 × 640 px. '
+                    'Se a imagem de celular não for enviada, a loja usa a de desktop.'
+                ),
             },
         ),
         ('Auditoria', {'fields': ('criado_em', 'atualizado_em')}),
