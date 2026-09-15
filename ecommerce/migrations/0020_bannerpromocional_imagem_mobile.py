@@ -2,25 +2,12 @@ from django.db import migrations, models
 
 
 def gerar_imagens_mobile_existentes(apps, schema_editor):
-    BannerPromocional = apps.get_model('ecommerce', 'BannerPromocional')
-    from ecommerce.banner_images import criar_arquivo_banner_mobile
-
-    for banner in BannerPromocional.objects.exclude(imagem='').iterator():
-        if banner.imagem_mobile:
-            continue
-        try:
-            nome, conteudo = criar_arquivo_banner_mobile(banner.imagem)
-        except Exception:
-            continue
-        banner.imagem_mobile.save(nome, conteudo, save=True)
+    # Recorte automático removido; o upload da imagem de celular é manual.
+    return
 
 
 def noop_reverse(apps, schema_editor):
-    BannerPromocional = apps.get_model('ecommerce', 'BannerPromocional')
-    for banner in BannerPromocional.objects.exclude(imagem_mobile='').iterator():
-        banner.imagem_mobile.delete(save=False)
-        banner.imagem_mobile = ''
-        banner.save(update_fields=['imagem_mobile'])
+    return
 
 
 class Migration(migrations.Migration):
