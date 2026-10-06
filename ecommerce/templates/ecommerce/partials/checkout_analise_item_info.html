@@ -11,6 +11,6 @@
     <div class="min-w-0">
         <div class="fw-medium text-truncate" title="{{ item.nome }}">{{ item.nome }}</div>
         <div class="small text-muted">Cód. {{ item.codigo_produto }}{% if item.detalhe %} · {{ item.detalhe }}{% endif %}</div>
-        {% if item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
+        {% if ecommerce_mostrar_precos and item.preco_unitario %}<div class="small">R$ {{ item.preco_unitario|floatformat:2 }}</div>{% endif %}
     </div>
 </div>

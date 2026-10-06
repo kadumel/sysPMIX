@@ -4,7 +4,7 @@
         soma das quantidades: <strong id="cartPageUnits">{{ cart_units_label }}</strong>
         {% if codtab_cliente %} · Tabela {{ codtab_cliente }}{% endif %}
     </span>
-    {% if total_geral > 0 %}
+    {% if ecommerce_mostrar_precos and total_geral > 0 %}
     <span class="fw-semibold" id="cartPageTotal">Total: R$ {{ total_geral|floatformat:2 }}</span>
     {% else %}
     <span class="fw-semibold d-none" id="cartPageTotal"></span>

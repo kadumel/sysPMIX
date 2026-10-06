@@ -47,7 +47,7 @@
                     <div>
                         <span class="fw-medium">{{ it.nome }}</span>
                         <span class="text-muted small d-block">Cód. {{ it.codigo_produto }}</span>
-                        {% if it.preco_unitario is not None %}
+                        {% if ecommerce_mostrar_precos and it.preco_unitario is not None %}
                         <span class="text-muted small d-block">Unitário: R$ {{ it.preco_unitario|floatformat:2 }} · Subtotal: R$ {{ it.subtotal|floatformat:2 }}</span>
                         {% endif %}
                     </div>
@@ -55,7 +55,7 @@
                 </li>
                 {% endfor %}
             </ul>
-            {% if pedido.valor_total %}
+            {% if ecommerce_mostrar_precos and pedido.valor_total %}
             <div class="card-footer bg-white fw-semibold text-end">
                 Total do pedido: R$ {{ pedido.valor_total|floatformat:2 }}
             </div>

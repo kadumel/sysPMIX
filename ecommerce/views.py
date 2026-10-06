@@ -614,7 +614,7 @@ def checkout_analise_preview(request):
         'cart_count': ctx_carrinho['cart_count'],
         'cart_units_label': ctx_carrinho['cart_units_label'],
     }
-    if settings.DEBUG:
+    if settings.DEBUG and catalog.usuario_ve_precos_ecommerce(request.user):
         payload['debug_novidades'] = diagnosticar_novidades_campanha(
             cliente_ctx,
             get_cart(request),
@@ -673,18 +673,18 @@ def checkout_analise_adicionar(request):
 
     ctx = _cart_snapshot_context(request)
     snapshots = _render_cart_snapshots_html(request)
-    return JsonResponse(
-        {
-            'ok': True,
-            'html': analise_html,
-            'tem_sugestoes': resultado.tem_sugestoes,
-            'total_sugestoes': len(resultado.todas_sugestoes()),
-            'cart_count': ctx['cart_count'],
-            'cart_units_label': ctx['cart_units_label'],
-            'total_geral': f'{ctx["total_geral"]:.2f}',
-            **snapshots,
-        }
-    )
+    payload = {
+        'ok': True,
+        'html': analise_html,
+        'tem_sugestoes': resultado.tem_sugestoes,
+        'total_sugestoes': len(resultado.todas_sugestoes()),
+        'cart_count': ctx['cart_count'],
+        'cart_units_label': ctx['cart_units_label'],
+        **snapshots,
+    }
+    if catalog.usuario_ve_precos_ecommerce(request.user):
+        payload['total_geral'] = f'{ctx["total_geral"]:.2f}'
+    return JsonResponse(payload)
 
 
 @login_required

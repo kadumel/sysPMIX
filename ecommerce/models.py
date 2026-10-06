@@ -470,7 +470,20 @@ class ProdutoImagem(models.Model):
         verbose_name='Produto Sankhya',
     )
     nome_imagem = models.CharField('Nome da imagem', max_length=255, blank=True)
-    imagem = models.ImageField('Imagem', upload_to=_produto_imagem_upload_to)
+    imagem = models.ImageField(
+        'Imagem principal',
+        upload_to=_produto_imagem_upload_to,
+        help_text='Foto principal do produto. É sempre a primeira a aparecer na loja.',
+    )
+    imagem_secundaria = models.ImageField(
+        'Segunda imagem',
+        upload_to=_produto_imagem_upload_to,
+        blank=True,
+        help_text=(
+            'Opcional. Na loja, o cliente pode passar da foto principal para esta. '
+            'Se ficar vazia, a vitrine mostra só a imagem principal.'
+        ),
+    )
     ativo = models.BooleanField('Ativo', default=True, db_index=True)
     criado_em = models.DateTimeField('Criado em', auto_now_add=True)
     atualizado_em = models.DateTimeField('Atualizado em', auto_now=True)

@@ -25,7 +25,7 @@
                     </button>
                 </form>
             </div>
-            {% if linha.preco_unitario is not None %}
+            {% if ecommerce_mostrar_precos and linha.preco_unitario is not None %}
             <span class="text-muted small d-block">Unitário: R$ {{ linha.preco_unitario|floatformat:2 }} · Subtotal: <strong>R$ {{ linha.subtotal|floatformat:2 }}</strong></span>
             {% endif %}
         </div>

@@ -60,6 +60,7 @@
                                 {% endif %}
                             </a>
                         </th>
+                        {% if ecommerce_mostrar_precos %}
                         <th>
                             <a href="{{ sort_link_valor_total }}" class="ecommerce-sort-link text-decoration-none d-inline-flex align-items-center gap-1">
                                 Valor total
@@ -68,6 +69,7 @@
                                 {% endif %}
                             </a>
                         </th>
+                        {% endif %}
                         <th>Status</th>
                         <th>Pedido Sankhya</th>
                         <th class="text-end">Ações</th>
@@ -78,7 +80,9 @@
                     <tr>
                         <td class="fw-medium">#{{ p.pk }}</td>
                         <td class="small text-muted">{{ p.criado_em|date:"d/m/Y H:i" }}</td>
+                        {% if ecommerce_mostrar_precos %}
                         <td class="small fw-semibold">R$ {{ p.valor_total|floatformat:2 }}</td>
+                        {% endif %}
                         <td>
                             {% if p.status == 'pendente' %}
                             <span class="badge text-bg-warning text-dark">Pendente</span>
