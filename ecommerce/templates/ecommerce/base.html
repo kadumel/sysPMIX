@@ -204,6 +204,76 @@
             object-fit: cover;
             display: block;
         }
+        .ecommerce-product-gallery {
+            position: relative;
+            touch-action: pan-y;
+            user-select: none;
+        }
+        .ecommerce-product-gallery-track {
+            display: flex;
+            height: 14rem;
+            transition: transform 0.28s ease;
+        }
+        .ecommerce-product-gallery .ecommerce-product-thumb-img {
+            flex: 0 0 100%;
+            width: 100%;
+            max-width: 100%;
+            height: 14rem;
+            -webkit-user-drag: none;
+        }
+        .ecommerce-product-gallery-nav {
+            position: absolute;
+            top: 50%;
+            z-index: 2;
+            transform: translateY(-50%);
+            width: 1.75rem;
+            height: 1.75rem;
+            border: 0;
+            border-radius: 999px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            color: #fff;
+            background: rgba(0, 20, 40, 0.55);
+        }
+        .ecommerce-product-gallery-nav[hidden] {
+            display: none !important;
+        }
+        .ecommerce-product-gallery-nav:hover,
+        .ecommerce-product-gallery-nav:focus-visible {
+            color: #fff;
+            background: rgba(0, 74, 141, 0.9);
+        }
+        .ecommerce-product-gallery-prev { left: 0.35rem; }
+        .ecommerce-product-gallery-next { right: 0.35rem; }
+        .ecommerce-product-gallery-nav .bi {
+            font-size: 0.95rem;
+            line-height: 1;
+        }
+        .ecommerce-product-gallery-dots {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0.4rem;
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            gap: 0.35rem;
+        }
+        .ecommerce-product-gallery-dot {
+            width: 0.45rem;
+            height: 0.45rem;
+            padding: 0;
+            border: 0;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.55);
+            box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+        }
+        .ecommerce-product-gallery-dot.is-active {
+            background: #fff;
+        }
         .ecommerce-grupo-tree {
             max-height: min(55vh, 28rem);
             overflow-y: auto;
@@ -685,8 +755,19 @@
                 transform: none;
             }
             .ecommerce-product-card .ecommerce-product-thumb,
-            .ecommerce-product-card .ecommerce-product-thumb .ecommerce-product-thumb-img {
+            .ecommerce-product-card .ecommerce-product-thumb .ecommerce-product-thumb-img,
+            .ecommerce-product-card .ecommerce-product-gallery-track {
                 height: 7.25rem;
+            }
+            .ecommerce-product-card .ecommerce-product-gallery-nav {
+                width: 1.45rem;
+                height: 1.45rem;
+            }
+            .ecommerce-product-card .ecommerce-product-gallery-nav .bi {
+                font-size: 0.8rem;
+            }
+            .ecommerce-product-card .ecommerce-product-gallery-dots {
+                bottom: 0.28rem;
             }
             .ecommerce-product-card .ecommerce-product-thumb {
                 font-size: 1.35rem;
@@ -1215,6 +1296,87 @@
                         submitBtn.disabled = false;
                     });
             });
+        })();
+    </script>
+    <script>
+        (function () {
+            var SWIPE_MIN = 36;
+
+            function galleryRoot(node) {
+                return node && node.closest ? node.closest('[data-product-gallery]') : null;
+            }
+
+            function setGalleryIndex(root, index) {
+                var track = root.querySelector('.ecommerce-product-gallery-track');
+                if (!track) return;
+                var total = track.children.length;
+                if (total < 2) return;
+                if (index < 0) index = 0;
+                if (index > total - 1) index = total - 1;
+                root.dataset.galleryIndex = String(index);
+                track.style.transform = 'translateX(' + (-index * 100) + '%)';
+                var prev = root.querySelector('[data-gallery-dir="prev"]');
+                var next = root.querySelector('[data-gallery-dir="next"]');
+                if (prev) prev.hidden = index === 0;
+                if (next) next.hidden = index === total - 1;
+                root.querySelectorAll('[data-gallery-dot]').forEach(function (dot) {
+                    var n = Number(dot.getAttribute('data-gallery-dot'));
+                    var active = n === index;
+                    dot.classList.toggle('is-active', active);
+                    if (active) dot.setAttribute('aria-current', 'true');
+                    else dot.removeAttribute('aria-current');
+                });
+            }
+
+            document.addEventListener('click', function (event) {
+                var dirBtn = event.target.closest('[data-gallery-dir]');
+                if (dirBtn) {
+                    var root = galleryRoot(dirBtn);
+                    if (!root) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var current = Number(root.dataset.galleryIndex || '0');
+                    setGalleryIndex(root, current + (dirBtn.getAttribute('data-gallery-dir') === 'next' ? 1 : -1));
+                    return;
+                }
+                var dot = event.target.closest('[data-gallery-dot]');
+                if (!dot) return;
+                var rootDot = galleryRoot(dot);
+                if (!rootDot) return;
+                event.preventDefault();
+                event.stopPropagation();
+                setGalleryIndex(rootDot, Number(dot.getAttribute('data-gallery-dot')));
+            });
+
+            var tracking = null;
+            var startX = 0;
+            var startY = 0;
+
+            document.addEventListener('touchstart', function (event) {
+                if (event.touches.length !== 1) return;
+                var root = galleryRoot(event.target);
+                if (!root) return;
+                tracking = root;
+                startX = event.touches[0].clientX;
+                startY = event.touches[0].clientY;
+            }, { passive: true });
+
+            document.addEventListener('touchend', function (event) {
+                if (!tracking) return;
+                var root = tracking;
+                tracking = null;
+                var touch = event.changedTouches && event.changedTouches[0];
+                if (!touch) return;
+                var dx = touch.clientX - startX;
+                var dy = touch.clientY - startY;
+                if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) < Math.abs(dy)) return;
+                var current = Number(root.dataset.galleryIndex || '0');
+                setGalleryIndex(root, current + (dx < 0 ? 1 : -1));
+            }, { passive: true });
+
+            document.addEventListener('touchcancel', function () {
+                tracking = null;
+            }, { passive: true });
         })();
     </script>
     {% block extra_js %}{% endblock %}

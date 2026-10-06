@@ -34,6 +34,12 @@ def ecommerce_catalog_qs(context, grupo=None, page=None, q=None):
 
 
 @register.filter
+def fotos_vitrine(produto):
+    """URLs da vitrine: principal e, se existir, a segunda foto."""
+    return catalog.fotos_vitrine_produto(produto)
+
+
+@register.filter
 def tipo_loja_mercadoria(grupo):
     return grupo.tipo_loja == GrupoProduto.TipoLoja.MERCADORIA
 

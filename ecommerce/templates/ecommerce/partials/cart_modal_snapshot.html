@@ -8,7 +8,7 @@
                 <span class="fw-medium">{{ linha.nome }}</span>
                 <span class="text-muted d-block">Cód. {{ linha.codigo_produto }} · Qtd. {{ linha.qty_label }}</span>
             </div>
-            {% if linha.subtotal is not None %}
+            {% if ecommerce_mostrar_precos and linha.subtotal is not None %}
             <span class="small fw-semibold text-nowrap">R$ {{ linha.subtotal|floatformat:2 }}</span>
             {% endif %}
         </li>
@@ -19,7 +19,7 @@
             <span id="cartModalCount">{{ cart_count }}</span> produto{{ cart_count|pluralize }} ·
             <strong id="cartModalUnits">{{ cart_units_label }}</strong> un.
         </span>
-        {% if total_geral > 0 %}
+        {% if ecommerce_mostrar_precos and total_geral > 0 %}
         <span class="fw-semibold" id="cartModalTotal">Total: R$ {{ total_geral|floatformat:2 }}</span>
         {% else %}
         <span class="fw-semibold d-none" id="cartModalTotal"></span>

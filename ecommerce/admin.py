@@ -309,10 +309,28 @@ class AlertaLojaAdmin(admin.ModelAdmin):
 
 @admin.register(ProdutoImagem)
 class ProdutoImagemAdmin(admin.ModelAdmin):
-    list_display = ('id', 'produto', 'nome_imagem', 'ativo', 'criado_em')
+    list_display = ('id', 'produto', 'nome_imagem', 'tem_segunda_foto', 'ativo', 'criado_em')
     list_filter = ('ativo', 'criado_em')
     search_fields = ('produto__codigo_produto', 'produto__nome', 'nome_imagem')
     readonly_fields = ('nome_imagem', 'criado_em', 'atualizado_em')
+    fieldsets = (
+        (None, {'fields': ('produto', 'ativo')}),
+        (
+            'Fotos',
+            {
+                'fields': ('imagem', 'imagem_secundaria'),
+                'description': (
+                    'A imagem principal é sempre a primeira da loja. '
+                    'A segunda foto é opcional: o cliente só consegue passar para ela quando estiver preenchida.'
+                ),
+            },
+        ),
+        ('Auditoria', {'fields': ('nome_imagem', 'criado_em', 'atualizado_em')}),
+    )
+
+    @admin.display(description='Segunda foto', boolean=True)
+    def tem_segunda_foto(self, obj):
+        return bool(obj.imagem_secundaria)
 
 
 class RotaPadraoClienteInline(admin.TabularInline):

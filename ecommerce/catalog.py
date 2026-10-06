@@ -572,6 +572,41 @@ def prefetch_imagens_produto_loja(qs: QuerySet[Produto]) -> QuerySet[Produto]:
     )
 
 
+def _url_imagem(campo) -> str:
+    if not campo:
+        return ''
+    try:
+        return campo.url
+    except ValueError:
+        return ''
+
+
+def fotos_vitrine_produto(produto) -> list[str]:
+    """Até duas fotos da vitrine. A primeira é sempre a principal."""
+    imagens = [
+        im
+        for im in produto.imagens_ecommerce.all()
+        if im.ativo and (_url_imagem(im.imagem) or _url_imagem(getattr(im, 'imagem_secundaria', None)))
+    ]
+    if not imagens:
+        return []
+    principal = _url_imagem(imagens[0].imagem)
+    secundaria = _url_imagem(getattr(imagens[0], 'imagem_secundaria', None))
+    if not secundaria:
+        for extra in imagens[1:]:
+            secundaria = _url_imagem(extra.imagem) or _url_imagem(getattr(extra, 'imagem_secundaria', None))
+            if secundaria:
+                break
+    urls: list[str] = []
+    if principal:
+        urls.append(principal)
+    if secundaria and secundaria not in urls:
+        urls.append(secundaria)
+    elif secundaria and not urls:
+        urls.append(secundaria)
+    return urls
+
+
 def aplicar_busca_produtos(qs: QuerySet[Produto], termo: str) -> QuerySet[Produto]:
     """Filtra por texto em campos comuns do produto Sankhya."""
     termo = normalizar_busca(termo)
@@ -609,6 +644,14 @@ def get_cliente_codtab(user) -> int | None:
     if codtab is None:
         return None
     return codtab
+
+
+def usuario_ve_precos_ecommerce(user) -> bool:
+    """Preços da loja só aparecem para comercial, gerente e administrador."""
+    if not getattr(user, 'is_authenticated', False):
+        return False
+    perfil = getattr(getattr(user, 'perfil_usuario', None), 'perfil', None)
+    return perfil in PERFIS_PAINEL_BI_LOJA
 
 
 def get_cliente_context(request):

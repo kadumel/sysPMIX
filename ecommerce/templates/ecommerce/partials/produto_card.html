@@ -1,18 +1,50 @@
+{% load ecommerce_catalog %}
 <div class="col">
     <div class="card h-100 ecommerce-product-card">
-        <div class="ecommerce-product-thumb overflow-hidden">
-            {% for im in p.imagens_ecommerce.all %}
-                {% if forloop.first %}
-                    {% if im.imagem %}
-                        <img src="{{ im.imagem.url }}" alt="" class="ecommerce-product-thumb-img" width="800" height="448" loading="lazy" decoding="async">
-                    {% else %}
-                        <span aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</span>
-                    {% endif %}
-                {% endif %}
-            {% empty %}
-                <span aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</span>
-            {% endfor %}
+        {% with fotos=p|fotos_vitrine %}
+        <div
+            class="ecommerce-product-thumb overflow-hidden{% if fotos|length > 1 %} ecommerce-product-gallery{% endif %}"
+            {% if fotos|length > 1 %}data-product-gallery data-gallery-index="0" role="group" aria-label="Fotos de {{ p.nome|default:'produto' }}"{% endif %}
+        >
+            {% if fotos|length > 1 %}
+            <div class="ecommerce-product-gallery-track">
+                {% for url in fotos %}
+                <img
+                    src="{{ url }}"
+                    alt="{% if forloop.first %}{{ p.nome|default:'Produto' }}{% else %}{{ p.nome|default:'Produto' }} — foto {{ forloop.counter }}{% endif %}"
+                    class="ecommerce-product-thumb-img"
+                    width="800"
+                    height="448"
+                    loading="lazy"
+                    decoding="async"
+                    draggable="false"
+                >
+                {% endfor %}
+            </div>
+            <button type="button" class="ecommerce-product-gallery-nav ecommerce-product-gallery-prev" data-gallery-dir="prev" aria-label="Foto anterior" hidden>
+                <i class="bi bi-chevron-left" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="ecommerce-product-gallery-nav ecommerce-product-gallery-next" data-gallery-dir="next" aria-label="Próxima foto">
+                <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+            <div class="ecommerce-product-gallery-dots">
+                {% for url in fotos %}
+                <button
+                    type="button"
+                    class="ecommerce-product-gallery-dot{% if forloop.first %} is-active{% endif %}"
+                    data-gallery-dot="{{ forloop.counter0 }}"
+                    aria-label="Foto {{ forloop.counter }}"
+                    {% if forloop.first %}aria-current="true"{% endif %}
+                ></button>
+                {% endfor %}
+            </div>
+            {% elif fotos %}
+            <img src="{{ fotos.0 }}" alt="{{ p.nome|default:'Produto' }}" class="ecommerce-product-thumb-img" width="800" height="448" loading="lazy" decoding="async">
+            {% else %}
+            <span aria-hidden="true">{{ p.nome|default:"?"|first|upper }}</span>
+            {% endif %}
         </div>
+        {% endwith %}
         <div class="card-body d-flex flex-column">
             {% if p.nome_grupo_produto %}
             <span class="badge rounded-pill align-self-start mb-2 text-truncate ecommerce-product-group" style="max-width: 100%;" title="{{ p.nome_grupo_produto }}">{{ p.nome_grupo_produto }}</span>
@@ -26,10 +58,12 @@
             <div class="flex-grow-1"></div>
             {% endif %}
             <p class="small text-muted mb-2 ecommerce-product-code">Cód. {{ p.codigo_produto }}</p>
+            {% if ecommerce_mostrar_precos %}
             {% if p.preco_ecommerce is not None %}
             <p class="fw-semibold mb-2 ecommerce-product-price">R$ {{ p.preco_ecommerce|floatformat:2 }}</p>
             {% elif request.user.is_authenticated %}
             <p class="small text-muted mb-2 ecommerce-product-price">Preço indisponível para sua tabela.</p>
+            {% endif %}
             {% endif %}
             <button
                 type="button"

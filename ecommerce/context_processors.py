@@ -23,6 +23,7 @@ def ecommerce_nav(request):
         'ecommerce_usuario_exibicao': None,
         'ecommerce_notificacoes_nao_lidas': 0,
         'ecommerce_selector_habilitado': False,
+        'ecommerce_mostrar_precos': False,
         'ecommerce_cliente_context_id': None,
         'ecommerce_clientes_selector_url': reverse('gestao_ecommerce_clientes_selector'),
         'ecommerce_cliente_selecionar_url': reverse('gestao_ecommerce_cliente_selecionar'),
@@ -50,6 +51,7 @@ def ecommerce_nav(request):
         ).count()
         perfil = getattr(getattr(user, 'perfil_usuario', None), 'perfil', None)
         ctx['ecommerce_selector_habilitado'] = perfil in PERFIS_PAINEL_BI_LOJA
+        ctx['ecommerce_mostrar_precos'] = catalog.usuario_ve_precos_ecommerce(user)
         path = getattr(request, 'path', '') or ''
         if path.startswith('/ecommerce'):
             agora = timezone.now().astimezone(catalog.ECOMMERCE_TZ)
