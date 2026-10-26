@@ -434,7 +434,7 @@ def sync_produtos() -> dict[str, int]:
             "nome": _to_str(v.get("nome"), 200),
             "referencia": _to_str(v.get("referencia"), 100),
             "codigo_grupo_produto": _to_int(v.get("codigoGrupoProduto")),
-            "ativo": bool(v.get("ativo", True)),
+            #"ativo": bool(v.get("ativo", True)),
         }
         obj, created = Produto.objects.update_or_create(codigo_produto=codigo, defaults=defaults)
         return created, bool(obj)
