@@ -22,7 +22,7 @@ SANKHYA_PEDIDOS_URL = 'https://api.sankhya.com.br/v1/vendas/pedidos'
 SANKHYA_DB_EXPLORER_SERVICE = 'DbExplorerSP.executeQuery'
 
 SQL_FINANCEIROS_CLIENTE = """
-SELECT t.codParc, t.sugtipnegsaid, p.codtiptitpad, p.sequencia, p.prazo, p.percentual
+SELECT t.codParc, t.sugtipnegsaid, p.codtiptitpad, p.sequencia, p.prazo, p.percentual, p.CODBCOPAD, p.CODCTABCOINT
 FROM TGFCPL t
 JOIN TGFPPG p ON p.Codtipvenda = t.sugtipnegsaid
 WHERE t.codParc = {codparc}
@@ -130,7 +130,20 @@ def _rows_execute_query_para_dicts(response_body: dict[str, Any]) -> list[dict[s
                 }
             )
             continue
-        if len(linha) >= 6:
+        if len(linha) >= 8:
+            resultado.append(
+                {
+                    'CODPARC': linha[0],
+                    'SUGTIPNEGSAID': linha[1],
+                    'CODTIPTITPAD': linha[2],
+                    'SEQUENCIA': linha[3],
+                    'PRAZO': linha[4],
+                    'PERCENTUAL': linha[5],
+                    'CODBCOPAD': linha[6],
+                    'CODCTABCOINT': linha[7],
+                }
+            )
+        elif len(linha) >= 6:
             resultado.append(
                 {
                     'CODPARC': linha[0],
@@ -256,6 +269,8 @@ def _montar_financeiros_payload(
                 'tipoPagamento': tipo_pagamento,
                 'dataVencimento': vencimento.strftime('%d/%m/%Y'),
                 'valorParcela': float(valor_parcela),
+                'CODBCO': _to_int_opcional(linha.get('CODBCOPAD')),
+                'CODCTABCOINT': _to_int_opcional(linha.get('CODCTABCOINT')),
             }
         )
 
