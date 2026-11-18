@@ -153,25 +153,46 @@ def _rows_execute_query_para_dicts(response_body: dict[str, Any]) -> list[dict[s
     return resultado
 
 
+def _log_consulta_financeiro(titulo: str, conteudo: str) -> None:
+    """Imprime no stdout (log do container) e no logger da integração."""
+    print(f'\n=== {titulo} ===\n{conteudo}\n===\n', flush=True)
+    logger.info('%s\n%s', titulo, conteudo)
+
+
 def _consultar_financeiros_cliente_sankhya(codigo_cliente: int) -> list[dict[str, Any]]:
     headers = _get_token_headers()
     headers['Content-Type'] = 'application/json'
     url = _sankhya_gateway_url(SANKHYA_DB_EXPLORER_SERVICE)
+    sql = SQL_FINANCEIROS_CLIENTE.format(codparc=int(codigo_cliente))
     body = {
         'serviceName': SANKHYA_DB_EXPLORER_SERVICE,
         'requestBody': {
-            'sql': SQL_FINANCEIROS_CLIENTE.format(codparc=int(codigo_cliente)),
+            'sql': sql,
             'offsetPage': 0,
             'pageSize': 100,
         },
     }
+    _log_consulta_financeiro(
+        f'Consulta financeiros Sankhya — CODPARC {codigo_cliente}',
+        f'POST {url}\n{sql}',
+    )
     resp, _ = _request_with_token_retry('POST', url, headers, json=body, timeout=120)
     try:
         data = resp.json()
+        retorno = json.dumps(data, indent=2, ensure_ascii=False)
     except ValueError as exc:
+        _log_consulta_financeiro(
+            f'Retorno financeiros Sankhya — CODPARC {codigo_cliente} (HTTP {resp.status_code}, corpo inválido)',
+            (resp.text or '')[:8000],
+        )
         raise IntegracaoSankhyaError(
             f'Resposta inválida ao consultar financeiros (HTTP {resp.status_code}).'
         ) from exc
+
+    _log_consulta_financeiro(
+        f'Retorno financeiros Sankhya — CODPARC {codigo_cliente} (HTTP {resp.status_code})',
+        retorno,
+    )
 
     if resp.status_code >= 400:
         mensagem = data.get('mensagem') or data.get('message') or resp.text[:500]
@@ -186,6 +207,10 @@ def _consultar_financeiros_cliente_sankhya(codigo_cliente: int) -> list[dict[str
 
     response_body = data.get('responseBody') or {}
     linhas = _rows_execute_query_para_dicts(response_body)
+    _log_consulta_financeiro(
+        f'Financeiros interpretados — CODPARC {codigo_cliente} ({len(linhas)} linha(s))',
+        json.dumps(linhas, indent=2, ensure_ascii=False, default=str),
+    )
     if not linhas:
         raise IntegracaoSankhyaError(
             f'Cliente {codigo_cliente} sem plano de pagamento configurado no Sankhya.'
