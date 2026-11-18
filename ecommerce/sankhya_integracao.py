@@ -11,7 +11,7 @@ from typing import Any
 from django.conf import settings
 from django.utils import timezone
 
-from api_sankhya.models import Cidade, Cliente
+from api_sankhya.models import Cidade, Cliente, Preco
 from api_sankhya.services import _get_token_headers, _request_with_token_retry
 
 from .models import LocalEstoqueEcommerce, PedidoLoja, TopEnvioSankhya
@@ -259,6 +259,22 @@ def buscar_financeiros_pedido_sankhya(
     return financeiros
 
 
+def _unidades_tabela_preco(pedido: PedidoLoja, codigos: list[int]) -> dict[int, str]:
+    """Unidade de cada produto na tabela de preço do pedido (menor local de estoque)."""
+    if pedido.codtab in (None, 0) or not codigos:
+        return {}
+    precos = (
+        Preco.objects.filter(codigo_produto__in=codigos, codigo_tabela=pedido.codtab)
+        .order_by('codigo_produto', 'codigo_local_estoque')
+        .values_list('codigo_produto', 'unidade')
+    )
+    unidades: dict[int, str] = {}
+    for codigo, unidade in precos:
+        if codigo not in unidades:
+            unidades[int(codigo)] = (unidade or '').strip()
+    return unidades
+
+
 def montar_payload_pedido_sankhya(
     pedido: PedidoLoja,
     top_envio: TopEnvioSankhya,
@@ -286,14 +302,25 @@ def montar_payload_pedido_sankhya(
     if not itens_db:
         raise IntegracaoSankhyaError('Pedido sem itens para envio ao Sankhya.')
 
+    unidades = _unidades_tabela_preco(
+        pedido,
+        [int(item.codigo_produto) for item in itens_db],
+    )
+
     itens: list[dict[str, Any]] = []
     for sequencia, item in enumerate(itens_db, start=1):
+        unidade = unidades.get(int(item.codigo_produto), '')
+        if not unidade:
+            raise IntegracaoSankhyaError(
+                f'Produto {item.codigo_produto} sem unidade na tabela de preço {pedido.codtab}.'
+            )
         itens.append(
             {
                 'sequencia': sequencia,
                 'codigoProduto': item.codigo_produto,
                 'quantidade': _valor_api(item.quantidade),
                 'valorUnitario': _valor_api(item.preco_unitario),
+                'unidade': unidade,
                 'codigoLocalEstoque': codigo_local_estoque,
                 'controle': '',
             }
